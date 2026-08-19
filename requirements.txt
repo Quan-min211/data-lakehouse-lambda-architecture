@@ -1,0 +1,46 @@
+# =============================================================================
+# Data Lakehouse Lambda Architecture — Python Dependencies
+# =============================================================================
+# Install: pip install -r requirements.txt
+
+# --- Core Data Processing ---
+pyspark>=3.5.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+
+# --- Kafka ---
+kafka-python>=2.0.2
+confluent-kafka>=2.3.0
+
+# --- Apache Iceberg ---
+pyiceberg>=0.6.0
+
+# --- ClickHouse ---
+clickhouse-connect>=0.7.0
+
+# --- Redis ---
+redis>=5.0.0
+
+# --- FastAPI (Serving Layer) ---
+fastapi>=0.110.0
+uvicorn>=0.27.0
+
+# --- dbt ---
+dbt-core>=1.7.0
+dbt-spark>=1.7.0
+
+# --- Dagster (Orchestration) ---
+dagster>=1.6.0
+dagster-webserver>=1.6.0
+
+# --- Visualization & Analysis ---
+matplotlib>=3.8.0
+plotly>=5.18.0
+streamlit>=1.30.0
+
+# --- Utilities ---
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+
+# --- Testing ---
+pytest>=8.0.0

@@ -1,0 +1,53 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.venv/
+env/
+venv/
+ENV/
+conda/
+.conda/
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment secrets
+.env
+
+# Docker volumes & data
+docker-data/
+minio-data/
+
+# Raw datasets (too large for Git)
+datasets/raw/
+datasets/processed/
+data/
+
+# Results (generated, can be large)
+results/logs/*.csv
+results/plots/*.png
+results/plots/*.html
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# dbt
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+
+# Dagster
+dagster_project/.dagster/
