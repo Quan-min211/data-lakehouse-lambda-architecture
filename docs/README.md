@@ -10,3 +10,5 @@ Tài liệu dự án, proposal, kiến trúc hệ thống.
 | `sys-arch.md` | System Architecture chi tiết (TODO) |
 | `plans/` | Kế hoạch sprint & task tracking |
 | `process/` | Tài liệu tiến trình thực hiện (tiếng Việt) |
+| slides.html | Slide thuyết trình đề xuất đề tài TLCN (HTML tương tác) |
+| ssets/ | Tài nguyên hình ảnh, logo phục vụ tài liệu |
