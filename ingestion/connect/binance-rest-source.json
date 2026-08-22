@@ -1,0 +1,51 @@
+﻿{
+  "_doc": "Kafka Connect HTTP Source Connector — Binance REST API backfill",
+  "name": "binance-rest-source",
+  "config": {
+    "connector.class": "com.github.castorm.kafka.connect.http.HttpSourceConnector",
+
+    "tasks.max": "5",
+
+    "http.request.url": "https://api.binance.com/api/v3/historicalTrades",
+    "http.request.method": "GET",
+    "http.request.params": "symbol=${offset.symbol}&limit=1000",
+    "http.offset.initial": "{\"symbol\": \"BTCUSDT\"}",
+
+    "kafka.topic": "crypto_trades_raw",
+
+    "_rate_limit": "50 pairs x weight=5 = 250/round. 1 round/15s = 1000 weight/min < 1200 limit. Safe.",
+    "poll.interval.ms": "15000",
+
+    "_backoff": "Exponential backoff: 1s->2s->4s->...->60s cap. Prevents IP ban from Binance.",
+    "http.client.connection.timeout.ms": "5000",
+    "http.client.read.timeout.ms": "15000",
+    "http.response.error.handle.codes": "429,418",
+    "http.response.error.handle.429.backoff.millis": "60000",
+    "http.response.error.handle.418.backoff.millis": "300000",
+    "retry.backoff.ms": "1000",
+    "retry.backoff.multiplier": "2.0",
+    "retry.max.retries": "10",
+
+    "_dlq": "Bad records go to DLQ — never halts the connector task.",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "crypto_trades_dlq",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+
+    "_smt": "SMT 1: Stamp kafka_ingested_at. SMT 2: Route to daily topic crypto_trades_YYYY-MM-DD.",
+    "transforms": "insertTimestamp,routeByDate",
+
+    "transforms.insertTimestamp.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "transforms.insertTimestamp.timestamp.field": "kafka_ingested_at",
+
+    "transforms.routeByDate.type": "org.apache.kafka.connect.transforms.TimestampRouter",
+    "transforms.routeByDate.topic.format": "crypto_trades_${timestamp}",
+    "transforms.routeByDate.timestamp.format": "yyyy-MM-dd",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
+  }
+}
