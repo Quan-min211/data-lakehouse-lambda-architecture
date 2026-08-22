@@ -1,0 +1,9 @@
+lambda_spark:
+  target: dev
+  outputs:
+    dev:
+      type: spark
+      method: thrift
+      host: localhost
+      port: 10000
+      schema: default

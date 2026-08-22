@@ -1,0 +1,19 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir \
+    fastapi==0.110.0 \
+    uvicorn==0.27.0 \
+    clickhouse-connect==0.7.0 \
+    redis==5.0.0 \
+    kafka-python==2.0.2 \
+    python-dotenv==1.0.0 \
+    pyyaml==6.0.0
+
+COPY src/ ./src/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.serving_layer.api_routes:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

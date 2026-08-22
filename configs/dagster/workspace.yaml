@@ -1,0 +1,5 @@
+# Dagster Workspace Config
+load_from:
+  - python_file:
+      relative_path: ../../dagster_project/repository.py
+      location_name: lambda_lakehouse_pipeline

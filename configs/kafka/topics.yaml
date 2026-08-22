@@ -1,0 +1,7 @@
+# Kafka Topics Configuration
+topics:
+  - name: "crypto.trades"
+    partitions: 3
+    replication_factor: 1
+    retention_ms: 86400000 # 24 hours
+    cleanup_policy: "delete"

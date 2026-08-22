@@ -1,0 +1,13 @@
+# Apache Iceberg Table Configuration
+catalog:
+  type: "rest"
+  uri: "http://iceberg-rest:8181"
+  warehouse: "s3://warehouse/"
+
+tables:
+  bronze_trades:
+    namespace: "bronze"
+    table_name: "crypto_trades"
+    partition_spec:
+      - field: "trade_time"
+        transform: "day"
