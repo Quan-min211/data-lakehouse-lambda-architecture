@@ -1,12 +1,14 @@
-# Data Lakehouse with Lambda Architecture — Benchmark & Evaluation
+# Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa
+## (Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring)
 
 [![Course](https://img.shields.io/badge/Course-TLCN-blue)](https://github.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-Lambda-green)](https://github.com/)
 [![Status](https://img.shields.io/badge/Status-In--Progress-yellow)](https://github.com/)
 
-Thiết kế và triển khai hệ thống **Data Lakehouse** theo mô hình **Lambda Architecture** (Batch Layer + Speed Layer + Serving Layer), sử dụng **Apache Iceberg** làm Open Table Format và **Docker Compose** để đóng gói toàn bộ hạ tầng.
+Thiết kế và triển khai hệ thống **Data Lakehouse** theo mô hình **Lambda Architecture** (Batch Layer + Speed Layer + Serving Layer) với cơ chế tự động đối soát dựa trên Batch Watermark cho thị trường tiền mã hóa (BTCUSDT Binance), sử dụng **Apache Iceberg** làm Open Table Format và **Docker Compose** để đóng gói toàn bộ hạ tầng.
 
-Đề tài Tiểu luận Chuyên ngành (TLCN) — Đại học Sư phạm Kỹ thuật TP.HCM (HCMUTE).
+Đề tài Tiểu luận Chuyên ngành (TLCN) — Khoa Công Nghệ Thông Tin · Đại học Sư phạm Kỹ thuật TP.HCM (HCMUTE).
+Niên khóa: Học kỳ 1 — Năm học 2026-2027.
 
 ---
 
@@ -308,9 +310,11 @@ python scripts/benchmarks/bench_compaction.py
 
 ## Contributors
 
-| Name | Role |
-|:---|:---|
-| *TBD* | *TBD* |
+| Họ và Tên | MSSV | Vai trò |
+|:---|:---|:---|
+| **Nguyễn Đặng Quốc Anh** | `23133004` | Sinh viên thực hiện (Ingestion, Speed Layer, Serving Query Merger) |
+| **Phạm Minh Quân** | `23133060` | Sinh viên thực hiện (Apache Iceberg, Batch Layer, Data Quality) |
+| **ThS. Đoàn Minh Trí** | — | Giảng viên hướng dẫn |
 
 ---
 

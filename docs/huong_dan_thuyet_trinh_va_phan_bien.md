@@ -1,5 +1,5 @@
 # Hướng Dẫn Thuyết Trình Ý Tưởng & Bộ Hỏi - Đáp (Q&A) Đồ Án TLCN
-## Đề tài: Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa
+## ĐỀ TÀI: Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa
 *(Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring)*
 
 > **Dành cho:** Nguyễn Đặng Quốc Anh (23133004) & Phạm Minh Quân (23133060)  
@@ -18,8 +18,7 @@ Khi bắt đầu gặp Thầy, không nên đi ngay vào chi tiết code hay cà
 
 ### 🗣️ Đoạn Pitching mẫu (Thuộc lòng để mở đầu):
 > *"Dạ thưa Thầy, hôm nay nhóm em xin phép trình bày đề xuất đề tài Tiểu luận chuyên ngành với định hướng phát triển nối tiếp lên Khóa luận tốt nghiệp.*  
-> *Đề tài của nhóm là: **Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa**.*  �n nối tiếp lên Khóa luận tốt nghiệp.*  
-> *Đề tài của nhóm là: **Thiết kế và Triển khai Hệ thống Data Lakehouse theo Lambda Architecture với Cơ chế Đối soát Batch–Speed cho Giám sát Thị trường Tiền Mã Hóa Thời Gian Thực**.*  
+> *Đề tài của nhóm là: **Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa**.*  
 >  
 > *Lý do nhóm chọn đề tài này là vì trong giám sát thị trường tài chính (crypto), doanh nghiệp luôn gặp **mâu thuẫn lớn giữa 2 nhu cầu**: vừa cần dữ liệu cập nhật tức thời (< 5 giây) để bắt kịp biến động nến/giá, vừa cần độ chính xác tuyệt đối (Ground Truth) để báo cáo và kiểm toán lịch sử.*  
 >  
@@ -74,9 +73,6 @@ Khi bắt đầu gặp Thầy, không nên đi ngay vào chi tiết code hay cà
 ---
 
 ## 4. Trọng tâm: Thuật toán Auto-Correcting Query Merger (Slide 8)
-> [!IMPORTANT]
-> **Đây là slide quan trọng nhất để Thầy thấy tính học thuật và kỹ thuật của đồ án!**
-
 * **Cơ chế hoạt động:**
   1. Client gửi request `GET /api/market?symbol=BTCUSDT&start=...&end=...` vào **FastAPI Gateway**.
   2. FastAPI truy vấn `batch_watermark` mới nhất từ hệ thống.
@@ -107,15 +103,12 @@ Khi bắt đầu gặp Thầy, không nên đi ngay vào chi tiết code hay cà
 
 ## 7. Định hướng 2 Giai đoạn: TLCN $\rightarrow$ KLTN (Slide 11, 12)
 * **Ý cần nói:**
-  * **Giai đoạn 1 (TLCN - 10 tuần):** Tập trung xây dựng hoàn chỉnh nền tảng kiến trúc (MVP), luồng nạp Binance WebSocket, Query Merger v1.0, 4 bài Benchmark và Dashboard giám sát.
-  * **Giai đoạn 2 (KLTN - Nâng cấp chuyên sâu):** Kế thừa trọn vẹn nền tảng TLCN để mở rộng: Multi-symbol (ETH, SOL), Multi-exchange (OKX, Bybit), tích hợp **Dagster & dbt-spark**, bổ sung **Redis Hot Cache**, ứng dụng **Machine Learning** phát hiện bất thường (Isolation Forest), và đóng gói Kubernetes.
-  * Nhấn mạnh: *"Nhóm mong muốn lắng nghe góp ý của Thầy để định hình phạm vi TLCN vừa vặn nhất và mở rộng vững chắc cho KLTN."*
+  * **Giai đoạn 1 (TLCN - 13 tuần):** Tập trung xây dựng hoàn chỉnh nền tảng kiến trúc (MVP), luồng nạp Binance WebSocket, Query Merger v1.0, 4 bài Benchmark và Dashboard giám sát.
+  * **Giai đoạn 2 (KLTN - Nâng cao):** Kế thừa trọn vẹn nền tảng TLCN để mở rộng: Multi-symbol (ETH, SOL), Multi-exchange (OKX, Bybit), tích hợp **Dagster & dbt-spark**, bổ sung **Redis Hot Cache**, ứng dụng **Machine Learning** phát hiện bất thường (Isolation Forest), và đóng gói Kubernetes.
 
 ---
 
 # PHẦN 3: CHEAT SHEET KIẾN THỨC CỐT LÕI (BẮT BUỘC PHẢI THUỘC)
-
-Nhóm cần nắm vững các khái niệm sau để trả lời bất kỳ câu hỏi kỹ thuật nào của Thầy:
 
 | Khái niệm | Định nghĩa ngắn gọn & Bản chất |
 |:---|:---|
@@ -181,12 +174,8 @@ Nhóm cần nắm vững các khái niệm sau để trả lời bất kỳ câu
 
 - [ ] **Mở sẵn Slide:** Mở file [docs/slides.html](slides.html) trên trình duyệt, nhấn `F11` chuyển sang chế độ Full Screen.
 - [ ] **Kiểm tra phím tắt:** Thử bấm `→`, `←`, `Space` để lướt qua các hiệu ứng và biểu đồ SVG.
-- [ ] **Tài liệu in / PDF:** Mang theo bản [proposal.pdf](proposal%20(1).pdf) hoặc mở sẵn file Markdown [proposal_tlcn_lambda.md](proposal_tlcn_lambda.md).
+- [ ] **Tài liệu in / PDF:** Mang theo bản đề cương hoặc mở sẵn file Markdown [de_cuong_chi_tiet_tieu_luan.md](de_cuong_chi_tiet_tieu_luan.md).
 - [ ] **Phân công trình bày:**
   * **Bạn A (Quốc Anh):** Trình bày Bối cảnh, Bài toán nghiệp vụ Binance, Ingestion Layer, Speed Layer & Serving Query Merger.
   * **Bạn B (Minh Quân):** Trình bày Batch Layer, Apache Iceberg, Data Quality/Fault Injection, Kế hoạch 4 Benchmark & Ngân sách RAM 16GB.
 - [ ] **Tâm thế:** Tự tin, cầu thị, lắng nghe kỹ từng câu hỏi của Thầy và ghi chép lại các điểm Thầy góp ý chỉnh sửa.
-
----
-
-*Chúc hai bạn có một buổi báo cáo đề xuất đề tài thành công xuất sắc!*

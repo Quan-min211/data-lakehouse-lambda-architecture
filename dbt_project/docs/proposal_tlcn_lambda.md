@@ -1,9 +1,9 @@
-# PROPOSAL — Thiết Kế và Triển Khai Hệ Thống Data Lakehouse theo Lambda Architecture
-## (Bản chỉnh sửa Proposal TLCN — Cập nhật Lambda Architecture)
+# PROPOSAL — Thiết Kế và Triển Khai Hệ Thống Data Lakehouse theo Kiến Trúc Lambda Hỗ Trợ Đối Soát Dữ Liệu Thời Gian Thực cho Thị Trường Tiền Mã Hóa
+## (Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring)
 
 **Trường:** Đại học Sư phạm Kỹ thuật TP.HCM (HCMUTE)
-**Chuyên ngành:** Kỹ thuật Máy tính / Khoa học Dữ liệu
-**Loại đề tài:** Đồ án Tốt nghiệp (TLCN)
+**Khoa:** Công Nghệ Thông Tin
+**Loại đề tài:** Tiểu luận chuyên ngành (TLCN)
 
 ---
 
