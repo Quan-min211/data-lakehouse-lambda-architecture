@@ -1,0 +1,51 @@
+{
+  "": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CryptoTradeEvent",
+  "description": "Schema chuan hoa cho su kien giao dich tien ma hoa (Normalized Binance Trade Event)",
+  "type": "object",
+  "properties": {
+    "trade_id": {
+      "type": "integer"
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number",
+      "minimum": 1e-8
+    },
+    "quantity": {
+      "type": "number",
+      "minimum": 1e-8
+    },
+    "trade_time": {
+      "type": "integer"
+    },
+    "is_buyer_maker": {
+      "type": "boolean"
+    },
+    "ingestion_time": {
+      "type": "integer"
+    },
+    "is_injected": {
+      "type": "boolean",
+      "default": false
+    },
+    "fault_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "trade_id",
+    "symbol",
+    "price",
+    "quantity",
+    "trade_time",
+    "is_buyer_maker",
+    "ingestion_time",
+    "is_injected"
+  ]
+}

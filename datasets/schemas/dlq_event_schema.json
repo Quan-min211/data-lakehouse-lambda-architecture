@@ -1,0 +1,30 @@
+{
+  "": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeadLetterQueueEvent",
+  "description": "Schema cho cac su kien bi loi duoc chuyen vao Dead-Letter Queue (DLQ)",
+  "type": "object",
+  "properties": {
+    "raw_payload": {
+      "type": "string",
+      "description": "Chuoi payload goc nhan duoc tu WebSocket/API"
+    },
+    "error_reason": {
+      "type": "string",
+      "description": "Nguyen nhan bi loi parse / schema validation"
+    },
+    "source_stream": {
+      "type": "string",
+      "description": "Ten nguon su kien (vi du: binance_websocket)"
+    },
+    "received_at": {
+      "type": "integer",
+      "description": "Thoi diem nhan message loi (epoch ms)"
+    }
+  },
+  "required": [
+    "raw_payload",
+    "error_reason",
+    "source_stream",
+    "received_at"
+  ]
+}
