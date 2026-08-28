@@ -13,7 +13,7 @@ from typing import List
 @dataclass
 class KafkaConfig:
     """Cấu hình kết nối Apache Kafka."""
-    bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
     external_servers: str = os.getenv("KAFKA_EXTERNAL_SERVERS", "localhost:9094")
     topic_raw: str = os.getenv("KAFKA_TOPIC_RAW", "crypto_trades_raw")
     topic_dlq: str = os.getenv("KAFKA_TOPIC_DLQ", "crypto_trades_dlq")
