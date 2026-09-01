@@ -35,7 +35,7 @@ minio-data/
 # Raw datasets (too large for Git)
 datasets/raw/
 datasets/processed/
-data/
+/data/
 
 # Results (generated, can be large)
 results/logs/*.csv
