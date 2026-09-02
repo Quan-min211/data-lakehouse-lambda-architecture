@@ -1,0 +1,17 @@
+{
+  "symbol": "LINKUSDT",
+  "last_price": 11.446,
+  "mu_annual": 2.5804100650868533,
+  "sigma_annual": 0.5262473543695807,
+  "mu_per_min": 4.9094559838029934e-06,
+  "sigma_per_min": 0.0007258756822294701,
+  "volume_mean": 2247.0330399999993,
+  "volume_std": 3134.170055076935,
+  "volume_min": 0.91,
+  "volume_max": 38492.11,
+  "trade_count_mean": 213.296,
+  "trade_count_std": 239.6611282290059,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\linkusdt_klines_1m.csv"
+}

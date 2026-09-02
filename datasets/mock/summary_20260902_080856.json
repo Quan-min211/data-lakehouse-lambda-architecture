@@ -1,0 +1,41 @@
+{
+  "run_id": "20260902_080856",
+  "generated_at": "2026-09-02T08:08:56.134673+00:00",
+  "config": {
+    "days": 7,
+    "n_minutes": 10080,
+    "ticks_per_min": 8,
+    "fault_mode": "full",
+    "fault_rates": {
+      "duplicate": 0.1,
+      "late_data": 0.1,
+      "out_of_order": 0.05,
+      "schema_invalid": 0.03
+    },
+    "start_time": "2026-08-26T08:08:56.133673+00:00"
+  },
+  "symbols": [
+    "BTCUSDT",
+    "DOGEUSDT",
+    "ENSOUSDT",
+    "ETHUSDT",
+    "LINKUSDT",
+    "RLUSDUSDT",
+    "SOLUSDT",
+    "SUIUSDT",
+    "UNIUSDT",
+    "USD1USDT",
+    "USDCUSDT",
+    "XRPUSDT",
+    "ZECUSDT"
+  ],
+  "total_kline_records": 131040,
+  "total_aggtrade_records": 1262456,
+  "total_fault_records": 253682,
+  "fault_breakdown": {
+    "schema_invalid": 26871,
+    "out_of_order": 50713,
+    "duplicate": 92612,
+    "late_data": 83486
+  }
+}

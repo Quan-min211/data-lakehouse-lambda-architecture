@@ -1,0 +1,17 @@
+{
+  "symbol": "ZECUSDT",
+  "last_price": 847.17,
+  "mu_annual": -0.9369350595926929,
+  "sigma_annual": 0.8890972068254078,
+  "mu_per_min": -1.782600950518822e-06,
+  "sigma_per_min": 0.0012263701398477083,
+  "volume_mean": 102.182135,
+  "volume_std": 171.1017849513931,
+  "volume_min": 0.0,
+  "volume_max": 2210.966,
+  "trade_count_mean": 269.44,
+  "trade_count_std": 331.68193860986764,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\zecusdt_klines_1m.csv"
+}

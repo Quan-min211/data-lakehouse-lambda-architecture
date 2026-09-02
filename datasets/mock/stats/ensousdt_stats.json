@@ -1,0 +1,17 @@
+{
+  "symbol": "ENSOUSDT",
+  "last_price": 0.872,
+  "mu_annual": -10.15834412367008,
+  "sigma_annual": 1.2354393182608103,
+  "mu_per_min": -1.9327138743664537e-05,
+  "sigma_per_min": 0.0017040947580059026,
+  "volume_mean": 81476.64739,
+  "volume_std": 257545.16786140663,
+  "volume_min": 0.0,
+  "volume_max": 4070157.01,
+  "trade_count_mean": 213.656,
+  "trade_count_std": 252.47294838061364,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\ensousdt_klines_1m.csv"
+}

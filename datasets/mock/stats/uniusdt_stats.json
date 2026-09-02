@@ -1,0 +1,17 @@
+{
+  "symbol": "UNIUSDT",
+  "last_price": 5.747,
+  "mu_annual": 53.23021433375585,
+  "sigma_annual": 1.385533096878838,
+  "mu_per_min": 0.00010127514142647613,
+  "sigma_per_min": 0.0019111255830506692,
+  "volume_mean": 8621.525539999999,
+  "volume_std": 14863.24033157259,
+  "volume_min": 13.0,
+  "volume_max": 156813.72,
+  "trade_count_mean": 256.147,
+  "trade_count_std": 371.5119613027284,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\uniusdt_klines_1m.csv"
+}

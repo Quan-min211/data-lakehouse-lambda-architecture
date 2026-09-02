@@ -1,0 +1,17 @@
+{
+  "symbol": "ETHUSDT",
+  "last_price": 2462.61,
+  "mu_annual": -1.991676618110727,
+  "sigma_annual": 0.36157740796427607,
+  "mu_per_min": -3.7893390755531335e-06,
+  "sigma_per_min": 0.000498739320028026,
+  "volume_mean": 138.6176096,
+  "volume_std": 164.51020560929115,
+  "volume_min": 2.7139,
+  "volume_max": 2154.8096,
+  "trade_count_mean": 1341.684,
+  "trade_count_std": 1070.9419116572103,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\ethusdt_klines_1m.csv"
+}

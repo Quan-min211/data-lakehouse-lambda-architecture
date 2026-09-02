@@ -1,0 +1,17 @@
+{
+  "symbol": "DOGEUSDT",
+  "last_price": 0.083,
+  "mu_annual": -1.582335406621789,
+  "sigma_annual": 0.4363531863604795,
+  "mu_per_min": -3.0105315955513487e-06,
+  "sigma_per_min": 0.0006018807775705655,
+  "volume_mean": 306403.064,
+  "volume_std": 518948.2430311773,
+  "volume_min": 747.0,
+  "volume_max": 5200431.0,
+  "trade_count_mean": 230.77,
+  "trade_count_std": 204.65654912560217,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\dogeusdt_klines_1m.csv"
+}

@@ -1,0 +1,17 @@
+{
+  "symbol": "SOLUSDT",
+  "last_price": 102.68,
+  "mu_annual": -4.184942265091054,
+  "sigma_annual": 0.4751629984821521,
+  "mu_per_min": -7.962218921406115e-06,
+  "sigma_per_min": 0.0006554128259829785,
+  "volume_mean": 1327.884123,
+  "volume_std": 1687.7639302839364,
+  "volume_min": 32.136,
+  "volume_max": 16592.277,
+  "trade_count_mean": 526.15,
+  "trade_count_std": 397.89453062338015,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\solusdt_klines_1m.csv"
+}

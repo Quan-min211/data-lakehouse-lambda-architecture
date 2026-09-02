@@ -1,0 +1,17 @@
+{
+  "symbol": "USDCUSDT",
+  "last_price": 1.00027,
+  "mu_annual": 0.05260104042620486,
+  "sigma_annual": 0.007345219334444608,
+  "mu_per_min": 1.0007808300267287e-07,
+  "sigma_per_min": 1.0131577957103873e-05,
+  "volume_mean": 1868630.791,
+  "volume_std": 2391855.597619882,
+  "volume_min": 21477.0,
+  "volume_max": 13586886.0,
+  "trade_count_mean": 325.2,
+  "trade_count_std": 202.79484214348253,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\usdcusdt_klines_1m.csv"
+}

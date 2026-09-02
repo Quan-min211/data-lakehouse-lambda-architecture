@@ -1,0 +1,17 @@
+{
+  "symbol": "SUIUSDT",
+  "last_price": 0.7279,
+  "mu_annual": 1.3026513216202402,
+  "sigma_annual": 0.6639504744280733,
+  "mu_per_min": 2.4784081461572305e-06,
+  "sigma_per_min": 0.0009158155372950157,
+  "volume_mean": 28727.8155,
+  "volume_std": 43966.2919885472,
+  "volume_min": 147.6,
+  "volume_max": 359247.1,
+  "trade_count_mean": 139.325,
+  "trade_count_std": 120.7272354317782,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\suiusdt_klines_1m.csv"
+}

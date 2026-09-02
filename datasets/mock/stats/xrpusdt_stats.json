@@ -1,0 +1,17 @@
+{
+  "symbol": "XRPUSDT",
+  "last_price": 1.3818,
+  "mu_annual": 0.11423865556219755,
+  "sigma_annual": 0.4908521715488033,
+  "mu_per_min": 2.1734904026293293e-07,
+  "sigma_per_min": 0.0006770535793450822,
+  "volume_mean": 58180.031599999995,
+  "volume_std": 61134.79852514132,
+  "volume_min": 607.7,
+  "volume_max": 406282.9,
+  "trade_count_mean": 406.674,
+  "trade_count_std": 285.72672910317647,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\xrpusdt_klines_1m.csv"
+}

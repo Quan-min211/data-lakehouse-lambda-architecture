@@ -1,0 +1,17 @@
+{
+  "symbol": "RLUSDUSDT",
+  "last_price": 1.0005,
+  "mu_annual": 0.0525889476304,
+  "sigma_annual": 0.031016574581085688,
+  "mu_per_min": 1.0005507540030441e-07,
+  "sigma_per_min": 4.278249961263507e-05,
+  "volume_mean": 59438.304,
+  "volume_std": 504089.2819679443,
+  "volume_min": 0.0,
+  "volume_max": 8298222.0,
+  "trade_count_mean": 2.366,
+  "trade_count_std": 4.787070502927652,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 1000,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\raw\\klines\\rlusdusdt_klines_1m.csv"
+}
