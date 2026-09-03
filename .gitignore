@@ -34,6 +34,7 @@ minio-data/
 
 # Raw datasets (too large for Git)
 datasets/raw/
+datasets/mock/
 datasets/processed/
 /data/
 
