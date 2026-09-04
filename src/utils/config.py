@@ -66,3 +66,19 @@ class AppConfig:
 
 
 config = AppConfig()
+
+
+def get_kafka_config() -> KafkaConfig:
+    return KafkaConfig()
+
+
+def get_clickhouse_config() -> ClickHouseConfig:
+    return ClickHouseConfig()
+
+
+def get_binance_config() -> BinanceConfig:
+    return BinanceConfig()
+
+
+def get_minio_config() -> MinIOConfig:
+    return MinIOConfig()
