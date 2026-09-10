@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Báo Cáo Tiến Độ TLCN — Lambda Lakehouse</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d1117;
+      --bg2:       #161b22;
+      --bg3:       #21262d;
+      --border:    #30363d;
+      --text:      #c9d1d9;
+      --text-dim:  #8b949e;
+      --accent:    #58a6ff;
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --purple:    #bc8cff;
+      --orange:    #f0883e;
+      --teal:      #39d353;
+      --grad1:     linear-gradient(135deg, #1a2744 0%, #0d1117 100%);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ─── Header ───────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #0d1b35 0%, #091020 50%, #0d1117 100%);
+      border-bottom: 1px solid #1e3a6e;
+      padding: 56px 32px 48px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% -10%, #1e3a6e55 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-block;
+      background: #1a2744;
+      border: 1px solid #1e3a6e;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(20px, 3vw, 32px);
+      font-weight: 700;
+      color: #e6edf3;
+      line-height: 1.3;
+      max-width: 900px;
+      margin: 0 auto 12px;
+    }
+    .hero .subtitle {
+      font-size: 15px;
+      color: var(--accent);
+      font-style: italic;
+      margin-bottom: 32px;
+    }
+    .meta-grid {
+      display: inline-grid;
+      grid-template-columns: auto auto;
+      gap: 6px 24px;
+      text-align: left;
+      background: #0d1b35;
+      border: 1px solid #1e3a6e;
+      border-radius: 12px;
+      padding: 18px 28px;
+      font-size: 13.5px;
+    }
+    .meta-grid .k { color: var(--text-dim); }
+    .meta-grid .v { color: #e6edf3; font-weight: 600; }
+
+    /* ─── Nav ──────────────────────────────────────────────── */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      background: #0d1117dd;
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex; gap: 4px; align-items: center;
+      overflow-x: auto;
+    }
+    .nav a {
+      display: block;
+      padding: 12px 14px;
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: color .2s, border-color .2s;
+    }
+    .nav a:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ─── Layout ───────────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
+    section { margin-bottom: 72px; }
+
+    /* ─── Section Headers ──────────────────────────────────── */
+    .section-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 28px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-num {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      color: #000;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 15px;
+      flex-shrink: 0;
+    }
+    .section-title { font-size: 22px; font-weight: 700; color: #e6edf3; }
+
+    h3 {
+      font-size: 16px; font-weight: 700;
+      color: var(--accent);
+      margin: 28px 0 12px;
+    }
+    h4 {
+      font-size: 14px; font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin: 20px 0 8px;
+    }
+
+    /* ─── Cards ────────────────────────────────────────────── */
+    .cards { display: grid; gap: 16px; }
+    .cards.col2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .cards.col3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      transition: border-color .2s, transform .2s;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card .card-title {
+      font-size: 15px; font-weight: 700;
+      color: #e6edf3; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card .card-body { font-size: 13.5px; color: var(--text-dim); }
+    .card .card-body strong { color: var(--text); }
+
+    /* ─── Stat Boxes ───────────────────────────────────────── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin: 20px 0;
+    }
+    .stat-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 16px;
+      text-align: center;
+    }
+    .stat-box .num {
+      font-size: 26px; font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat-box .label {
+      font-size: 11.5px; color: var(--text-dim);
+      margin-top: 5px; text-transform: uppercase; letter-spacing: .5px;
+    }
+
+    /* ─── Tables ───────────────────────────────────────────── */
+    .tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    thead tr { background: var(--bg3); }
+    th {
+      padding: 11px 14px;
+      text-align: left;
+      color: var(--text-dim);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #21262d;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #161b2260; }
+    code {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: #f0883e;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12.5px;
+    }
+
+    /* ─── Status Badges ────────────────────────────────────── */
+    .ok    { display:inline-block; background:#0d3a0d; color:var(--green);  border:1px solid var(--green);  padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+    .warn  { display:inline-block; background:#3a2a0d; color:var(--yellow); border:1px solid var(--yellow); padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+    .fail  { display:inline-block; background:#3a0d0d; color:var(--red);    border:1px solid var(--red);    padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+    .info  { display:inline-block; background:#1a2744; color:var(--accent); border:1px solid var(--accent); padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+
+    /* ─── Architecture Diagram ─────────────────────────────── */
+    .arch {
+      display: grid;
+      gap: 8px;
+      margin: 20px 0;
+    }
+    .arch-row {
+      display: grid;
+      gap: 8px;
+    }
+    .arch-row.split { grid-template-columns: 1fr 1fr; }
+    .arch-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .arch-box.src   { border-color: #58a6ff44; background: #0d1b35; }
+    .arch-box.ingest{ border-color: #bc8cff44; background: #160d2a; }
+    .arch-box.batch { border-color: #3fb95044; background: #0d1f14; }
+    .arch-box.speed { border-color: #f0883e44; background: #1f130d; }
+    .arch-box.serve { border-color: #58a6ff66; background: #0d1b35; }
+    .arch-box.dash  { border-color: #39d35344; background: #0d1f14; }
+    .arch-box .ab-title {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .arch-box.src    .ab-title { color: var(--accent); }
+    .arch-box.ingest .ab-title { color: var(--purple); }
+    .arch-box.batch  .ab-title { color: var(--green); }
+    .arch-box.speed  .ab-title { color: var(--orange); }
+    .arch-box.serve  .ab-title { color: var(--accent); }
+    .arch-box.dash   .ab-title { color: var(--teal); }
+    .arch-box ul { padding-left: 16px; color: var(--text-dim); font-size: 12.5px; }
+    .arch-box li { margin-bottom: 3px; }
+    .arch-arrow {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 20px;
+      line-height: 1;
+    }
+    .arch-wm {
+      background: #1a2744;
+      border: 1px dashed #3a5a8e;
+      border-radius: 8px;
+      padding: 10px 20px;
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--accent);
+    }
+
+    /* ─── Layer Cards ──────────────────────────────────────── */
+    .layer-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .layer-card-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .lch-icon { font-size: 20px; }
+    .lch-name { font-weight: 700; font-size: 15px; color: #e6edf3; }
+    .lch-who  { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+    .layer-card-body { padding: 16px 20px; }
+
+    /* ─── Progress Bar ─────────────────────────────────────── */
+    .prog-wrap { margin: 6px 0 4px; }
+    .prog-label { display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim); margin-bottom:4px; }
+    .prog-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow:hidden; }
+    .prog-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+    /* ─── Test Result ──────────────────────────────────────── */
+    .test-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #21262d;
+      font-size: 13.5px;
+    }
+    .test-row:last-child { border-bottom: none; }
+    .test-name { flex: 1; font-family: monospace; color: var(--text-dim); font-size: 13px; }
+    .test-count { color: var(--text-dim); font-size: 13px; min-width: 40px; text-align: right; }
+    .test-pass { color: var(--green); font-weight: 700; min-width: 90px; text-align: right; }
+
+    /* ─── TODO list ────────────────────────────────────────── */
+    .todo-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .todo-pri {
+      flex-shrink: 0;
+      width: 60px; font-size: 11px; font-weight: 700;
+      padding: 3px 0; border-radius: 4px;
+      text-align: center;
+    }
+    .pri-cao  { background:#3a0d0d; color:var(--red); }
+    .pri-tb   { background:#3a2a0d; color:var(--yellow); }
+    .todo-text { font-size: 13.5px; }
+    .todo-text strong { color: #e6edf3; }
+    .todo-text p { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+    /* ─── Fault donut-ish bars ─────────────────────────────── */
+    .fault-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .fault-item { background:var(--bg3); border-radius:8px; padding:12px 14px; }
+    .fault-item .fname { font-size:12.5px; color:var(--text-dim); margin-bottom:6px; }
+    .fault-item .fnum  { font-size:19px; font-weight:800; color:var(--orange); }
+    .fault-item .fpct  { font-size:11px; color:var(--text-dim); }
+
+    /* ─── Footer ───────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 32px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    /* ─── Utility ──────────────────────────────────────────── */
+    .gap { margin-top: 16px; }
+    p { margin-bottom: 10px; color: var(--text-dim); }
+    strong { color: var(--text); }
+    ul.styled { padding-left: 20px; color: var(--text-dim); }
+    ul.styled li { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ HERO ══════════ -->
+<div class="hero">
+  <div class="badge">TLCN — HK1 2026–2027</div>
+  <h1>Thiết kế và triển khai hệ thống Data Lakehouse<br>theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực</h1>
+  <div class="subtitle">Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring</div>
+  <div class="meta-grid">
+    <span class="k">Sinh viên</span>
+    <span class="v">Nguyễn Đặng Quốc Anh (23133004) &mdash; Phạm Minh Quân (23133060)</span>
+    <span class="k">GVHD</span>
+    <span class="v">ThS. Đoàn Minh Trí</span>
+    <span class="k">Khoa</span>
+    <span class="v">Công nghệ Thông tin &mdash; HCMUTE</span>
+    <span class="k">Ngày báo cáo</span>
+    <span class="v">10/09/2026</span>
+  </div>
+</div>
+
+<!-- ══════════ NAV ══════════ -->
+<nav class="nav">
+  <a href="#rq">Câu hỏi NC</a>
+  <a href="#data">Dữ liệu</a>
+  <a href="#arch">Kiến trúc</a>
+  <a href="#layers">Các tầng</a>
+  <a href="#compare">So sánh</a>
+  <a href="#team">Nhân sự</a>
+  <a href="#tests">Unit Tests</a>
+  <a href="#todo">Còn lại</a>
+</nav>
+
+<div class="container">
+
+  <!-- ══ 1. RESEARCH QUESTIONS ══ -->
+  <section id="rq">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <div class="section-title">Câu hỏi nghiên cứu &amp; Mục tiêu</div>
+    </div>
+    <p><strong>Bài toán cốt lõi:</strong> Làm thế nào để một hệ thống vừa cung cấp dữ liệu thời gian thực (gần đúng) vừa đảm bảo tính chính xác tuyệt đối của dữ liệu lịch sử?</p>
+    <div class="cards col3">
+      <div class="card">
+        <div class="card-title">⚡ RQ1</div>
+        <div class="card-body">Lambda Architecture có giúp <strong>giảm độ trễ truy vấn</strong> so với Batch-only truyền thống không?<br><br><code>→ Benchmark 1: Query Latency</code></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🎯 RQ2</div>
+        <div class="card-body">Speed View (gần đúng) <strong>sai lệch bao nhiêu %</strong> so với Batch View (chính xác) sau khi tái xử lý?<br><br><code>→ Benchmark 2: Reconciliation Accuracy</code></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📦 RQ3</div>
+        <div class="card-body">Iceberg Compaction <strong>cải thiện hiệu năng đọc bao nhiêu %</strong> sau khi streaming tạo nhiều file nhỏ?<br><br><code>→ Benchmark 3: Compaction Efficiency</code></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 2. DATA ══ -->
+  <section id="data">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <div class="section-title">Dữ liệu — Thu thập &amp; Mock</div>
+    </div>
+
+    <h3>2.1 Dữ liệu thực — Binance REST API</h3>
+    <p>Script: <code>scripts/fetch_binance_data.py</code> — Tự động lọc Top-N cặp USDT theo khối lượng 24h, loại bỏ stablecoin-stablecoin.</p>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num">13</div><div class="label">Cặp tiền (symbols)</div></div>
+      <div class="stat-box"><div class="num">10,000</div><div class="label">Nến 1m (klines)</div></div>
+      <div class="stat-box"><div class="num">5,000</div><div class="label">AggTrades</div></div>
+      <div class="stat-box"><div class="num">~15,001</div><div class="label">Tổng bản ghi thực</div></div>
+    </div>
+
+    <h4>Schema TradeEvent (Data Contract)</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Thuộc tính</th><th>Kiểu dữ liệu</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td><code>trade_id</code></td><td>BIGINT</td><td>Mã giao dịch duy nhất từ Binance aggTrade ID</td></tr>
+          <tr><td><code>symbol</code></td><td>STRING</td><td>Cặp giao dịch (BTCUSDT, ETHUSDT...)</td></tr>
+          <tr><td><code>price</code></td><td>DOUBLE</td><td>Giá khớp lệnh (USDT)</td></tr>
+          <tr><td><code>quantity</code></td><td>DOUBLE</td><td>Khối lượng coin khớp lệnh</td></tr>
+          <tr><td><code>trade_time</code></td><td>BIGINT</td><td><strong>Event-time</strong> — epoch ms UTC từ Binance</td></tr>
+          <tr><td><code>is_buyer_maker</code></td><td>BOOLEAN</td><td>True: Taker bán / False: Taker mua</td></tr>
+          <tr><td><code>ingestion_time</code></td><td>BIGINT</td><td><strong>Processing-time</strong> — thời điểm Producer nhận</td></tr>
+          <tr><td><code>is_injected</code></td><td>BOOLEAN</td><td>Đánh dấu bản ghi được tiêm lỗi thực nghiệm</td></tr>
+          <tr><td><code>fault_type</code></td><td>STRING (nullable)</td><td><code>duplicate</code> / <code>late_data</code> / <code>out_of_order</code> / <code>schema_invalid</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="gap">2.2 Mock Data — Geometric Brownian Motion (GBM)</h3>
+    <p>Script: <code>scripts/generate_mock_data.py</code> — Mô hình giá tài chính chuẩn mực Black-Scholes. Tham số <code>μ, σ</code> được <strong>calibrate từ dữ liệu lịch sử thực</strong> của từng symbol.</p>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num">7</div><div class="label">Ngày mô phỏng</div></div>
+      <div class="stat-box"><div class="num">1,262,456</div><div class="label">AggTrades Mock</div></div>
+      <div class="stat-box"><div class="num">131,040</div><div class="label">Nến 1m Mock</div></div>
+      <div class="stat-box"><div class="num">253,682</div><div class="label">Bản ghi lỗi tiêm</div></div>
+      <div class="stat-box"><div class="num">~1.5M</div><div class="label">Tổng bản ghi mock</div></div>
+      <div class="stat-box"><div class="num">~360 MB</div><div class="label">Kích thước ổ đĩa</div></div>
+    </div>
+
+    <h4>Fault Injection — Bơm lỗi có kiểm soát</h4>
+    <div class="fault-grid">
+      <div class="fault-item">
+        <div class="fname">🔁 Duplicate (10%)</div>
+        <div class="fnum">92,612</div>
+        <div class="fpct">Cùng trade_id, ingestion_time khác → test Deduplication</div>
+      </div>
+      <div class="fault-item">
+        <div class="fname">⏰ Late Data (10%)</div>
+        <div class="fnum">83,486</div>
+        <div class="fpct">trade_time lùi 1–5 phút → test Watermark Spark</div>
+      </div>
+      <div class="fault-item">
+        <div class="fname">🔀 Out-of-Order (5%)</div>
+        <div class="fnum">50,713</div>
+        <div class="fpct">Đảo thứ tự sự kiện → test Event-time Processing</div>
+      </div>
+      <div class="fault-item">
+        <div class="fname">❌ Schema Invalid (3%)</div>
+        <div class="fnum">26,871</div>
+        <div class="fpct">Giá âm, khối lượng = 0 → test Data Quality Gate</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3. ARCHITECTURE ══ -->
+  <section id="arch">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <div class="section-title">Kiến trúc hệ thống Lambda</div>
+    </div>
+
+    <div class="arch">
+      <!-- Source -->
+      <div class="arch-box src">
+        <div class="ab-title">📡 Nguồn dữ liệu</div>
+        <ul>
+          <li>Binance REST API (15,001 bản ghi thực — 13 symbols)</li>
+          <li>Mock Data Generator GBM (1.26M aggTrades + 131K klines)</li>
+          <li>Kafka Producer + Fault Injector (4 loại lỗi kiểm soát)</li>
+        </ul>
+      </div>
+      <div class="arch-arrow">↓</div>
+
+      <!-- Ingestion -->
+      <div class="arch-box ingest">
+        <div class="ab-title">🔌 Tầng Thu Thập (Ingestion)</div>
+        <ul>
+          <li>ResilientKafkaProducer — acks=all, retry exponential backoff</li>
+          <li>Kafka topic: <code>crypto_trades_raw</code> &nbsp;|&nbsp; DLQ: <code>crypto_trades_dlq</code></li>
+          <li>FaultInjector — tiêm 4 loại lỗi phân tán</li>
+        </ul>
+      </div>
+      <div class="arch-arrow">↓ Kafka Stream ↓</div>
+
+      <!-- Batch + Speed -->
+      <div class="arch-row split">
+        <div class="arch-box batch">
+          <div class="ab-title">🏭 Tầng Lô (Batch Layer)</div>
+          <ul>
+            <li>IcebergTableManager → Bronze Table v2 (partition days)</li>
+            <li>CompactionJob: Bin-Pack / Sort / Manifest / Expire</li>
+            <li>Dagster 6 SDA: bronze→silver→gold→CH→watermark</li>
+            <li>→ ClickHouse: <code>lakehouse.batch_agg</code></li>
+            <li>Chu kỳ: <strong>15 phút</strong></li>
+          </ul>
+        </div>
+        <div class="arch-box speed">
+          <div class="ab-title">⚡ Tầng Tốc Độ (Speed Layer)</div>
+          <ul>
+            <li>Spark Structured Streaming, Trigger 5s</li>
+            <li>WindowAggregator — Watermark 1m, Window 1m</li>
+            <li>MetricsCalculator — OHLCV + VWAP</li>
+            <li>SpikeDetector — |Close-Open|/Open ≥ 2%</li>
+            <li>→ ClickHouse: <code>lakehouse.speed_agg</code></li>
+            <li><strong>SLA: latency &lt; 5 giây</strong></li>
+          </ul>
+        </div>
+      </div>
+      <div class="arch-arrow">↓ batch_agg + speed_agg ↓</div>
+
+      <!-- Watermark -->
+      <div class="arch-wm">
+        🕐 <strong>lakehouse.system_watermark</strong> — W = Batch Cutoff (mốc phân chia Reconciled vs Provisional)
+      </div>
+      <div class="arch-arrow">↓</div>
+
+      <!-- Serving -->
+      <div class="arch-box serve">
+        <div class="ab-title">🔀 Tầng Phục Vụ (Serving Layer) — Auto-Correcting Query Merger</div>
+        <ul>
+          <li><strong>CASE 1:</strong> T_end ≤ W &nbsp;→ 100% Batch View &nbsp;<span class="ok">Reconciled</span></li>
+          <li><strong>CASE 2:</strong> T_start ≥ W → 100% Speed View <span class="info">Provisional</span></li>
+          <li><strong>CASE 3:</strong> T_start &lt; W &lt; T_end → Cắt tại W, ghép 2 nguồn, ZERO Double-Counting</li>
+          <li>FastAPI Port 8000 &nbsp;| &nbsp;<code>/api/market</code> &nbsp;<code>/api/reconciliation</code> &nbsp;<code>/api/watermark</code></li>
+        </ul>
+      </div>
+      <div class="arch-arrow">↓</div>
+
+      <!-- Dashboard -->
+      <div class="arch-box dash">
+        <div class="ab-title">📊 Tầng Trực Quan (Dashboard)</div>
+        <ul>
+          <li>Streamlit + Plotly — Port 8501 — Dark theme</li>
+          <li>Biểu đồ nến Candlestick OHLCV + VWAP + Price Spike</li>
+          <li>Badge Reconciled (xanh) vs Provisional (tím)</li>
+          <li>5 thẻ KPI + Bảng đối soát Batch vs Speed</li>
+          <li>Auto-refresh 3s/5s/10s + Fallback data khi API offline</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-top:28px;">Hạ tầng Docker Compose</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Service</th><th>Image</th><th>Port</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Kafka</strong> (KRaft)</td><td><code>apache/kafka:3.7.0</code></td><td>9092, 9094</td><td>Message broker — không ZooKeeper</td></tr>
+          <tr><td><strong>MinIO</strong></td><td><code>minio/minio:latest</code></td><td>9000, 9001</td><td>S3-compatible object storage</td></tr>
+          <tr><td><strong>Iceberg REST</strong></td><td><code>tabulario/iceberg-rest</code></td><td>8181</td><td>Catalog quản lý schema Iceberg</td></tr>
+          <tr><td><strong>ClickHouse</strong></td><td><code>clickhouse/clickhouse-server</code></td><td>8123, 9009</td><td>OLAP engine — Batch + Speed Views</td></tr>
+          <tr><td><strong>Redis</strong></td><td><code>redis:7.2-alpine</code></td><td>6379</td><td>Hot cache (dự phòng)</td></tr>
+          <tr><td><strong>FastAPI</strong></td><td>Custom Dockerfile</td><td>8000</td><td>Serving Layer API</td></tr>
+          <tr><td><strong>Streamlit</strong></td><td>Custom Dockerfile</td><td>8501</td><td>Dashboard UI</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ 4. LAYERS ══ -->
+  <section id="layers">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <div class="section-title">Chi tiết các tầng đã triển khai</div>
+    </div>
+
+    <!-- Ingestion -->
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="lch-icon">🔌</span>
+        <span class="lch-name">Ingestion Layer</span>
+        <span class="ok">HOÀN THÀNH</span>
+        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
+      </div>
+      <div class="layer-card-body">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
+          <tbody>
+            <tr><td><code>src/ingestion/models.py</code></td><td>TradeEvent &amp; DLQEvent — Data Contract chuẩn hóa</td></tr>
+            <tr><td><code>src/ingestion/kafka_producer.py</code></td><td>ResilientKafkaProducer — retry backoff, DLQ routing, key partition</td></tr>
+            <tr><td><code>src/ingestion/fault_injector.py</code></td><td>FaultInjector — 4 loại lỗi phân tán có kiểm soát</td></tr>
+            <tr><td><code>src/ingestion/binance_ws.py</code></td><td>WebSocket streaming Top-10 coin, auto-reconnect</td></tr>
+            <tr><td><code>datasets/schemas/trade_event_schema.json</code></td><td>JSON Schema — Data Contract chuẩn hóa</td></tr>
+          </tbody>
+        </table></div>
+        <div class="prog-wrap gap">
+          <div class="prog-label"><span>Unit Tests</span><span>8/8 PASS</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch -->
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="lch-icon">🏭</span>
+        <span class="lch-name">Batch Layer (Iceberg + Compaction + Dagster)</span>
+        <span class="ok">HOÀN THÀNH</span>
+        <span class="lch-who">Phạm Minh Quân</span>
+      </div>
+      <div class="layer-card-body">
+        <h4>Bronze Table Schema (Iceberg v2)</h4>
+        <p style="font-family:monospace;font-size:12.5px;background:var(--bg3);padding:14px;border-radius:8px;line-height:1.8;color:#c9d1d9;">
+          <span style="color:#bc8cff">CREATE TABLE</span> iceberg_catalog.bronze.crypto_trades<br>
+          &nbsp;&nbsp;( trade_id BIGINT NOT NULL, symbol STRING NOT NULL, price DOUBLE, ..., fault_type STRING )<br>
+          <span style="color:#bc8cff">USING iceberg</span><br>
+          <span style="color:#bc8cff">PARTITIONED BY</span> (days(trade_time_ts))<br>
+          <span style="color:#bc8cff">TBLPROPERTIES</span> ('format-version'='2', 'write.target-file-size-bytes'='134217728')
+        </p>
+        <h4>Compaction Strategies</h4>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Chiến lược</th><th>Lệnh Iceberg</th><th>Mục đích</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Bin-Packing</strong></td><td><code>rewrite_data_files(strategy='binpack')</code></td><td>Gộp file nhỏ → 128 MB <span class="info">Benchmark 3</span></td></tr>
+            <tr><td>Sort Compaction</td><td><code>rewrite_data_files(strategy='sort')</code></td><td>Sắp xếp symbol, trade_time_ts</td></tr>
+            <tr><td>Manifest Rewrite</td><td><code>rewrite_manifests()</code></td><td>Gộp metadata manifests nhỏ</td></tr>
+            <tr><td>Expire Snapshots</td><td><code>expire_snapshots()</code></td><td>Xóa snapshot &gt; 7 ngày</td></tr>
+          </tbody>
+        </table></div>
+        <h4>Dagster 6 SDA — Data Lineage</h4>
+        <p style="font-family:monospace;font-size:12.5px;background:var(--bg3);padding:14px;border-radius:8px;color:#c9d1d9;line-height:2;">
+          <span style="color:#3fb950">bronze_crypto_trades</span> → <span style="color:#58a6ff">silver_cleaned_trades</span> (DQ Gate: dedup + quarantine)<br>
+          → <span style="color:#f0883e">gold_market_aggregates</span> (OHLCV + VWAP — Ground Truth)<br>
+          → <span style="color:#bc8cff">clickhouse_batch_sync</span> → <span style="color:#39d353">system_watermark_sync</span><br>
+          + <span style="color:#d29922">iceberg_small_files_compaction</span> (job độc lập — mỗi 2 giờ)
+        </p>
+        <p style="font-size:13px;margin-top:8px;">✅ Kết quả thực tế: <strong>75 nến</strong> đã ghi vào <code>lakehouse.batch_agg</code> &nbsp;|&nbsp; Pipeline: <strong>15 phút/lần</strong></p>
+      </div>
+    </div>
+
+    <!-- Speed -->
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="lch-icon">⚡</span>
+        <span class="lch-name">Speed Layer (Spark Structured Streaming)</span>
+        <span class="ok">HOÀN THÀNH</span>
+        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
+      </div>
+      <div class="layer-card-body">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
+          <tbody>
+            <tr><td><code>spark_streaming.py</code></td><td>Entry point: SparkSession local[2], Trigger 5s, checkpoint</td></tr>
+            <tr><td><code>window_aggregator.py</code></td><td>Parse Kafka JSON → Watermark 1m → Tumbling Window 1m</td></tr>
+            <tr><td><code>metrics_calculator.py</code></td><td>OHLCV + VWAP = Σ(P×Q)/ΣQ</td></tr>
+            <tr><td><code>spike_detector.py</code></td><td>is_spike: |Close-Open|/Open ≥ 2% hoặc (High-Low)/Low ≥ 3%</td></tr>
+            <tr><td><code>clickhouse_writer.py</code></td><td>foreachBatch → ClickHouse <code>lakehouse.speed_agg</code> (ReplacingMergeTree)</td></tr>
+          </tbody>
+        </table></div>
+        <div class="prog-wrap gap">
+          <div class="prog-label"><span>Unit Tests</span><span>17/17 PASS</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Serving -->
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="lch-icon">🔀</span>
+        <span class="lch-name">Serving Layer (Auto-Correcting Query Merger)</span>
+        <span class="ok">HOÀN THÀNH</span>
+        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
+      </div>
+      <div class="layer-card-body">
+        <p>Thuật toán phân luồng <strong>3 Case</strong> dựa trên Batch Watermark W:</p>
+        <div class="cards col3" style="margin:12px 0;">
+          <div class="card">
+            <div class="card-title"><span class="ok">CASE 1</span> &nbsp; Lịch sử</div>
+            <div class="card-body">T_end ≤ W → 100% batch_agg<br>Δ = 0.0 (đã qua DQ Gate)</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="info">CASE 2</span> &nbsp; Thời gian thực</div>
+            <div class="card-body">T_start ≥ W → 100% speed_agg<br>Tức thời, chấp nhận gần đúng</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="warn">CASE 3</span> &nbsp; Hybrid</div>
+            <div class="card-body">Cắt tại W, ghép 2 nguồn<br>ZERO Double-Counting<br>Tính Δ = |VWAP_speed - VWAP_batch|</div>
+          </div>
+        </div>
+        <div class="prog-wrap">
+          <div class="prog-label"><span>Unit Tests</span><span>24/24 PASS</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="layer-card">
+      <div class="layer-card-header">
+        <span class="lch-icon">📊</span>
+        <span class="lch-name">Dashboard Layer (Streamlit + Plotly)</span>
+        <span class="ok">HOÀN THÀNH</span>
+        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
+      </div>
+      <div class="layer-card-body">
+        <ul class="styled">
+          <li>Biểu đồ nến Candlestick OHLCV + đường VWAP + cảnh báo Spike</li>
+          <li>Nến <span class="ok">Reconciled</span> (xanh/đỏ) vs <span class="info">Provisional</span> (tím) — phân biệt nguồn dữ liệu</li>
+          <li>5 thẻ KPI: Giá hiện tại, VWAP, Query Case, Watermark, Δ đối soát</li>
+          <li>Bảng đối soát MAE Batch vs Speed (phục vụ Benchmark 2)</li>
+          <li>Auto-refresh 3s/5s/10s &nbsp;|&nbsp; Fallback data khi API offline</li>
+        </ul>
+        <div class="prog-wrap gap">
+          <div class="prog-label"><span>Unit Tests</span><span>27/27 PASS</span></div>
+          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 5. COMPARE ══ -->
+  <section id="compare">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <div class="section-title">So sánh Kiến trúc Đề ra vs Thực tế</div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Hạng mục</th><th>Đề ra ban đầu</th><th>Thực tế đã xây dựng</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+          <tr><td>Data Collection</td><td>Kafka + Batch CSV</td><td>Binance REST API + Mock GBM</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Kafka Broker</td><td>Apache Kafka (KRaft)</td><td>Apache Kafka 3.7.0 (KRaft, no ZK)</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Object Storage</td><td>MinIO</td><td>MinIO (Docker)</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Table Format</td><td>Apache Iceberg</td><td>Iceberg v2 (REST Catalog)</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Bronze Table</td><td>MinIO + Iceberg</td><td><code>bronze.crypto_trades</code> partition days</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Silver/Gold Layer</td><td>dbt transformation</td><td>Dagster SDA simulate (dbt chưa có models)</td><td><span class="warn">⚠ Thiếu dbt</span></td></tr>
+          <tr><td>Batch Views</td><td>ClickHouse batch_agg</td><td><code>lakehouse.batch_agg</code></td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Stream Processing</td><td>Spark Structured Streaming</td><td>Spark Micro-batch Trigger 5s</td><td><span class="ok">OK</span></td></tr>
+          <tr><td><strong>Speed Views</strong></td><td><strong>Redis</strong></td><td><strong>ClickHouse speed_agg</strong></td><td><span class="warn">⚠ Đổi sang CH</span></td></tr>
+          <tr><td>Serving API</td><td>FastAPI Query Merger</td><td>FastAPI + 3-Case Auto-Correcting Merger</td><td><span class="ok">OK (nâng cấp)</span></td></tr>
+          <tr><td>Dashboard</td><td>Metabase / Streamlit</td><td>Streamlit + Plotly custom</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Orchestration</td><td>Dagster</td><td>Dagster 6 SDA + 2 Schedules</td><td><span class="ok">OK</span></td></tr>
+          <tr><td>Compaction</td><td>Iceberg OPTIMIZE</td><td>Bin-Pack + Sort + Manifest + Expire</td><td><span class="ok">OK (đầy đủ hơn)</span></td></tr>
+          <tr><td><strong>Benchmark Scripts</strong></td><td>3 bộ benchmark</td><td>Chưa có code thực</td><td><span class="fail">❌ CHƯA LÀM</span></td></tr>
+          <tr><td>Data Quality Module</td><td>src/data_quality/</td><td>Logic simulate trong Dagster</td><td><span class="warn">⚠ Chưa đủ</span></td></tr>
+          <tr><td>Unit Tests</td><td>pytest</td><td>81/81 PASS</td><td><span class="ok">OK ✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:28px;">Điểm thích nghi đáng chú ý</h3>
+    <div class="cards col3">
+      <div class="card">
+        <div class="card-title">🔄 Redis → ClickHouse</div>
+        <div class="card-body">Speed Views dùng ClickHouse <code>ReplacingMergeTree</code> thay Redis. Đơn giản hóa kiến trúc, vẫn đảm bảo SLA &lt; 5s.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">⬆️ Query Merger nâng cấp</div>
+        <div class="card-body">Thiết kế thuật toán 3 Case với Δ_reconciliation và CandleStatus (Reconciled / Provisional) phục vụ trực tiếp Benchmark 2.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚙️ Dagster SDA</div>
+        <div class="card-body">Thay Spark Batch Job thuần bằng Dagster Software-Defined Assets với lineage DAG, auto-schedule, metadata tracking.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 6. TEAM ══ -->
+  <section id="team">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <div class="section-title">Phân chia công việc</div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Hạng mục</th><th style="text-align:center">Nguyễn Đặng Quốc Anh (23133004)</th><th style="text-align:center">Phạm Minh Quân (23133060)</th></tr></thead>
+        <tbody>
+          <tr><td>Data Contract &amp; JSON Schema</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Kafka Producer &amp; Fault Injector</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Binance WebSocket &amp; Backfill</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td><strong>Fetch Binance Data (REST API)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
+          <tr><td><strong>Mock Data Generator (GBM)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
+          <tr><td><strong>Iceberg Utils (Bronze DDL, Write, Time Travel)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
+          <tr><td><strong>Compaction Job (4 chiến lược)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
+          <tr><td>Speed Layer (5 modules)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Serving Layer (Query Merger + FastAPI)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Dashboard (Streamlit + Plotly)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Dagster Orchestration (6 SDA)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
+          <tr><td>Tài liệu data (data.md, reportmock.md)</td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ 7. TESTS ══ -->
+  <section id="tests">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <div class="section-title">Kết quả kiểm thử tự động</div>
+    </div>
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      <div class="stat-box"><div class="num" style="color:var(--green)">81</div><div class="label">Tổng Tests</div></div>
+      <div class="stat-box"><div class="num" style="color:var(--green)">81</div><div class="label">PASS</div></div>
+      <div class="stat-box"><div class="num" style="color:var(--red)">0</div><div class="label">FAIL</div></div>
+      <div class="stat-box"><div class="num" style="color:var(--green)">100%</div><div class="label">Pass Rate</div></div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-top:16px;">
+      <div class="test-row">
+        <span class="test-name">test_ingestion.py</span>
+        <span class="test-count">8 tests</span>
+        <span class="test-pass">✓ 8/8 PASS</span>
+      </div>
+      <div class="test-row">
+        <span class="test-name">test_speed_layer.py</span>
+        <span class="test-count">17 tests</span>
+        <span class="test-pass">✓ 17/17 PASS</span>
+      </div>
+      <div class="test-row">
+        <span class="test-name">test_query_merger.py</span>
+        <span class="test-count">24 tests</span>
+        <span class="test-pass">✓ 24/24 PASS</span>
+      </div>
+      <div class="test-row">
+        <span class="test-name">test_dashboard_components.py</span>
+        <span class="test-count">27 tests</span>
+        <span class="test-pass">✓ 27/27 PASS</span>
+      </div>
+      <div class="test-row">
+        <span class="test-name">test_dagster_pipeline.py</span>
+        <span class="test-count">5 tests</span>
+        <span class="test-pass">✓ 5/5 PASS</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 8. TODO ══ -->
+  <section id="todo">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <div class="section-title">Những phần còn lại cần hoàn thiện</div>
+    </div>
+
+    <div class="todo-item">
+      <div class="todo-pri pri-cao">🔴 CAO</div>
+      <div class="todo-text">
+        <strong>Benchmark 1 — Query Latency</strong> (<code>bench_latency.py</code>)
+        <p>So sánh độ trễ Batch-only vs Speed-only vs Lambda Merge. Cần Docker đang chạy.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-cao">🔴 CAO</div>
+      <div class="todo-text">
+        <strong>Benchmark 2 — Reconciliation Accuracy</strong> (<code>bench_reprocess.py</code>)
+        <p>Đo sai số VWAP Speed View vs Batch View. Cần đủ data và Watermark chốt.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-cao">🔴 CAO</div>
+      <div class="todo-text">
+        <strong>Benchmark 3 — Compaction Efficiency</strong> (<code>bench_compaction.py</code>)
+        <p>Đo cải thiện read latency TRƯỚC vs SAU Bin-Packing Compaction.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-cao">🔴 CAO</div>
+      <div class="todo-text">
+        <strong>Ghi kết quả Benchmark → CSV</strong> (<code>results/logs/</code>)
+        <p>Output chuẩn để làm bảng dữ liệu chương thực nghiệm luận văn.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-tb">🟡 TB</div>
+      <div class="todo-text">
+        <strong>Data Quality Module</strong> (<code>src/data_quality/</code>)
+        <p>Tách logic DQ ra module độc lập, hiện đang simulate trong Dagster.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-tb">🟡 TB</div>
+      <div class="todo-text">
+        <strong>dbt Models</strong> (<code>dbt_project/models/</code>)
+        <p>Xây dựng Bronze/Silver/Gold SQL models theo kế hoạch đề ra.</p>
+      </div>
+    </div>
+    <div class="todo-item">
+      <div class="todo-pri pri-cao">🔴 CAO</div>
+      <div class="todo-text">
+        <strong>Báo cáo luận văn</strong>
+        <p>Viết nội dung từng chương: Tổng quan, Thiết kế hệ thống, Thực nghiệm, Kết luận.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <strong>Báo cáo tiến độ TLCN</strong> &mdash; Data Lakehouse Lambda Architecture &mdash;
+  Phạm Minh Quân &amp; Nguyễn Đặng Quốc Anh &mdash; HCMUTE HK1 2026–2027<br>
+  Cập nhật: 10/09/2026
+</footer>
+
+</body>
+</html>
