@@ -386,9 +386,7 @@
   <a href="#arch">Kiến trúc</a>
   <a href="#layers">Các tầng</a>
   <a href="#compare">So sánh</a>
-  <a href="#team">Nhân sự</a>
   <a href="#tests">Unit Tests</a>
-  <a href="#todo">Còn lại</a>
 </nav>
 
 <div class="container">
@@ -791,37 +789,10 @@
     </div>
   </section>
 
-  <!-- ══ 6. TEAM ══ -->
-  <section id="team">
-    <div class="section-header">
-      <div class="section-num">6</div>
-      <div class="section-title">Phân chia công việc</div>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Hạng mục</th><th style="text-align:center">Nguyễn Đặng Quốc Anh (23133004)</th><th style="text-align:center">Phạm Minh Quân (23133060)</th></tr></thead>
-        <tbody>
-          <tr><td>Data Contract &amp; JSON Schema</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Kafka Producer &amp; Fault Injector</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Binance WebSocket &amp; Backfill</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td><strong>Fetch Binance Data (REST API)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
-          <tr><td><strong>Mock Data Generator (GBM)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
-          <tr><td><strong>Iceberg Utils (Bronze DDL, Write, Time Travel)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
-          <tr><td><strong>Compaction Job (4 chiến lược)</strong></td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
-          <tr><td>Speed Layer (5 modules)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Serving Layer (Query Merger + FastAPI)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Dashboard (Streamlit + Plotly)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Dagster Orchestration (6 SDA)</td><td style="text-align:center"><span class="ok">✓</span></td><td></td></tr>
-          <tr><td>Tài liệu data (data.md, reportmock.md)</td><td></td><td style="text-align:center"><span class="ok">✓</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ══ 7. TESTS ══ -->
+  <!-- ══ 6. TESTS ══ -->
   <section id="tests">
     <div class="section-header">
-      <div class="section-num">7</div>
+      <div class="section-num">6</div>
       <div class="section-title">Kết quả kiểm thử tự động</div>
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
@@ -859,63 +830,7 @@
     </div>
   </section>
 
-  <!-- ══ 8. TODO ══ -->
-  <section id="todo">
-    <div class="section-header">
-      <div class="section-num">8</div>
-      <div class="section-title">Những phần còn lại cần hoàn thiện</div>
-    </div>
 
-    <div class="todo-item">
-      <div class="todo-pri pri-cao">🔴 CAO</div>
-      <div class="todo-text">
-        <strong>Benchmark 1 — Query Latency</strong> (<code>bench_latency.py</code>)
-        <p>So sánh độ trễ Batch-only vs Speed-only vs Lambda Merge. Cần Docker đang chạy.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-cao">🔴 CAO</div>
-      <div class="todo-text">
-        <strong>Benchmark 2 — Reconciliation Accuracy</strong> (<code>bench_reprocess.py</code>)
-        <p>Đo sai số VWAP Speed View vs Batch View. Cần đủ data và Watermark chốt.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-cao">🔴 CAO</div>
-      <div class="todo-text">
-        <strong>Benchmark 3 — Compaction Efficiency</strong> (<code>bench_compaction.py</code>)
-        <p>Đo cải thiện read latency TRƯỚC vs SAU Bin-Packing Compaction.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-cao">🔴 CAO</div>
-      <div class="todo-text">
-        <strong>Ghi kết quả Benchmark → CSV</strong> (<code>results/logs/</code>)
-        <p>Output chuẩn để làm bảng dữ liệu chương thực nghiệm luận văn.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-tb">🟡 TB</div>
-      <div class="todo-text">
-        <strong>Data Quality Module</strong> (<code>src/data_quality/</code>)
-        <p>Tách logic DQ ra module độc lập, hiện đang simulate trong Dagster.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-tb">🟡 TB</div>
-      <div class="todo-text">
-        <strong>dbt Models</strong> (<code>dbt_project/models/</code>)
-        <p>Xây dựng Bronze/Silver/Gold SQL models theo kế hoạch đề ra.</p>
-      </div>
-    </div>
-    <div class="todo-item">
-      <div class="todo-pri pri-cao">🔴 CAO</div>
-      <div class="todo-text">
-        <strong>Báo cáo luận văn</strong>
-        <p>Viết nội dung từng chương: Tổng quan, Thiết kế hệ thống, Thực nghiệm, Kết luận.</p>
-      </div>
-    </div>
-  </section>
 
 </div>
 
