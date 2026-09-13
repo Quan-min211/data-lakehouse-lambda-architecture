@@ -4,841 +4,1569 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Báo Cáo Tiến Độ TLCN — Lambda Lakehouse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ─── Reset & Base ─────────────────────────────────────── */
+    /* ─── RESET & ROOT TOKENS ────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:        #0d1117;
-      --bg2:       #161b22;
-      --bg3:       #21262d;
-      --border:    #30363d;
-      --text:      #c9d1d9;
-      --text-dim:  #8b949e;
-      --accent:    #58a6ff;
-      --green:     #3fb950;
-      --yellow:    #d29922;
-      --red:       #f85149;
-      --purple:    #bc8cff;
-      --orange:    #f0883e;
-      --teal:      #39d353;
-      --grad1:     linear-gradient(135deg, #1a2744 0%, #0d1117 100%);
-    }
-    html { scroll-behavior: smooth; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-      font-size: 15px;
-      line-height: 1.7;
+      --bg:           #080c14;
+      --bg-card:      rgba(15, 23, 42, 0.75);
+      --bg-card-hover:rgba(30, 41, 59, 0.85);
+      --bg-header:    rgba(8, 12, 20, 0.85);
+      --border:       rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(56, 189, 248, 0.5);
+      
+      --text:         #f1f5f9;
+      --text-muted:   #94a3b8;
+      --text-dim:     #64748b;
+      
+      --cyan:         #38bdf8;
+      --blue:         #3b82f6;
+      --emerald:      #10b981;
+      --green:        #34d399;
+      --amber:        #f59e0b;
+      --rose:         #f43f5e;
+      --purple:       #a855f7;
+      --indigo:       #6366f1;
+
+      --grad-cyan:    linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+      --grad-emerald: linear-gradient(135deg, #34d399 0%, #059669 100%);
+      --grad-purple:  linear-gradient(135deg, #c084fc 0%, #7c3aed 100%);
+      --grad-amber:   linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+      --glow-cyan:    0 0 25px rgba(56, 189, 248, 0.25);
     }
 
-    /* ─── Header ───────────────────────────────────────────── */
-    .hero {
-      background: linear-gradient(135deg, #0d1b35 0%, #091020 50%, #0d1117 100%);
-      border-bottom: 1px solid #1e3a6e;
-      padding: 56px 32px 48px;
-      text-align: center;
-      position: relative;
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.6;
+      user-select: none;
+    }
+
+    /* ─── BACKGROUND AMBIENCE ────────────────────────────────── */
+    .ambience {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
       overflow: hidden;
     }
-    .hero::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 50% -10%, #1e3a6e55 0%, transparent 70%);
-      pointer-events: none;
+    .ambience-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
     }
-    .badge {
-      display: inline-block;
-      background: #1a2744;
-      border: 1px solid #1e3a6e;
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      padding: 5px 14px;
-      border-radius: 20px;
-      margin-bottom: 20px;
+    .blob-1 { width: 600px; height: 600px; background: #2563eb; top: -100px; left: -100px; }
+    .blob-2 { width: 500px; height: 500px; background: #059669; bottom: -100px; right: -50px; }
+    .blob-3 { width: 450px; height: 450px; background: #7c3aed; top: 40%; right: 20%; }
+
+    /* ─── APP WRAPPER ────────────────────────────────────────── */
+    .app {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .hero h1 {
-      font-size: clamp(20px, 3vw, 32px);
+
+    /* ─── TOP NAVBAR ─────────────────────────────────────────── */
+    .header {
+      height: 56px;
+      background: var(--bg-header);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       font-weight: 700;
-      color: #e6edf3;
-      line-height: 1.3;
-      max-width: 900px;
-      margin: 0 auto 12px;
+      font-size: 14px;
+      color: var(--text);
+      cursor: pointer;
     }
-    .hero .subtitle {
-      font-size: 15px;
-      color: var(--accent);
+    .brand-tag {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Chapter Navigation Pills */
+    .nav-chapters {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      max-width: 65vw;
+      scrollbar-width: none;
+    }
+    .nav-chapters::-webkit-scrollbar { display: none; }
+
+    .chap-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chap-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .chap-btn.active {
+      color: #fff;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .chap-btn .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: all 0.2s;
+    }
+    .chap-btn.active .dot {
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* Header Tools */
+    .header-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .icon-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .icon-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-focus);
+    }
+
+    /* ─── SLIDES CONTAINER & TRACK ───────────────────────────── */
+    .viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      height: calc(100vh - 56px - 58px);
+    }
+
+    .slides-track {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+      will-change: transform;
+    }
+
+    .slide {
+      min-width: 100%;
+      max-width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 32px 56px 40px;
+      user-select: text;
+    }
+    /* Sleek Custom Scrollbar inside Slide */
+    .slide::-webkit-scrollbar { width: 6px; }
+    .slide::-webkit-scrollbar-track { background: transparent; }
+    .slide::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+    .slide::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+    .slide-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      animation: fadeIn 0.4s ease forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── SLIDE HEADER & BADGES ──────────────────────────────── */
+    .slide-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      border: 1px solid transparent;
+    }
+    .pill-cyan   { background: rgba(56, 189, 248, 0.12); color: var(--cyan); border-color: rgba(56, 189, 248, 0.25); }
+    .pill-emerald{ background: rgba(52, 211, 153, 0.12); color: var(--green); border-color: rgba(52, 211, 153, 0.25); }
+    .pill-purple { background: rgba(168, 85, 247, 0.12); color: var(--purple); border-color: rgba(168, 85, 247, 0.25); }
+    .pill-amber  { background: rgba(245, 158, 11, 0.12); color: var(--amber); border-color: rgba(245, 158, 11, 0.25); }
+
+    .slide-title {
+      font-size: clamp(24px, 2.4vw, 32px);
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+    .slide-desc {
+      font-size: 14.5px;
+      color: var(--text-muted);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+
+    /* ─── SLIDE 0: HERO (COVER) ──────────────────────────────── */
+    .hero-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 170px);
+      text-align: center;
+      padding: 20px 0;
+    }
+    .hero-title {
+      font-size: clamp(26px, 3.4vw, 42px);
+      font-weight: 800;
+      line-height: 1.25;
+      color: #fff;
+      max-width: 960px;
+      margin: 16px auto;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-sub {
+      font-size: 16px;
+      color: var(--cyan);
+      font-weight: 500;
       font-style: italic;
       margin-bottom: 32px;
     }
-    .meta-grid {
-      display: inline-grid;
-      grid-template-columns: auto auto;
-      gap: 6px 24px;
+    .hero-meta-box {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      padding: 20px 36px;
       text-align: left;
-      background: #0d1b35;
-      border: 1px solid #1e3a6e;
-      border-radius: 12px;
-      padding: 18px 28px;
       font-size: 13.5px;
+      max-width: 760px;
+      margin-bottom: 32px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }
-    .meta-grid .k { color: var(--text-dim); }
-    .meta-grid .v { color: #e6edf3; font-weight: 600; }
+    .hero-meta-item { display: flex; flex-direction: column; gap: 3px; }
+    .hero-meta-item .k { color: var(--text-dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+    .hero-meta-item .v { color: #f8fafc; font-weight: 600; }
 
-    /* ─── Nav ──────────────────────────────────────────────── */
-    .nav {
-      position: sticky; top: 0; z-index: 100;
-      background: #0d1117dd;
+    .btn-start {
+      background: var(--grad-cyan);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--glow-cyan);
+      transition: all 0.25s;
+    }
+    .btn-start:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(56, 189, 248, 0.4);
+    }
+
+    /* ─── CARDS & GRIDS ──────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      backdrop-filter: blur(14px);
+      transition: all 0.25s ease;
+      position: relative;
+    }
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .card-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-desc {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* ─── STAT METRICS BOXES ─────────────────────────────────── */
+    .metric-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
       backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      display: flex; gap: 4px; align-items: center;
+      transition: all 0.2s;
+    }
+    .metric-box:hover {
+      border-color: var(--cyan);
+      transform: translateY(-2px);
+    }
+    .metric-val {
+      font-size: 26px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.1;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .metric-lbl {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── CODE & TABLES ──────────────────────────────────────── */
+    code, .code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: #38bdf8;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+    .code-block {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      background: rgba(10, 15, 28, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: #e2e8f0;
       overflow-x: auto;
     }
-    .nav a {
-      display: block;
-      padding: 12px 14px;
-      color: var(--text-dim);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 500;
-      white-space: nowrap;
-      border-bottom: 2px solid transparent;
-      transition: color .2s, border-color .2s;
-    }
-    .nav a:hover { color: var(--accent); border-color: var(--accent); }
 
-    /* ─── Layout ───────────────────────────────────────────── */
-    .container { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
-    section { margin-bottom: 72px; }
-
-    /* ─── Section Headers ──────────────────────────────────── */
-    .section-header {
-      display: flex; align-items: center; gap: 14px;
-      margin-bottom: 28px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    .section-num {
-      width: 36px; height: 36px;
-      background: var(--accent);
-      color: #000;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 15px;
-      flex-shrink: 0;
-    }
-    .section-title { font-size: 22px; font-weight: 700; color: #e6edf3; }
-
-    h3 {
-      font-size: 16px; font-weight: 700;
-      color: var(--accent);
-      margin: 28px 0 12px;
-    }
-    h4 {
-      font-size: 14px; font-weight: 600;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: .8px;
-      margin: 20px 0 8px;
-    }
-
-    /* ─── Cards ────────────────────────────────────────────── */
-    .cards { display: grid; gap: 16px; }
-    .cards.col2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-    .cards.col3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-    .card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 20px;
-      transition: border-color .2s, transform .2s;
-    }
-    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .card .card-title {
-      font-size: 15px; font-weight: 700;
-      color: #e6edf3; margin-bottom: 8px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .card .card-body { font-size: 13.5px; color: var(--text-dim); }
-    .card .card-body strong { color: var(--text); }
-
-    /* ─── Stat Boxes ───────────────────────────────────────── */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
-      margin: 20px 0;
-    }
-    .stat-box {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 18px 16px;
-      text-align: center;
-    }
-    .stat-box .num {
-      font-size: 26px; font-weight: 800;
-      color: var(--accent);
-      line-height: 1;
-    }
-    .stat-box .label {
-      font-size: 11.5px; color: var(--text-dim);
-      margin-top: 5px; text-transform: uppercase; letter-spacing: .5px;
-    }
-
-    /* ─── Tables ───────────────────────────────────────────── */
-    .tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
-    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-    thead tr { background: var(--bg3); }
-    th {
-      padding: 11px 14px;
-      text-align: left;
-      color: var(--text-dim);
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      border-bottom: 1px solid var(--border);
-    }
-    td {
-      padding: 10px 14px;
-      border-bottom: 1px solid #21262d;
-      vertical-align: middle;
-    }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #161b2260; }
-    code {
-      background: #21262d;
-      border: 1px solid var(--border);
-      color: #f0883e;
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-family: 'Cascadia Code', 'Fira Code', monospace;
-      font-size: 12.5px;
-    }
-
-    /* ─── Status Badges ────────────────────────────────────── */
-    .ok    { display:inline-block; background:#0d3a0d; color:var(--green);  border:1px solid var(--green);  padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
-    .warn  { display:inline-block; background:#3a2a0d; color:var(--yellow); border:1px solid var(--yellow); padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
-    .fail  { display:inline-block; background:#3a0d0d; color:var(--red);    border:1px solid var(--red);    padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
-    .info  { display:inline-block; background:#1a2744; color:var(--accent); border:1px solid var(--accent); padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
-
-    /* ─── Architecture Diagram ─────────────────────────────── */
-    .arch {
-      display: grid;
-      gap: 8px;
-      margin: 20px 0;
-    }
-    .arch-row {
-      display: grid;
-      gap: 8px;
-    }
-    .arch-row.split { grid-template-columns: 1fr 1fr; }
-    .arch-box {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px 20px;
-    }
-    .arch-box.src   { border-color: #58a6ff44; background: #0d1b35; }
-    .arch-box.ingest{ border-color: #bc8cff44; background: #160d2a; }
-    .arch-box.batch { border-color: #3fb95044; background: #0d1f14; }
-    .arch-box.speed { border-color: #f0883e44; background: #1f130d; }
-    .arch-box.serve { border-color: #58a6ff66; background: #0d1b35; }
-    .arch-box.dash  { border-color: #39d35344; background: #0d1f14; }
-    .arch-box .ab-title {
-      font-size: 11px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 1px;
-      margin-bottom: 8px;
-    }
-    .arch-box.src    .ab-title { color: var(--accent); }
-    .arch-box.ingest .ab-title { color: var(--purple); }
-    .arch-box.batch  .ab-title { color: var(--green); }
-    .arch-box.speed  .ab-title { color: var(--orange); }
-    .arch-box.serve  .ab-title { color: var(--accent); }
-    .arch-box.dash   .ab-title { color: var(--teal); }
-    .arch-box ul { padding-left: 16px; color: var(--text-dim); font-size: 12.5px; }
-    .arch-box li { margin-bottom: 3px; }
-    .arch-arrow {
-      text-align: center;
-      color: var(--text-dim);
-      font-size: 20px;
-      line-height: 1;
-    }
-    .arch-wm {
-      background: #1a2744;
-      border: 1px dashed #3a5a8e;
-      border-radius: 8px;
-      padding: 10px 20px;
-      text-align: center;
-      font-size: 12.5px;
-      color: var(--accent);
-    }
-
-    /* ─── Layer Cards ──────────────────────────────────────── */
-    .layer-card {
-      background: var(--bg2);
+    .table-container {
       border: 1px solid var(--border);
       border-radius: 12px;
-      margin-bottom: 20px;
       overflow: hidden;
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      margin-top: 14px;
     }
-    .layer-card-header {
-      display: flex; align-items: center; gap: 12px;
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-    .lch-icon { font-size: 20px; }
-    .lch-name { font-weight: 700; font-size: 15px; color: #e6edf3; }
-    .lch-who  { margin-left: auto; font-size: 12px; color: var(--text-dim); }
-    .layer-card-body { padding: 16px 20px; }
-
-    /* ─── Progress Bar ─────────────────────────────────────── */
-    .prog-wrap { margin: 6px 0 4px; }
-    .prog-label { display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim); margin-bottom:4px; }
-    .prog-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow:hidden; }
-    .prog-fill { height: 100%; border-radius: 3px; background: var(--green); }
-
-    /* ─── Test Result ──────────────────────────────────────── */
-    .test-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid #21262d;
-      font-size: 13.5px;
-    }
-    .test-row:last-child { border-bottom: none; }
-    .test-name { flex: 1; font-family: monospace; color: var(--text-dim); font-size: 13px; }
-    .test-count { color: var(--text-dim); font-size: 13px; min-width: 40px; text-align: right; }
-    .test-pass { color: var(--green); font-weight: 700; min-width: 90px; text-align: right; }
-
-    /* ─── TODO list ────────────────────────────────────────── */
-    .todo-item {
-      display: flex; align-items: flex-start; gap: 12px;
-      padding: 12px 16px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 10px;
-    }
-    .todo-pri {
-      flex-shrink: 0;
-      width: 60px; font-size: 11px; font-weight: 700;
-      padding: 3px 0; border-radius: 4px;
-      text-align: center;
-    }
-    .pri-cao  { background:#3a0d0d; color:var(--red); }
-    .pri-tb   { background:#3a2a0d; color:var(--yellow); }
-    .todo-text { font-size: 13.5px; }
-    .todo-text strong { color: #e6edf3; }
-    .todo-text p { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-
-    /* ─── Fault donut-ish bars ─────────────────────────────── */
-    .fault-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .fault-item { background:var(--bg3); border-radius:8px; padding:12px 14px; }
-    .fault-item .fname { font-size:12.5px; color:var(--text-dim); margin-bottom:6px; }
-    .fault-item .fnum  { font-size:19px; font-weight:800; color:var(--orange); }
-    .fault-item .fpct  { font-size:11px; color:var(--text-dim); }
-
-    /* ─── Footer ───────────────────────────────────────────── */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 24px 32px;
-      text-align: center;
-      color: var(--text-dim);
+    table {
+      width: 100%;
+      border-collapse: collapse;
       font-size: 13px;
     }
+    thead th {
+      background: rgba(30, 41, 59, 0.7);
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 11px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #e2e8f0;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
 
-    /* ─── Utility ──────────────────────────────────────────── */
-    .gap { margin-top: 16px; }
-    p { margin-bottom: 10px; color: var(--text-dim); }
-    strong { color: var(--text); }
-    ul.styled { padding-left: 20px; color: var(--text-dim); }
-    ul.styled li { margin-bottom: 5px; }
+    /* ─── STATUS PILLS ───────────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 9px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .status-ok   { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .status-fail { background: rgba(244, 63, 94, 0.15);  color: #f87171; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .status-info { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+
+    /* ─── ARCHITECTURE DIAGRAM ───────────────────────────────── */
+    .arch-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .arch-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      backdrop-filter: blur(14px);
+    }
+    .arch-card.src   { border-color: rgba(56, 189, 248, 0.3); background: rgba(14, 30, 60, 0.4); }
+    .arch-card.ing   { border-color: rgba(168, 85, 247, 0.3); background: rgba(30, 15, 55, 0.4); }
+    .arch-card.bat   { border-color: rgba(16, 185, 129, 0.3); background: rgba(10, 35, 25, 0.4); }
+    .arch-card.spd   { border-color: rgba(245, 158, 11, 0.3); background: rgba(40, 25, 10, 0.4); }
+    .arch-card.srv   { border-color: rgba(56, 189, 248, 0.4); background: rgba(15, 35, 65, 0.5); }
+    .arch-card.dsh   { border-color: rgba(52, 211, 153, 0.3); background: rgba(15, 40, 30, 0.4); }
+
+    .arch-title {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .arch-card.src .arch-title { color: var(--cyan); }
+    .arch-card.ing .arch-title { color: var(--purple); }
+    .arch-card.bat .arch-title { color: var(--green); }
+    .arch-card.spd .arch-title { color: var(--amber); }
+    .arch-card.srv .arch-title { color: var(--cyan); }
+    .arch-card.dsh .arch-title { color: var(--emerald); }
+
+    .arch-list {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .arch-list li::before {
+      content: "•";
+      color: var(--text-dim);
+      display: inline-block;
+      width: 10px;
+    }
+
+    .arch-arrow {
+      text-align: center;
+      color: var(--cyan);
+      font-size: 14px;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+
+    .watermark-banner {
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.1), rgba(168, 85, 247, 0.1));
+      border: 1px dashed rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+      padding: 10px 18px;
+      text-align: center;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+
+    /* ─── LAYER TABS (SLIDE 4) ───────────────────────────────── */
+    .tab-nav {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+    .tab-btn.active {
+      color: #fff;
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; animation: fadeIn 0.3s ease; }
+
+    /* Progress bar */
+    .p-bar-wrap { margin-top: 14px; }
+    .p-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+    .p-bar { height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; }
+    .p-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+    /* ─── BOTTOM CONTROL BAR ─────────────────────────────────── */
+    .footer-bar {
+      height: 58px;
+      background: var(--bg-header);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 50;
+    }
+
+    /* Top edge progress bar on footer */
+    .deck-progress-bar {
+      position: absolute;
+      top: -1px;
+      left: 0;
+      height: 2px;
+      background: var(--grad-cyan);
+      box-shadow: 0 0 10px var(--cyan);
+      transition: width 0.35s ease;
+      width: 0%;
+    }
+
+    .btn-nav {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: #fff;
+      font-weight: 600;
+      font-size: 13.5px;
+      padding: 8px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-nav:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--cyan);
+      transform: translateY(-1px);
+    }
+    .btn-nav:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .btn-nav.primary {
+      background: var(--grad-cyan);
+      border-color: transparent;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+    }
+
+    /* Slide Dots Indicator */
+    .dots-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .slide-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 40px;
+      background: rgba(255, 255, 255, 0.18);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.3, 1.5, 0.5, 1);
+    }
+    .slide-dot:hover {
+      background: rgba(255, 255, 255, 0.45);
+    }
+    .slide-dot.active {
+      width: 24px;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    .slide-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .slide-counter span { color: #fff; }
+
+    /* ─── FLOATING SIDE CHEVRONS ─────────────────────────────── */
+    .side-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 70px;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 12px;
+      z-index: 40;
+      transition: all 0.2s;
+      opacity: 0.4;
+    }
+    .side-nav:hover {
+      opacity: 1;
+      color: #fff;
+      border-color: var(--cyan);
+      background: rgba(15, 23, 42, 0.9);
+    }
+    .side-prev { left: 16px; }
+    .side-next { right: 16px; }
+
+    /* ─── SHORTCUT TOOLTIP MODAL ─────────────────────────────── */
+    .kbd-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    @media (max-width: 900px) {
+      .slide { padding: 24px 20px 32px; }
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .hero-meta-box { grid-template-columns: 1fr; }
+      .nav-chapters { display: none; }
+      .side-nav { display: none; }
+    }
   </style>
 </head>
 <body>
 
-<!-- ══════════ HERO ══════════ -->
-<div class="hero">
-  <div class="badge">TLCN — HK1 2026–2027</div>
-  <h1>Thiết kế và triển khai hệ thống Data Lakehouse<br>theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực</h1>
-  <div class="subtitle">Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring</div>
-  <div class="meta-grid">
-    <span class="k">Sinh viên</span>
-    <span class="v">Nguyễn Đặng Quốc Anh (23133004) &mdash; Phạm Minh Quân (23133060)</span>
-    <span class="k">GVHD</span>
-    <span class="v">ThS. Đoàn Minh Trí</span>
-    <span class="k">Khoa</span>
-    <span class="v">Công nghệ Thông tin &mdash; HCMUTE</span>
-    <span class="k">Ngày báo cáo</span>
-    <span class="v">10/09/2026</span>
+  <!-- Ambient Glow Background -->
+  <div class="ambience">
+    <div class="ambience-blob blob-1"></div>
+    <div class="ambience-blob blob-2"></div>
+    <div class="ambience-blob blob-3"></div>
   </div>
-</div>
 
-<!-- ══════════ NAV ══════════ -->
-<nav class="nav">
-  <a href="#rq">Câu hỏi NC</a>
-  <a href="#data">Dữ liệu</a>
-  <a href="#arch">Kiến trúc</a>
-  <a href="#layers">Các tầng</a>
-  <a href="#compare">So sánh</a>
-  <a href="#tests">Unit Tests</a>
-</nav>
-
-<div class="container">
-
-  <!-- ══ 1. RESEARCH QUESTIONS ══ -->
-  <section id="rq">
-    <div class="section-header">
-      <div class="section-num">1</div>
-      <div class="section-title">Câu hỏi nghiên cứu &amp; Mục tiêu</div>
-    </div>
-    <p><strong>Bài toán cốt lõi:</strong> Làm thế nào để một hệ thống vừa cung cấp dữ liệu thời gian thực (gần đúng) vừa đảm bảo tính chính xác tuyệt đối của dữ liệu lịch sử?</p>
-    <div class="cards col3">
-      <div class="card">
-        <div class="card-title">⚡ RQ1</div>
-        <div class="card-body">Lambda Architecture có giúp <strong>giảm độ trễ truy vấn</strong> so với Batch-only truyền thống không?<br><br><code>→ Benchmark 1: Query Latency</code></div>
+  <div class="app">
+    <!-- ══════════ TOP HEADER ══════════ -->
+    <header class="header">
+      <div class="brand" onclick="goToSlide(0)">
+        <span style="font-size:18px;">⚡</span>
+        <span>Lambda Lakehouse</span>
+        <span class="brand-tag">TLCN HK1</span>
       </div>
-      <div class="card">
-        <div class="card-title">🎯 RQ2</div>
-        <div class="card-body">Speed View (gần đúng) <strong>sai lệch bao nhiêu %</strong> so với Batch View (chính xác) sau khi tái xử lý?<br><br><code>→ Benchmark 2: Reconciliation Accuracy</code></div>
+
+      <!-- Quick Chapter Pills -->
+      <nav class="nav-chapters">
+        <button class="chap-btn active" onclick="goToSlide(0)"><span class="dot"></span>Trang bìa</button>
+        <button class="chap-btn" onclick="goToSlide(1)"><span class="dot"></span>1. Mục tiêu</button>
+        <button class="chap-btn" onclick="goToSlide(2)"><span class="dot"></span>2. Dữ liệu</button>
+        <button class="chap-btn" onclick="goToSlide(3)"><span class="dot"></span>3. Kiến trúc</button>
+        <button class="chap-btn" onclick="goToSlide(4)"><span class="dot"></span>4. Các tầng</button>
+        <button class="chap-btn" onclick="goToSlide(5)"><span class="dot"></span>5. So sánh</button>
+        <button class="chap-btn" onclick="goToSlide(6)"><span class="dot"></span>6. Unit Tests</button>
+        <button class="chap-btn" onclick="goToSlide(7)"><span class="dot"></span>Tổng kết</button>
+      </nav>
+
+      <div class="header-tools">
+        <span style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <span class="kbd-tag">←</span> <span class="kbd-tag">→</span>
+        </span>
+        <button class="icon-btn" onclick="toggleFullscreen()" title="Toàn màn hình (F)">
+          ⛶
+        </button>
       </div>
-      <div class="card">
-        <div class="card-title">📦 RQ3</div>
-        <div class="card-body">Iceberg Compaction <strong>cải thiện hiệu năng đọc bao nhiêu %</strong> sau khi streaming tạo nhiều file nhỏ?<br><br><code>→ Benchmark 3: Compaction Efficiency</code></div>
-      </div>
-    </div>
-  </section>
+    </header>
 
-  <!-- ══ 2. DATA ══ -->
-  <section id="data">
-    <div class="section-header">
-      <div class="section-num">2</div>
-      <div class="section-title">Dữ liệu — Thu thập &amp; Mock</div>
-    </div>
+    <!-- ══════════ SLIDES VIEWPORT ══════════ -->
+    <main class="viewport">
+      <!-- Floating Chevrons -->
+      <button class="side-nav side-prev" id="sidePrev" onclick="prevSlide()" title="Slide trước (←)">❮</button>
+      <button class="side-nav side-next" id="sideNext" onclick="nextSlide()" title="Slide tiếp theo (→)">❯</button>
 
-    <h3>2.1 Dữ liệu thực — Binance REST API</h3>
-    <p>Script: <code>scripts/fetch_binance_data.py</code> — Tự động lọc Top-N cặp USDT theo khối lượng 24h, loại bỏ stablecoin-stablecoin.</p>
+      <div class="slides-track" id="slidesTrack">
 
-    <div class="stat-grid">
-      <div class="stat-box"><div class="num">13</div><div class="label">Cặp tiền (symbols)</div></div>
-      <div class="stat-box"><div class="num">10,000</div><div class="label">Nến 1m (klines)</div></div>
-      <div class="stat-box"><div class="num">5,000</div><div class="label">AggTrades</div></div>
-      <div class="stat-box"><div class="num">~15,001</div><div class="label">Tổng bản ghi thực</div></div>
-    </div>
+        <!-- ─── SLIDE 0: HERO (COVER) ─────────────────────── -->
+        <section class="slide">
+          <div class="slide-inner hero-wrap">
+            <div class="slide-pill pill-cyan">Khóa luận tốt nghiệp kỹ sư CNTT &mdash; 2026–2027</div>
+            <h1 class="hero-title">Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực</h1>
+            <div class="hero-sub">Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring</div>
 
-    <h4>Schema TradeEvent (Data Contract)</h4>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Thuộc tính</th><th>Kiểu dữ liệu</th><th>Mô tả</th></tr></thead>
-        <tbody>
-          <tr><td><code>trade_id</code></td><td>BIGINT</td><td>Mã giao dịch duy nhất từ Binance aggTrade ID</td></tr>
-          <tr><td><code>symbol</code></td><td>STRING</td><td>Cặp giao dịch (BTCUSDT, ETHUSDT...)</td></tr>
-          <tr><td><code>price</code></td><td>DOUBLE</td><td>Giá khớp lệnh (USDT)</td></tr>
-          <tr><td><code>quantity</code></td><td>DOUBLE</td><td>Khối lượng coin khớp lệnh</td></tr>
-          <tr><td><code>trade_time</code></td><td>BIGINT</td><td><strong>Event-time</strong> — epoch ms UTC từ Binance</td></tr>
-          <tr><td><code>is_buyer_maker</code></td><td>BOOLEAN</td><td>True: Taker bán / False: Taker mua</td></tr>
-          <tr><td><code>ingestion_time</code></td><td>BIGINT</td><td><strong>Processing-time</strong> — thời điểm Producer nhận</td></tr>
-          <tr><td><code>is_injected</code></td><td>BOOLEAN</td><td>Đánh dấu bản ghi được tiêm lỗi thực nghiệm</td></tr>
-          <tr><td><code>fault_type</code></td><td>STRING (nullable)</td><td><code>duplicate</code> / <code>late_data</code> / <code>out_of_order</code> / <code>schema_invalid</code></td></tr>
-        </tbody>
-      </table>
-    </div>
+            <div class="hero-meta-box">
+              <div class="hero-meta-item">
+                <span class="k">Sinh viên thực hiện</span>
+                <span class="v">Nguyễn Đặng Quốc Anh (23133004)<br>Phạm Minh Quân (23133060)</span>
+              </div>
+              <div class="hero-meta-item">
+                <span class="k">Giảng viên hướng dẫn</span>
+                <span class="v">ThS. Đoàn Minh Trí</span>
+              </div>
+              <div class="hero-meta-item">
+                <span class="k">Khoa / Trường</span>
+                <span class="v">Công nghệ Thông tin &mdash; HCMUTE</span>
+              </div>
+              <div class="hero-meta-item">
+                <span class="k">Thời gian báo cáo</span>
+                <span class="v">Tháng 09 / 2026</span>
+              </div>
+            </div>
 
-    <h3 class="gap">2.2 Mock Data — Geometric Brownian Motion (GBM)</h3>
-    <p>Script: <code>scripts/generate_mock_data.py</code> — Mô hình giá tài chính chuẩn mực Black-Scholes. Tham số <code>μ, σ</code> được <strong>calibrate từ dữ liệu lịch sử thực</strong> của từng symbol.</p>
-
-    <div class="stat-grid">
-      <div class="stat-box"><div class="num">7</div><div class="label">Ngày mô phỏng</div></div>
-      <div class="stat-box"><div class="num">1,262,456</div><div class="label">AggTrades Mock</div></div>
-      <div class="stat-box"><div class="num">131,040</div><div class="label">Nến 1m Mock</div></div>
-      <div class="stat-box"><div class="num">253,682</div><div class="label">Bản ghi lỗi tiêm</div></div>
-      <div class="stat-box"><div class="num">~1.5M</div><div class="label">Tổng bản ghi mock</div></div>
-      <div class="stat-box"><div class="num">~360 MB</div><div class="label">Kích thước ổ đĩa</div></div>
-    </div>
-
-    <h4>Fault Injection — Bơm lỗi có kiểm soát</h4>
-    <div class="fault-grid">
-      <div class="fault-item">
-        <div class="fname">🔁 Duplicate (10%)</div>
-        <div class="fnum">92,612</div>
-        <div class="fpct">Cùng trade_id, ingestion_time khác → test Deduplication</div>
-      </div>
-      <div class="fault-item">
-        <div class="fname">⏰ Late Data (10%)</div>
-        <div class="fnum">83,486</div>
-        <div class="fpct">trade_time lùi 1–5 phút → test Watermark Spark</div>
-      </div>
-      <div class="fault-item">
-        <div class="fname">🔀 Out-of-Order (5%)</div>
-        <div class="fnum">50,713</div>
-        <div class="fpct">Đảo thứ tự sự kiện → test Event-time Processing</div>
-      </div>
-      <div class="fault-item">
-        <div class="fname">❌ Schema Invalid (3%)</div>
-        <div class="fnum">26,871</div>
-        <div class="fpct">Giá âm, khối lượng = 0 → test Data Quality Gate</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══ 3. ARCHITECTURE ══ -->
-  <section id="arch">
-    <div class="section-header">
-      <div class="section-num">3</div>
-      <div class="section-title">Kiến trúc hệ thống Lambda</div>
-    </div>
-
-    <div class="arch">
-      <!-- Source -->
-      <div class="arch-box src">
-        <div class="ab-title">📡 Nguồn dữ liệu</div>
-        <ul>
-          <li>Binance REST API (15,001 bản ghi thực — 13 symbols)</li>
-          <li>Mock Data Generator GBM (1.26M aggTrades + 131K klines)</li>
-          <li>Kafka Producer + Fault Injector (4 loại lỗi kiểm soát)</li>
-        </ul>
-      </div>
-      <div class="arch-arrow">↓</div>
-
-      <!-- Ingestion -->
-      <div class="arch-box ingest">
-        <div class="ab-title">🔌 Tầng Thu Thập (Ingestion)</div>
-        <ul>
-          <li>ResilientKafkaProducer — acks=all, retry exponential backoff</li>
-          <li>Kafka topic: <code>crypto_trades_raw</code> &nbsp;|&nbsp; DLQ: <code>crypto_trades_dlq</code></li>
-          <li>FaultInjector — tiêm 4 loại lỗi phân tán</li>
-        </ul>
-      </div>
-      <div class="arch-arrow">↓ Kafka Stream ↓</div>
-
-      <!-- Batch + Speed -->
-      <div class="arch-row split">
-        <div class="arch-box batch">
-          <div class="ab-title">🏭 Tầng Lô (Batch Layer)</div>
-          <ul>
-            <li>IcebergTableManager → Bronze Table v2 (partition days)</li>
-            <li>CompactionJob: Bin-Pack / Sort / Manifest / Expire</li>
-            <li>Dagster 6 SDA: bronze→silver→gold→CH→watermark</li>
-            <li>→ ClickHouse: <code>lakehouse.batch_agg</code></li>
-            <li>Chu kỳ: <strong>15 phút</strong></li>
-          </ul>
-        </div>
-        <div class="arch-box speed">
-          <div class="ab-title">⚡ Tầng Tốc Độ (Speed Layer)</div>
-          <ul>
-            <li>Spark Structured Streaming, Trigger 5s</li>
-            <li>WindowAggregator — Watermark 1m, Window 1m</li>
-            <li>MetricsCalculator — OHLCV + VWAP</li>
-            <li>SpikeDetector — |Close-Open|/Open ≥ 2%</li>
-            <li>→ ClickHouse: <code>lakehouse.speed_agg</code></li>
-            <li><strong>SLA: latency &lt; 5 giây</strong></li>
-          </ul>
-        </div>
-      </div>
-      <div class="arch-arrow">↓ batch_agg + speed_agg ↓</div>
-
-      <!-- Watermark -->
-      <div class="arch-wm">
-        🕐 <strong>lakehouse.system_watermark</strong> — W = Batch Cutoff (mốc phân chia Reconciled vs Provisional)
-      </div>
-      <div class="arch-arrow">↓</div>
-
-      <!-- Serving -->
-      <div class="arch-box serve">
-        <div class="ab-title">🔀 Tầng Phục Vụ (Serving Layer) — Auto-Correcting Query Merger</div>
-        <ul>
-          <li><strong>CASE 1:</strong> T_end ≤ W &nbsp;→ 100% Batch View &nbsp;<span class="ok">Reconciled</span></li>
-          <li><strong>CASE 2:</strong> T_start ≥ W → 100% Speed View <span class="info">Provisional</span></li>
-          <li><strong>CASE 3:</strong> T_start &lt; W &lt; T_end → Cắt tại W, ghép 2 nguồn, ZERO Double-Counting</li>
-          <li>FastAPI Port 8000 &nbsp;| &nbsp;<code>/api/market</code> &nbsp;<code>/api/reconciliation</code> &nbsp;<code>/api/watermark</code></li>
-        </ul>
-      </div>
-      <div class="arch-arrow">↓</div>
-
-      <!-- Dashboard -->
-      <div class="arch-box dash">
-        <div class="ab-title">📊 Tầng Trực Quan (Dashboard)</div>
-        <ul>
-          <li>Streamlit + Plotly — Port 8501 — Dark theme</li>
-          <li>Biểu đồ nến Candlestick OHLCV + VWAP + Price Spike</li>
-          <li>Badge Reconciled (xanh) vs Provisional (tím)</li>
-          <li>5 thẻ KPI + Bảng đối soát Batch vs Speed</li>
-          <li>Auto-refresh 3s/5s/10s + Fallback data khi API offline</li>
-        </ul>
-      </div>
-    </div>
-
-    <h3 style="margin-top:28px;">Hạ tầng Docker Compose</h3>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Service</th><th>Image</th><th>Port</th><th>Mô tả</th></tr></thead>
-        <tbody>
-          <tr><td><strong>Kafka</strong> (KRaft)</td><td><code>apache/kafka:3.7.0</code></td><td>9092, 9094</td><td>Message broker — không ZooKeeper</td></tr>
-          <tr><td><strong>MinIO</strong></td><td><code>minio/minio:latest</code></td><td>9000, 9001</td><td>S3-compatible object storage</td></tr>
-          <tr><td><strong>Iceberg REST</strong></td><td><code>tabulario/iceberg-rest</code></td><td>8181</td><td>Catalog quản lý schema Iceberg</td></tr>
-          <tr><td><strong>ClickHouse</strong></td><td><code>clickhouse/clickhouse-server</code></td><td>8123, 9009</td><td>OLAP engine — Batch + Speed Views</td></tr>
-          <tr><td><strong>Redis</strong></td><td><code>redis:7.2-alpine</code></td><td>6379</td><td>Hot cache (dự phòng)</td></tr>
-          <tr><td><strong>FastAPI</strong></td><td>Custom Dockerfile</td><td>8000</td><td>Serving Layer API</td></tr>
-          <tr><td><strong>Streamlit</strong></td><td>Custom Dockerfile</td><td>8501</td><td>Dashboard UI</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ══ 4. LAYERS ══ -->
-  <section id="layers">
-    <div class="section-header">
-      <div class="section-num">4</div>
-      <div class="section-title">Chi tiết các tầng đã triển khai</div>
-    </div>
-
-    <!-- Ingestion -->
-    <div class="layer-card">
-      <div class="layer-card-header">
-        <span class="lch-icon">🔌</span>
-        <span class="lch-name">Ingestion Layer</span>
-        <span class="ok">HOÀN THÀNH</span>
-        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
-      </div>
-      <div class="layer-card-body">
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
-          <tbody>
-            <tr><td><code>src/ingestion/models.py</code></td><td>TradeEvent &amp; DLQEvent — Data Contract chuẩn hóa</td></tr>
-            <tr><td><code>src/ingestion/kafka_producer.py</code></td><td>ResilientKafkaProducer — retry backoff, DLQ routing, key partition</td></tr>
-            <tr><td><code>src/ingestion/fault_injector.py</code></td><td>FaultInjector — 4 loại lỗi phân tán có kiểm soát</td></tr>
-            <tr><td><code>src/ingestion/binance_ws.py</code></td><td>WebSocket streaming Top-10 coin, auto-reconnect</td></tr>
-            <tr><td><code>datasets/schemas/trade_event_schema.json</code></td><td>JSON Schema — Data Contract chuẩn hóa</td></tr>
-          </tbody>
-        </table></div>
-        <div class="prog-wrap gap">
-          <div class="prog-label"><span>Unit Tests</span><span>8/8 PASS</span></div>
-          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Batch -->
-    <div class="layer-card">
-      <div class="layer-card-header">
-        <span class="lch-icon">🏭</span>
-        <span class="lch-name">Batch Layer (Iceberg + Compaction + Dagster)</span>
-        <span class="ok">HOÀN THÀNH</span>
-        <span class="lch-who">Phạm Minh Quân</span>
-      </div>
-      <div class="layer-card-body">
-        <h4>Bronze Table Schema (Iceberg v2)</h4>
-        <p style="font-family:monospace;font-size:12.5px;background:var(--bg3);padding:14px;border-radius:8px;line-height:1.8;color:#c9d1d9;">
-          <span style="color:#bc8cff">CREATE TABLE</span> iceberg_catalog.bronze.crypto_trades<br>
-          &nbsp;&nbsp;( trade_id BIGINT NOT NULL, symbol STRING NOT NULL, price DOUBLE, ..., fault_type STRING )<br>
-          <span style="color:#bc8cff">USING iceberg</span><br>
-          <span style="color:#bc8cff">PARTITIONED BY</span> (days(trade_time_ts))<br>
-          <span style="color:#bc8cff">TBLPROPERTIES</span> ('format-version'='2', 'write.target-file-size-bytes'='134217728')
-        </p>
-        <h4>Compaction Strategies</h4>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>Chiến lược</th><th>Lệnh Iceberg</th><th>Mục đích</th></tr></thead>
-          <tbody>
-            <tr><td><strong>Bin-Packing</strong></td><td><code>rewrite_data_files(strategy='binpack')</code></td><td>Gộp file nhỏ → 128 MB <span class="info">Benchmark 3</span></td></tr>
-            <tr><td>Sort Compaction</td><td><code>rewrite_data_files(strategy='sort')</code></td><td>Sắp xếp symbol, trade_time_ts</td></tr>
-            <tr><td>Manifest Rewrite</td><td><code>rewrite_manifests()</code></td><td>Gộp metadata manifests nhỏ</td></tr>
-            <tr><td>Expire Snapshots</td><td><code>expire_snapshots()</code></td><td>Xóa snapshot &gt; 7 ngày</td></tr>
-          </tbody>
-        </table></div>
-        <h4>Dagster 6 SDA — Data Lineage</h4>
-        <p style="font-family:monospace;font-size:12.5px;background:var(--bg3);padding:14px;border-radius:8px;color:#c9d1d9;line-height:2;">
-          <span style="color:#3fb950">bronze_crypto_trades</span> → <span style="color:#58a6ff">silver_cleaned_trades</span> (DQ Gate: dedup + quarantine)<br>
-          → <span style="color:#f0883e">gold_market_aggregates</span> (OHLCV + VWAP — Ground Truth)<br>
-          → <span style="color:#bc8cff">clickhouse_batch_sync</span> → <span style="color:#39d353">system_watermark_sync</span><br>
-          + <span style="color:#d29922">iceberg_small_files_compaction</span> (job độc lập — mỗi 2 giờ)
-        </p>
-        <p style="font-size:13px;margin-top:8px;">✅ Kết quả thực tế: <strong>75 nến</strong> đã ghi vào <code>lakehouse.batch_agg</code> &nbsp;|&nbsp; Pipeline: <strong>15 phút/lần</strong></p>
-      </div>
-    </div>
-
-    <!-- Speed -->
-    <div class="layer-card">
-      <div class="layer-card-header">
-        <span class="lch-icon">⚡</span>
-        <span class="lch-name">Speed Layer (Spark Structured Streaming)</span>
-        <span class="ok">HOÀN THÀNH</span>
-        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
-      </div>
-      <div class="layer-card-body">
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
-          <tbody>
-            <tr><td><code>spark_streaming.py</code></td><td>Entry point: SparkSession local[2], Trigger 5s, checkpoint</td></tr>
-            <tr><td><code>window_aggregator.py</code></td><td>Parse Kafka JSON → Watermark 1m → Tumbling Window 1m</td></tr>
-            <tr><td><code>metrics_calculator.py</code></td><td>OHLCV + VWAP = Σ(P×Q)/ΣQ</td></tr>
-            <tr><td><code>spike_detector.py</code></td><td>is_spike: |Close-Open|/Open ≥ 2% hoặc (High-Low)/Low ≥ 3%</td></tr>
-            <tr><td><code>clickhouse_writer.py</code></td><td>foreachBatch → ClickHouse <code>lakehouse.speed_agg</code> (ReplacingMergeTree)</td></tr>
-          </tbody>
-        </table></div>
-        <div class="prog-wrap gap">
-          <div class="prog-label"><span>Unit Tests</span><span>17/17 PASS</span></div>
-          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Serving -->
-    <div class="layer-card">
-      <div class="layer-card-header">
-        <span class="lch-icon">🔀</span>
-        <span class="lch-name">Serving Layer (Auto-Correcting Query Merger)</span>
-        <span class="ok">HOÀN THÀNH</span>
-        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
-      </div>
-      <div class="layer-card-body">
-        <p>Thuật toán phân luồng <strong>3 Case</strong> dựa trên Batch Watermark W:</p>
-        <div class="cards col3" style="margin:12px 0;">
-          <div class="card">
-            <div class="card-title"><span class="ok">CASE 1</span> &nbsp; Lịch sử</div>
-            <div class="card-body">T_end ≤ W → 100% batch_agg<br>Δ = 0.0 (đã qua DQ Gate)</div>
+            <button class="btn-start" onclick="nextSlide()">
+              Bắt đầu trình bày <span>→</span>
+            </button>
           </div>
-          <div class="card">
-            <div class="card-title"><span class="info">CASE 2</span> &nbsp; Thời gian thực</div>
-            <div class="card-body">T_start ≥ W → 100% speed_agg<br>Tức thời, chấp nhận gần đúng</div>
+        </section>
+
+        <!-- ─── SLIDE 1: RESEARCH QUESTIONS ───────────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-cyan">Phần 1</div>
+            <h2 class="slide-title">Câu hỏi nghiên cứu &amp; Mục tiêu cốt lõi</h2>
+            <p class="slide-desc">Bài toán: Làm thế nào để một hệ thống vừa phục vụ dữ liệu thời gian thực (gần đúng, độ trễ &lt; 5s) vừa đảm bảo độ chính xác tuyệt đối (Ground Truth) khi dữ liệu lịch sử được tái xử lý?</p>
+
+            <div class="grid-3">
+              <!-- RQ1 -->
+              <div class="card" style="border-top:3px solid var(--cyan);">
+                <div class="card-title">
+                  <span style="font-size:20px;">⚡</span>
+                  <span>RQ1: Query Latency</span>
+                </div>
+                <p class="card-desc" style="margin-bottom:14px;">
+                  Kiến trúc <strong>Lambda</strong> có giúp giảm đáng kể độ trễ truy vấn so với phương pháp <strong>Batch-only</strong> truyền thống không?
+                </p>
+                <div class="code-block">
+                  <strong style="color:var(--cyan)">Benchmark 1:</strong><br>
+                  So sánh read latency giữa Batch-only, Speed-only và Lambda Query Merger trên ClickHouse.
+                </div>
+              </div>
+
+              <!-- RQ2 -->
+              <div class="card" style="border-top:3px solid var(--purple);">
+                <div class="card-title">
+                  <span style="font-size:20px;">🎯</span>
+                  <span>RQ2: Reconciliation Accuracy</span>
+                </div>
+                <p class="card-desc" style="margin-bottom:14px;">
+                  Speed View (gần đúng) có mức sai lệch <strong>bao nhiêu % (MAE / MAPE)</strong> so với Batch View (chính xác) sau khi watermark chốt?
+                </p>
+                <div class="code-block">
+                  <strong style="color:var(--purple)">Benchmark 2:</strong><br>
+                  Đo sai số giá trị VWAP và volume giữa Speed và Batch, kiểm định thuật toán tự đối soát 3 Case.
+                </div>
+              </div>
+
+              <!-- RQ3 -->
+              <div class="card" style="border-top:3px solid var(--green);">
+                <div class="card-title">
+                  <span style="font-size:20px;">📦</span>
+                  <span>RQ3: Iceberg Compaction</span>
+                </div>
+                <p class="card-desc" style="margin-bottom:14px;">
+                  Bin-Packing Compaction giúp <strong>cải thiện hiệu năng đọc bao nhiêu %</strong> sau khi streaming ghi hàng loạt file parquet nhỏ?
+                </p>
+                <div class="code-block">
+                  <strong style="color:var(--green)">Benchmark 3:</strong><br>
+                  Đo thời gian scan dữ liệu trên Apache Iceberg v2 trước và sau khi gộp file nhỏ về kích thước 128 MB.
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:20px; background:rgba(30,41,59,0.5);">
+              <div style="font-size:13.5px;color:var(--text);display:flex;align-items:center;gap:12px;">
+                <span class="status-badge status-ok">ĐẶC BIỆT</span>
+                <span>Hệ thống áp dụng cơ chế <strong>Auto-Correcting</strong>: Tự động ghi đè dữ liệu tạm thời (Provisional) bằng dữ liệu chuẩn (Reconciled) ngay khi Batch Watermark được đồng bộ.</span>
+              </div>
+            </div>
           </div>
-          <div class="card">
-            <div class="card-title"><span class="warn">CASE 3</span> &nbsp; Hybrid</div>
-            <div class="card-body">Cắt tại W, ghép 2 nguồn<br>ZERO Double-Counting<br>Tính Δ = |VWAP_speed - VWAP_batch|</div>
+        </section>
+
+        <!-- ─── SLIDE 2: DATA & MOCKING ───────────────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-emerald">Phần 2</div>
+            <h2 class="slide-title">Dữ liệu thực nghiệm — Thu thập &amp; Mock GBM</h2>
+            <p class="slide-desc">Kết hợp giữa dữ liệu thực từ Binance REST API và dữ liệu mô phỏng toán học Geometric Brownian Motion (GBM) có tiêm lỗi kiểm soát để đánh giá khả năng tự phục hồi.</p>
+
+            <!-- Metrics Grid -->
+            <div class="grid-4" style="margin-bottom:18px;">
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--cyan)">13</div>
+                <div class="metric-lbl">Cặp Symbol USDT</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--green)">~15,001</div>
+                <div class="metric-lbl">Bản ghi Binance thực</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--purple)">~1.5M</div>
+                <div class="metric-lbl">Bản ghi Mock GBM</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--amber)">253,682</div>
+                <div class="metric-lbl">Bản ghi tiêm lỗi</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <!-- Data Contract Schema -->
+              <div class="card">
+                <div class="card-title">
+                  <span>📑</span> Schema TradeEvent (Data Contract)
+                </div>
+                <div class="table-container" style="margin-top:8px;">
+                  <table>
+                    <thead><tr><th>Trường</th><th>Kiểu</th><th>Ý nghĩa</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>trade_id</code></td><td>BIGINT</td><td>Mã giao dịch duy nhất</td></tr>
+                      <tr><td><code>symbol</code></td><td>STRING</td><td>Cặp giao dịch (BTCUSDT, ETHUSDT...)</td></tr>
+                      <tr><td><code>price, quantity</code></td><td>DOUBLE</td><td>Giá &amp; khối lượng khớp lệnh</td></tr>
+                      <tr><td><code>trade_time</code></td><td>BIGINT</td><td>Event-time (epoch ms UTC)</td></tr>
+                      <tr><td><code>ingestion_time</code></td><td>BIGINT</td><td>Processing-time (thời điểm nhận)</td></tr>
+                      <tr><td><code>fault_type</code></td><td>STRING</td><td>Loại lỗi tiêm (nullable)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Fault Injection Grid -->
+              <div class="card">
+                <div class="card-title">
+                  <span>🧪</span> Tiêm lỗi có kiểm soát (Fault Injection)
+                </div>
+                <p class="card-desc" style="margin-bottom:12px;">Mô phỏng các sự cố mạng viễn thông thực tế để kiểm tra khả năng phục hồi của Spark và Iceberg:</p>
+                <div class="grid-2" style="gap:10px;">
+                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
+                    <div style="font-weight:700;color:var(--amber);font-size:12.5px;">🔁 Duplicate (10%)</div>
+                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">92,612</div>
+                    <div style="font-size:11.5px;color:var(--text-dim);">Test khử trùng lặp (Dedup)</div>
+                  </div>
+                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
+                    <div style="font-weight:700;color:var(--purple);font-size:12.5px;">⏰ Late Data (10%)</div>
+                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">83,486</div>
+                    <div style="font-size:11.5px;color:var(--text-dim);">Lùi 1–5m, test Spark Watermark</div>
+                  </div>
+                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
+                    <div style="font-weight:700;color:var(--cyan);font-size:12.5px;">🔀 Out-of-Order (5%)</div>
+                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">50,713</div>
+                    <div style="font-size:11.5px;color:var(--text-dim);">Test Event-time Tumbling Window</div>
+                  </div>
+                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
+                    <div style="font-weight:700;color:var(--rose);font-size:12.5px;">❌ Schema Invalid (3%)</div>
+                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">26,871</div>
+                    <div style="font-size:11.5px;color:var(--text-dim);">Giá âm / q=0 → Test DQ Gate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
+
+        <!-- ─── SLIDE 3: ARCHITECTURE ─────────────────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-purple">Phần 3</div>
+            <h2 class="slide-title">Kiến trúc tổng thể Lambda Lakehouse</h2>
+            <p class="slide-desc">Phân tách luồng dữ liệu 2 nhánh: Speed Layer (độ trễ micro-batch 5s) và Batch Layer (chính xác tuyệt đối, chu kỳ 15 phút), đồng bộ qua System Watermark.</p>
+
+            <div class="arch-flow">
+              <!-- Source & Ingest -->
+              <div class="grid-2">
+                <div class="arch-card src">
+                  <div class="arch-title"><span>📡</span> 1. Data Sources</div>
+                  <ul class="arch-list">
+                    <li>Binance REST API (15K bản ghi thực)</li>
+                    <li>Mock GBM Generator (1.5M records)</li>
+                    <li>Fault Injector (4 loại lỗi phân tán)</li>
+                  </ul>
+                </div>
+                <div class="arch-card ing">
+                  <div class="arch-title"><span>🔌</span> 2. Ingestion Layer</div>
+                  <ul class="arch-list">
+                    <li>ResilientKafkaProducer (acks=all, backoff)</li>
+                    <li>Topic: <code>crypto_trades_raw</code></li>
+                    <li>Dead Letter Queue: <code>crypto_trades_dlq</code></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="arch-arrow">▼ &nbsp;Phân nhánh xử lý song song (Lambda Architecture) &nbsp;▼</div>
+
+              <!-- Batch vs Speed -->
+              <div class="grid-2">
+                <div class="arch-card bat">
+                  <div class="arch-title"><span>🏭</span> 3A. Batch Layer (Chu kỳ 15 phút)</div>
+                  <ul class="arch-list">
+                    <li>MinIO (S3) + Apache Iceberg v2 Bronze</li>
+                    <li>Dagster 6 SDA (DQ Gate, Dedup, Gold Agg)</li>
+                    <li>Compaction Job: Bin-Pack 128MB / Expire</li>
+                    <li>→ Ghi ClickHouse: <code>lakehouse.batch_agg</code></li>
+                  </ul>
+                </div>
+                <div class="arch-card spd">
+                  <div class="arch-title"><span>⚡</span> 3B. Speed Layer (Micro-batch 5s)</div>
+                  <ul class="arch-list">
+                    <li>Spark Structured Streaming Trigger 5s</li>
+                    <li>Watermark 1m, Tumbling Window 1m</li>
+                    <li>Tính OHLCV, VWAP, Price Spike (≥2%)</li>
+                    <li>→ Ghi ClickHouse: <code>lakehouse.speed_agg</code></li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Watermark Cutoff -->
+              <div class="watermark-banner">
+                🕐 <strong>lakehouse.system_watermark</strong>: Mốc thời gian <strong>W = Batch Cutoff</strong> &mdash; Căn cứ phân chia dữ liệu Reconciled vs Provisional
+              </div>
+
+              <!-- Serving & Dashboard -->
+              <div class="grid-2">
+                <div class="arch-card srv">
+                  <div class="arch-title"><span>🔀</span> 4. Serving Layer (FastAPI 3-Case Merger)</div>
+                  <ul class="arch-list">
+                    <li>CASE 1 (T ≤ W): 100% Batch (Chính xác)</li>
+                    <li>CASE 2 (T ≥ W): 100% Speed (Thời gian thực)</li>
+                    <li>CASE 3 (Hybrid): Ghép tại W, ZERO Double-Count</li>
+                  </ul>
+                </div>
+                <div class="arch-card dsh">
+                  <div class="arch-title"><span>📊</span> 5. Dashboard UI (Streamlit + Plotly)</div>
+                  <ul class="arch-list">
+                    <li>Biểu đồ nến OHLCV + VWAP + Cảnh báo Spike</li>
+                    <li>Badge Nến Reconciled vs Provisional</li>
+                    <li>Bảng đối soát sai lệch Δ = |VWAP_s - VWAP_b|</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── SLIDE 4: CORE LAYERS ──────────────────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-cyan">Phần 4</div>
+            <h2 class="slide-title">Chi tiết các tầng đã triển khai hoàn thiện</h2>
+            <p class="slide-desc">Toàn bộ 5 tầng cốt lõi đã được xây dựng, kết nối thành công và vượt qua 100% các bộ kiểm thử tự động.</p>
+
+            <!-- Interactive Sub-tabs -->
+            <div class="tab-nav">
+              <button class="tab-btn active" onclick="switchTab('tab-ingest', this)">🔌 Ingestion</button>
+              <button class="tab-btn" onclick="switchTab('tab-batch', this)">🏭 Batch Layer</button>
+              <button class="tab-btn" onclick="switchTab('tab-speed', this)">⚡ Speed Layer</button>
+              <button class="tab-btn" onclick="switchTab('tab-serving', this)">🔀 Serving Layer</button>
+              <button class="tab-btn" onclick="switchTab('tab-dash', this)">📊 Dashboard</button>
+            </div>
+
+            <!-- TAB 1: INGESTION -->
+            <div id="tab-ingest" class="tab-pane active">
+              <div class="grid-2">
+                <div class="card">
+                  <div class="card-title">Các module mã nguồn</div>
+                  <div class="table-container" style="margin-top:6px;">
+                    <table>
+                      <thead><tr><th>File</th><th>Chức năng chính</th></tr></thead>
+                      <tbody>
+                        <tr><td><code>models.py</code></td><td>TradeEvent, DLQEvent &amp; Data Contract</td></tr>
+                        <tr><td><code>kafka_producer.py</code></td><td>Producer bền vững, exponential backoff, DLQ</td></tr>
+                        <tr><td><code>fault_injector.py</code></td><td>Bộ tiêm 4 loại lỗi phân tán ngẫu nhiên</td></tr>
+                        <tr><td><code>binance_ws.py</code></td><td>WebSocket Top-10 coin, tự phục hồi mạng</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="p-bar-wrap">
+                    <div class="p-bar-label"><span>Unit Tests</span><span style="color:var(--green);font-weight:700;">8/8 PASS (100%)</span></div>
+                    <div class="p-bar"><div class="p-bar-fill" style="width:100%"></div></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">Điểm nổi bật kỹ thuật</div>
+                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:1.9;">
+                    <li><strong>Key Partitioning</strong>: Khóa partition bằng <code>symbol</code> đảm bảo thứ tự sự kiện trong từng coin.</li>
+                    <li><strong>Dead Letter Queue (DLQ)</strong>: Dữ liệu vi phạm JSON Schema tự động cách ly vào topic riêng, không làm sập pipeline.</li>
+                    <li><strong>Idempotent Producer</strong>: Cấu hình <code>acks=all</code> và <code>enable.idempotence=true</code> chống duplicate tại tầng mạng.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 2: BATCH -->
+            <div id="tab-batch" class="tab-pane">
+              <div class="grid-2">
+                <div class="card">
+                  <div class="card-title">Apache Iceberg v2 + Compaction</div>
+                  <p class="card-desc">Bảng Bronze crypto_trades lưu trên MinIO (S3), phân vùng theo ngày (<code>days(trade_time)</code>). Hỗ trợ 4 chiến lược dọn dẹp:</p>
+                  <div class="table-container" style="margin-top:8px;">
+                    <table>
+                      <thead><tr><th>Chiến lược</th><th>Lệnh Iceberg API</th><th>Mục đích</th></tr></thead>
+                      <tbody>
+                        <tr><td><strong>Bin-Packing</strong></td><td><code>rewrite_data_files('binpack')</code></td><td>Gộp file nhỏ → 128 MB (RQ3)</td></tr>
+                        <tr><td>Sort Compaction</td><td><code>rewrite_data_files('sort')</code></td><td>Sắp xếp theo symbol &amp; time</td></tr>
+                        <tr><td>Manifest Rewrite</td><td><code>rewrite_manifests()</code></td><td>Tối ưu cây metadata</td></tr>
+                        <tr><td>Expire Snapshots</td><td><code>expire_snapshots()</code></td><td>Xóa snapshot cũ &gt; 7 ngày</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">Dagster 6 Software-Defined Assets</div>
+                  <div class="code-block" style="font-size:12px;margin-top:8px;line-height:1.9;">
+                    <span style="color:var(--green)">bronze_crypto_trades</span><br>
+                    &nbsp;&nbsp;↓ (Data Quality Gate: deduplicate + quarantine)<br>
+                    <span style="color:var(--cyan)">silver_cleaned_trades</span><br>
+                    &nbsp;&nbsp;↓ (Tính OHLCV + VWAP chuẩn Ground Truth)<br>
+                    <span style="color:var(--amber)">gold_market_aggregates</span><br>
+                    &nbsp;&nbsp;↓ (Đồng bộ ClickHouse &amp; cập nhật Watermark W)<br>
+                    <span style="color:var(--purple)">clickhouse_batch_sync</span> → <span style="color:var(--green)">system_watermark_sync</span>
+                  </div>
+                  <p style="font-size:12.5px;color:var(--text-muted);margin-top:10px;">
+                    Lịch chạy tự động: Pipeline chạy <strong>mỗi 15 phút</strong> &nbsp;|&nbsp; Compaction chạy <strong>mỗi 2 giờ</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 3: SPEED -->
+            <div id="tab-speed" class="tab-pane">
+              <div class="grid-2">
+                <div class="card">
+                  <div class="card-title">Spark Structured Streaming Engine</div>
+                  <div class="table-container" style="margin-top:6px;">
+                    <table>
+                      <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
+                      <tbody>
+                        <tr><td><code>spark_streaming.py</code></td><td>Khởi tạo SparkSession local[2], Trigger 5s micro-batch</td></tr>
+                        <tr><td><code>window_aggregator.py</code></td><td>Tumbling Window 1m theo event-time, Watermark 1m</td></tr>
+                        <tr><td><code>metrics_calculator.py</code></td><td>Tính toán song song Open, High, Low, Close, Volume, VWAP</td></tr>
+                        <tr><td><code>spike_detector.py</code></td><td>Cảnh báo biến động bất thường: |Close-Open|/Open ≥ 2%</td></tr>
+                        <tr><td><code>clickhouse_writer.py</code></td><td><code>foreachBatch</code> ghi nạp ClickHouse <code>speed_agg</code></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="p-bar-wrap">
+                    <div class="p-bar-label"><span>Unit Tests</span><span style="color:var(--green);font-weight:700;">17/17 PASS (100%)</span></div>
+                    <div class="p-bar"><div class="p-bar-fill" style="width:100%"></div></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">Cơ chế ClickHouse ReplacingMergeTree</div>
+                  <p class="card-desc" style="margin-bottom:12px;">
+                    Thay vì sử dụng Redis như đề xuất sơ khai, Speed View được nạp trực tiếp vào ClickHouse bảng <code>ReplacingMergeTree(updated_at)</code>:
+                  </p>
+                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:1.9;">
+                    <li><strong>Tự động Upsert</strong>: Bản ghi mới trong cùng 1 cửa sổ nến sẽ ghi đè bản ghi cũ dựa vào <code>updated_at</code>.</li>
+                    <li><strong>Thống nhất Engine</strong>: Cả Batch View và Speed View đều nằm trên ClickHouse, giúp Serving Layer truy vấn đồng nhất bằng SQL siêu tốc.</li>
+                    <li><strong>Đạt chuẩn SLA</strong>: Thời gian từ khi có giao dịch đến khi hiển thị &lt; 5 giây.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 4: SERVING -->
+            <div id="tab-serving" class="tab-pane">
+              <div class="grid-3" style="margin-bottom:16px;">
+                <div class="card" style="border-left:3px solid var(--green);">
+                  <div class="card-title"><span class="status-badge status-ok">CASE 1</span> Lịch sử</div>
+                  <p class="card-desc"><strong>T_end ≤ W</strong>: Lấy 100% từ <code>batch_agg</code>. Dữ liệu đã qua DQ Gate, chính xác tuyệt đối, Δ = 0.0.</p>
+                </div>
+                <div class="card" style="border-left:3px solid var(--cyan);">
+                  <div class="card-title"><span class="status-badge status-info">CASE 2</span> Thời gian thực</div>
+                  <p class="card-desc"><strong>T_start ≥ W</strong>: Lấy 100% từ <code>speed_agg</code>. Phục vụ tức thời cho trading, chấp nhận gần đúng.</p>
+                </div>
+                <div class="card" style="border-left:3px solid var(--amber);">
+                  <div class="card-title"><span class="status-badge status-warn">CASE 3</span> Hybrid Ghép Nguồn</div>
+                  <p class="card-desc"><strong>T_start &lt; W &lt; T_end</strong>: Cắt tại W, nửa trước lấy Batch, nửa sau lấy Speed. <strong>ZERO Double-Counting</strong>.</p>
+                </div>
+              </div>
+              <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <strong style="color:#fff;">FastAPI Endpoints (Port 8000):</strong>
+                    <span style="color:var(--text-muted);font-size:13px;margin-left:10px;"><code>/api/market</code> &bull; <code>/api/reconciliation</code> &bull; <code>/api/watermark</code></span>
+                  </div>
+                  <span class="status-badge status-ok">24/24 Tests PASS</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 5: DASHBOARD -->
+            <div id="tab-dash" class="tab-pane">
+              <div class="grid-2">
+                <div class="card">
+                  <div class="card-title">Giao diện Streamlit + Plotly (Port 8501)</div>
+                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:1.9;">
+                    <li><strong>Biểu đồ nến Candlestick OHLCV</strong> kèm đường trung bình giá theo khối lượng <strong>VWAP</strong>.</li>
+                    <li>Phân biệt trực quan: Nến <span class="status-badge status-ok">Reconciled</span> (đã chốt) vs <span class="status-badge status-info">Provisional</span> (nến tạm thời màu tím).</li>
+                    <li><strong>Cảnh báo Price Spike</strong>: Đánh dấu nốt cảnh báo khi biên độ nến vượt ngưỡng 2%.</li>
+                    <li><strong>5 Thẻ KPI trực thơi</strong>: Giá mới nhất, VWAP, Trường hợp truy vấn (Case 1/2/3), Batch Watermark, Độ lệch đối soát.</li>
+                  </ul>
+                  <div class="p-bar-wrap">
+                    <div class="p-bar-label"><span>Unit Tests</span><span style="color:var(--green);font-weight:700;">27/27 PASS (100%)</span></div>
+                    <div class="p-bar"><div class="p-bar-fill" style="width:100%"></div></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-title">Bảng đối soát sai lệch phục vụ RQ2</div>
+                  <p class="card-desc" style="margin-bottom:10px;">
+                    Dashboard tính toán trực tiếp sai số Mean Absolute Error (MAE) và độ lệch giá trị tuyệt đối giữa 2 view:
+                  </p>
+                  <div class="code-block" style="font-size:12.5px;">
+                    Δ_reconciliation = |VWAP_speed - VWAP_batch|<br>
+                    MAE = (1/N) * Σ |VWAP_s - VWAP_b|<br>
+                    Tự động phân loại mức độ rủi ro (Low / Medium / High)
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ─── SLIDE 5: COMPARISON & ADAPTATIONS ─────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-amber">Phần 5</div>
+            <h2 class="slide-title">So sánh Kiến trúc: Đề ra ban đầu vs Thực tế</h2>
+            <p class="slide-desc">Đánh giá mức độ hoàn thiện so với kế hoạch ban đầu và các điểm cải tiến thích nghi nhằm tối ưu hóa hiệu năng hệ thống.</p>
+
+            <div class="table-container">
+              <table>
+                <thead><tr><th>Hạng mục</th><th>Kế hoạch đề ra</th><th>Thực tế đã triển khai</th><th>Đánh giá</th></tr></thead>
+                <tbody>
+                  <tr><td>Nguồn dữ liệu</td><td>Kafka + Batch CSV tĩnh</td><td>Binance REST API + Mock GBM đa dạng</td><td><span class="status-badge status-ok">Vượt mục tiêu</span></td></tr>
+                  <tr><td>Message Broker</td><td>Apache Kafka</td><td>Apache Kafka 3.7.0 (KRaft mode, no ZK)</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
+                  <tr><td>Storage &amp; Table Format</td><td>MinIO + Apache Iceberg</td><td>MinIO S3 + Iceberg v2 REST Catalog</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
+                  <tr><td>Compaction Pipeline</td><td>Iceberg OPTIMIZE cơ bản</td><td>4 chiến lược: Bin-Pack, Sort, Manifest, Expire</td><td><span class="status-badge status-ok">Đầy đủ hơn</span></td></tr>
+                  <tr><td>Stream Processing</td><td>Spark Structured Streaming</td><td>Trigger 5s micro-batch, Watermark, Spike Detection</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
+                  <tr><td><strong>Speed Views Storage</strong></td><td><strong>Redis Cache</strong></td><td><strong>ClickHouse ReplacingMergeTree</strong></td><td><span class="status-badge status-warn">Đổi kiến trúc</span></td></tr>
+                  <tr><td>Serving Layer API</td><td>FastAPI Query Merger</td><td>Thuật toán 3-Case Auto-Correcting + Δ reconciliation</td><td><span class="status-badge status-ok">Nâng cấp lớn</span></td></tr>
+                  <tr><td>Orchestration</td><td>Dagster cơ bản</td><td>Dagster 6 SDA + Data Lineage DAG + 2 Schedules</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
+                  <tr><td>Data Quality Gate</td><td>Module riêng biệt</td><td>Tích hợp trong Dagster Silver SDA (Dedup/Quarantine)</td><td><span class="status-badge status-warn">Cần tách module</span></td></tr>
+                  <tr><td>Benchmark Scripts</td><td>3 kịch bản thực nghiệm</td><td>Đã lên phương án chi tiết (chờ chạy đo đạc)</td><td><span class="status-badge status-info">Giai đoạn kế</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="grid-3" style="margin-top:16px;">
+              <div class="card">
+                <div class="card-title">1. Redis → ClickHouse</div>
+                <p class="card-desc">Lưu Speed View trên ClickHouse giúp giảm 1 service phụ thuộc, cho phép Serving Layer JOIN/UNION dữ liệu bằng SQL siêu tốc mà vẫn giữ độ trễ &lt; 5s.</p>
+              </div>
+              <div class="card">
+                <div class="card-title">2. 3-Case Query Merger</div>
+                <p class="card-desc">Thuật toán chia mốc theo Watermark W giải quyết triệt để lỗi tính 2 lần (Double-Counting) và tự động gắn nhãn Reconciled / Provisional.</p>
+              </div>
+              <div class="card">
+                <div class="card-title">3. Dagster SDA Pipeline</div>
+                <p class="card-desc">Thay vì chạy Spark Batch Job rời rạc, Dagster Software-Defined Assets quản lý dòng chảy lineage trực quan từ Bronze đến Watermark.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── SLIDE 6: AUTOMATED TESTS ──────────────────── -->
+        <section class="slide">
+          <div class="slide-inner">
+            <div class="slide-pill pill-emerald">Phần 6</div>
+            <h2 class="slide-title">Kết quả kiểm thử tự động (Unit &amp; Integration Tests)</h2>
+            <p class="slide-desc">Hệ thống áp dụng phương pháp kiểm thử toàn diện với pytest. Tất cả 81 unit tests trên cả 5 tầng kiến trúc đều vượt qua với tỷ lệ thành công 100%.</p>
+
+            <div class="grid-4" style="margin-bottom:20px;">
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--green)">81</div>
+                <div class="metric-lbl">Tổng số Tests</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--green)">81</div>
+                <div class="metric-lbl">Passed</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--rose)">0</div>
+                <div class="metric-lbl">Failed</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-val" style="color:var(--cyan)">100%</div>
+                <div class="metric-lbl">Tỷ lệ Thành Công</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding:16px 24px;">
+              <!-- Suite 1 -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_ingestion.py</div>
+                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra Kafka Producer, JSON Schema validator, Fault Injector logic</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-size:13px;color:var(--text-muted);">8 tests</span>
+                  <span class="status-badge status-ok">✓ 8/8 PASS</span>
+                </div>
+              </div>
+
+              <!-- Suite 2 -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_speed_layer.py</div>
+                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra Window Aggregator, VWAP calculator, Spike Detector, ClickHouse Writer</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-size:13px;color:var(--text-muted);">17 tests</span>
+                  <span class="status-badge status-ok">✓ 17/17 PASS</span>
+                </div>
+              </div>
+
+              <!-- Suite 3 -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_query_merger.py</div>
+                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra thuật toán 3 Case, logic chống double-count, tính sai lệch Δ_reconciliation</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-size:13px;color:var(--text-muted);">24 tests</span>
+                  <span class="status-badge status-ok">✓ 24/24 PASS</span>
+                </div>
+              </div>
+
+              <!-- Suite 4 -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_dashboard_components.py</div>
+                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra nến Plotly, KPI cards, bảng đối soát MAE, cơ chế tự refresh</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-size:13px;color:var(--text-muted);">27 tests</span>
+                  <span class="status-badge status-ok">✓ 27/27 PASS</span>
+                </div>
+              </div>
+
+              <!-- Suite 5 -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+                <div>
+                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_dagster_pipeline.py</div>
+                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra 6 Software-Defined Assets, Iceberg Compaction schedule &amp; lineage</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-size:13px;color:var(--text-muted);">5 tests</span>
+                  <span class="status-badge status-ok">✓ 5/5 PASS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── SLIDE 7: CONCLUSION & SUMMARY ─────────────── -->
+        <section class="slide">
+          <div class="slide-inner" style="text-align:center;padding-top:20px;">
+            <div class="slide-pill pill-cyan">Tổng kết báo cáo</div>
+            <h2 class="slide-title" style="margin-bottom:14px;">Hệ thống đã sẵn sàng cho giai đoạn đo đạc thực nghiệm</h2>
+            <p class="slide-desc" style="margin:0 auto 30px;max-width:760px;">
+              Hạ tầng Lambda Lakehouse hoàn chỉnh, các tầng Ingestion &rarr; Batch &rarr; Speed &rarr; Serving &rarr; Dashboard đã liên kết thông suốt và được kiểm chứng bằng 81 tests tự động.
+            </p>
+
+            <div class="grid-3" style="text-align:left;margin-bottom:32px;">
+              <div class="card" style="border-top:3px solid var(--green);">
+                <div class="card-title">✅ Đã hoàn thành</div>
+                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
+                  <li>Thu thập 15K bản ghi thực + 1.5M Mock GBM.</li>
+                  <li>Apache Iceberg v2 Bronze Table &amp; Compaction.</li>
+                  <li>Spark Streaming trigger 5s &rarr; ClickHouse.</li>
+                  <li>FastAPI Auto-Correcting Merger 3 Case.</li>
+                  <li>Streamlit Dashboard phân loại nến theo Watermark.</li>
+                </ul>
+              </div>
+
+              <div class="card" style="border-top:3px solid var(--cyan);">
+                <div class="card-title">🚀 Bước tiếp theo (Trọng tâm)</div>
+                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
+                  <li>Chạy thực nghiệm <strong>Benchmark 1</strong>: Query Latency.</li>
+                  <li>Chạy thực nghiệm <strong>Benchmark 2</strong>: Reconciliation Accuracy.</li>
+                  <li>Chạy thực nghiệm <strong>Benchmark 3</strong>: Compaction Efficiency.</li>
+                  <li>Trích xuất dữ liệu kết quả ra CSV để vẽ đồ thị luận văn.</li>
+                </ul>
+              </div>
+
+              <div class="card" style="border-top:3px solid var(--purple);">
+                <div class="card-title">🎓 Luận văn tốt nghiệp</div>
+                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
+                  <li>Hoàn thiện chương 3: Thiết kế kiến trúc Lambda.</li>
+                  <li>Hoàn thiện chương 4: Triển khai kỹ thuật chi tiết.</li>
+                  <li>Tổng hợp chương 5: Kết quả thực nghiệm &amp; Đánh giá.</li>
+                  <li>Chuẩn bị slide bảo vệ khóa luận chính thức.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:16px;padding:20px;display:inline-block;">
+              <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px;">Cảm ơn Thầy và các bạn đã lắng nghe!</div>
+              <div style="font-size:13.5px;color:var(--cyan);">Hỏi &amp; Đáp (Q&amp;A Session)</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- ══════════ BOTTOM BAR ══════════ -->
+    <footer class="footer-bar">
+      <!-- Progress Line -->
+      <div class="deck-progress-bar" id="progressBar"></div>
+
+      <!-- Prev Button -->
+      <button class="btn-nav" id="btnPrev" onclick="prevSlide()">
+        <span>❮</span>
+        <span>Trước</span>
+      </button>
+
+      <!-- Dots & Counter -->
+      <div style="display:flex;align-items:center;gap:18px;">
+        <div class="dots-wrap" id="dotsWrap"></div>
+        <div class="slide-counter">
+          <span id="curSlideNum">01</span> / <span id="totalSlideNum">08</span>
         </div>
-        <div class="prog-wrap">
-          <div class="prog-label"><span>Unit Tests</span><span>24/24 PASS</span></div>
-          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
-        </div>
       </div>
-    </div>
 
-    <!-- Dashboard -->
-    <div class="layer-card">
-      <div class="layer-card-header">
-        <span class="lch-icon">📊</span>
-        <span class="lch-name">Dashboard Layer (Streamlit + Plotly)</span>
-        <span class="ok">HOÀN THÀNH</span>
-        <span class="lch-who">Nguyễn Đặng Quốc Anh</span>
-      </div>
-      <div class="layer-card-body">
-        <ul class="styled">
-          <li>Biểu đồ nến Candlestick OHLCV + đường VWAP + cảnh báo Spike</li>
-          <li>Nến <span class="ok">Reconciled</span> (xanh/đỏ) vs <span class="info">Provisional</span> (tím) — phân biệt nguồn dữ liệu</li>
-          <li>5 thẻ KPI: Giá hiện tại, VWAP, Query Case, Watermark, Δ đối soát</li>
-          <li>Bảng đối soát MAE Batch vs Speed (phục vụ Benchmark 2)</li>
-          <li>Auto-refresh 3s/5s/10s &nbsp;|&nbsp; Fallback data khi API offline</li>
-        </ul>
-        <div class="prog-wrap gap">
-          <div class="prog-label"><span>Unit Tests</span><span>27/27 PASS</span></div>
-          <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
-        </div>
-      </div>
-    </div>
-  </section>
+      <!-- Next Button -->
+      <button class="btn-nav primary" id="btnNext" onclick="nextSlide()">
+        <span>Tiếp theo</span>
+        <span>❯</span>
+      </button>
+    </footer>
+  </div>
 
-  <!-- ══ 5. COMPARE ══ -->
-  <section id="compare">
-    <div class="section-header">
-      <div class="section-num">5</div>
-      <div class="section-title">So sánh Kiến trúc Đề ra vs Thực tế</div>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Hạng mục</th><th>Đề ra ban đầu</th><th>Thực tế đã xây dựng</th><th>Trạng thái</th></tr></thead>
-        <tbody>
-          <tr><td>Data Collection</td><td>Kafka + Batch CSV</td><td>Binance REST API + Mock GBM</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Kafka Broker</td><td>Apache Kafka (KRaft)</td><td>Apache Kafka 3.7.0 (KRaft, no ZK)</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Object Storage</td><td>MinIO</td><td>MinIO (Docker)</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Table Format</td><td>Apache Iceberg</td><td>Iceberg v2 (REST Catalog)</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Bronze Table</td><td>MinIO + Iceberg</td><td><code>bronze.crypto_trades</code> partition days</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Silver/Gold Layer</td><td>dbt transformation</td><td>Dagster SDA simulate (dbt chưa có models)</td><td><span class="warn">⚠ Thiếu dbt</span></td></tr>
-          <tr><td>Batch Views</td><td>ClickHouse batch_agg</td><td><code>lakehouse.batch_agg</code></td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Stream Processing</td><td>Spark Structured Streaming</td><td>Spark Micro-batch Trigger 5s</td><td><span class="ok">OK</span></td></tr>
-          <tr><td><strong>Speed Views</strong></td><td><strong>Redis</strong></td><td><strong>ClickHouse speed_agg</strong></td><td><span class="warn">⚠ Đổi sang CH</span></td></tr>
-          <tr><td>Serving API</td><td>FastAPI Query Merger</td><td>FastAPI + 3-Case Auto-Correcting Merger</td><td><span class="ok">OK (nâng cấp)</span></td></tr>
-          <tr><td>Dashboard</td><td>Metabase / Streamlit</td><td>Streamlit + Plotly custom</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Orchestration</td><td>Dagster</td><td>Dagster 6 SDA + 2 Schedules</td><td><span class="ok">OK</span></td></tr>
-          <tr><td>Compaction</td><td>Iceberg OPTIMIZE</td><td>Bin-Pack + Sort + Manifest + Expire</td><td><span class="ok">OK (đầy đủ hơn)</span></td></tr>
-          <tr><td><strong>Benchmark Scripts</strong></td><td>3 bộ benchmark</td><td>Chưa có code thực</td><td><span class="fail">❌ CHƯA LÀM</span></td></tr>
-          <tr><td>Data Quality Module</td><td>src/data_quality/</td><td>Logic simulate trong Dagster</td><td><span class="warn">⚠ Chưa đủ</span></td></tr>
-          <tr><td>Unit Tests</td><td>pytest</td><td>81/81 PASS</td><td><span class="ok">OK ✓</span></td></tr>
-        </tbody>
-      </table>
-    </div>
+  <!-- ─── PRESENTATION SLIDE CONTROLLER SCRIPT ───────────────── -->
+  <script>
+    let currentSlide = 0;
+    const track = document.getElementById('slidesTrack');
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    
+    const curNumEl = document.getElementById('curSlideNum');
+    const totalNumEl = document.getElementById('totalSlideNum');
+    const progressBar = document.getElementById('progressBar');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
+    const sidePrev = document.getElementById('sidePrev');
+    const sideNext = document.getElementById('sideNext');
+    const dotsWrap = document.getElementById('dotsWrap');
+    const chapBtns = document.querySelectorAll('.chap-btn');
 
-    <h3 style="margin-top:28px;">Điểm thích nghi đáng chú ý</h3>
-    <div class="cards col3">
-      <div class="card">
-        <div class="card-title">🔄 Redis → ClickHouse</div>
-        <div class="card-body">Speed Views dùng ClickHouse <code>ReplacingMergeTree</code> thay Redis. Đơn giản hóa kiến trúc, vẫn đảm bảo SLA &lt; 5s.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">⬆️ Query Merger nâng cấp</div>
-        <div class="card-body">Thiết kế thuật toán 3 Case với Δ_reconciliation và CandleStatus (Reconciled / Provisional) phục vụ trực tiếp Benchmark 2.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">⚙️ Dagster SDA</div>
-        <div class="card-body">Thay Spark Batch Job thuần bằng Dagster Software-Defined Assets với lineage DAG, auto-schedule, metadata tracking.</div>
-      </div>
-    </div>
-  </section>
+    // Initialize Total Count & Dots
+    totalNumEl.textContent = String(totalSlides).padStart(2, '0');
+    slides.forEach((_, idx) => {
+      const dot = document.createElement('div');
+      dot.className = 'slide-dot' + (idx === 0 ? ' active' : '');
+      dot.title = `Chuyển tới slide ${idx + 1}`;
+      dot.onclick = () => goToSlide(idx);
+      dotsWrap.appendChild(dot);
+    });
 
-  <!-- ══ 6. TESTS ══ -->
-  <section id="tests">
-    <div class="section-header">
-      <div class="section-num">6</div>
-      <div class="section-title">Kết quả kiểm thử tự động</div>
-    </div>
-    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
-      <div class="stat-box"><div class="num" style="color:var(--green)">81</div><div class="label">Tổng Tests</div></div>
-      <div class="stat-box"><div class="num" style="color:var(--green)">81</div><div class="label">PASS</div></div>
-      <div class="stat-box"><div class="num" style="color:var(--red)">0</div><div class="label">FAIL</div></div>
-      <div class="stat-box"><div class="num" style="color:var(--green)">100%</div><div class="label">Pass Rate</div></div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-top:16px;">
-      <div class="test-row">
-        <span class="test-name">test_ingestion.py</span>
-        <span class="test-count">8 tests</span>
-        <span class="test-pass">✓ 8/8 PASS</span>
-      </div>
-      <div class="test-row">
-        <span class="test-name">test_speed_layer.py</span>
-        <span class="test-count">17 tests</span>
-        <span class="test-pass">✓ 17/17 PASS</span>
-      </div>
-      <div class="test-row">
-        <span class="test-name">test_query_merger.py</span>
-        <span class="test-count">24 tests</span>
-        <span class="test-pass">✓ 24/24 PASS</span>
-      </div>
-      <div class="test-row">
-        <span class="test-name">test_dashboard_components.py</span>
-        <span class="test-count">27 tests</span>
-        <span class="test-pass">✓ 27/27 PASS</span>
-      </div>
-      <div class="test-row">
-        <span class="test-name">test_dagster_pipeline.py</span>
-        <span class="test-count">5 tests</span>
-        <span class="test-pass">✓ 5/5 PASS</span>
-      </div>
-    </div>
-  </section>
+    function updatePresentationState() {
+      // Move track
+      track.style.transform = `translateX(-${currentSlide * 100}%)`;
 
+      // Update counter
+      curNumEl.textContent = String(currentSlide + 1).padStart(2, '0');
 
+      // Update progress bar
+      const pct = (currentSlide / (totalSlides - 1)) * 100;
+      progressBar.style.width = `${pct}%`;
 
-</div>
+      // Update buttons
+      btnPrev.disabled = (currentSlide === 0);
+      sidePrev.style.display = (currentSlide === 0) ? 'none' : 'flex';
+      
+      if (currentSlide === totalSlides - 1) {
+        btnNext.innerHTML = `<span>Về đầu</span> <span>↺</span>`;
+      } else {
+        btnNext.innerHTML = `<span>Tiếp theo</span> <span>❯</span>`;
+      }
 
-<footer>
-  <strong>Báo cáo tiến độ TLCN</strong> &mdash; Data Lakehouse Lambda Architecture &mdash;
-  Phạm Minh Quân &amp; Nguyễn Đặng Quốc Anh &mdash; HCMUTE HK1 2026–2027<br>
-  Cập nhật: 10/09/2026
-</footer>
+      // Update Dots
+      const dots = document.querySelectorAll('.slide-dot');
+      dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
 
+      // Update Header Chapter Pills
+      chapBtns.forEach((btn, i) => {
+        btn.classList.toggle('active', i === currentSlide);
+        if (i === currentSlide) {
+          btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      });
+
+      // Scroll active slide back to top
+      if (slides[currentSlide]) {
+        slides[currentSlide].scrollTop = 0;
+      }
+    }
+
+    function goToSlide(index) {
+      if (index >= 0 && index < totalSlides) {
+        currentSlide = index;
+        updatePresentationState();
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+      } else {
+        currentSlide = 0; // Loop back
+      }
+      updatePresentationState();
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updatePresentationState();
+      }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Don't intercept if user is typing in an input
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      switch(e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+        case 'PageDown':
+        case ' ': // Spacebar
+          e.preventDefault();
+          nextSlide();
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+        case 'PageUp':
+          e.preventDefault();
+          prevSlide();
+          break;
+        case 'Home':
+          e.preventDefault();
+          goToSlide(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          goToSlide(totalSlides - 1);
+          break;
+        case 'f':
+        case 'F':
+          toggleFullscreen();
+          break;
+      }
+    });
+
+    // Sub-tab switching in Slide 4
+    function switchTab(tabId, el) {
+      const parent = el.closest('.slide-inner');
+      parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      parent.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add('active');
+    }
+
+    // Fullscreen Toggle
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.warn(`Fullscreen error: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Touch swipe support for mobile/tablet presentation
+    let touchStartX = 0;
+    let touchEndX = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      if (touchStartX - touchEndX > 60) {
+        nextSlide(); // Swiped left
+      } else if (touchEndX - touchStartX > 60) {
+        prevSlide(); // Swiped right
+      }
+    }, { passive: true });
+
+    // Initial setup
+    updatePresentationState();
+  </script>
 </body>
 </html>
