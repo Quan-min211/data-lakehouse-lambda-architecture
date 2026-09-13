@@ -291,8 +291,8 @@
     }
     .hero-meta-box {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px 32px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px 28px;
       background: var(--bg-card);
       border: 1px solid var(--border);
       backdrop-filter: blur(20px);
@@ -729,13 +729,10 @@
       <!-- Quick Chapter Pills -->
       <nav class="nav-chapters">
         <button class="chap-btn active" onclick="goToSlide(0)"><span class="dot"></span>Trang bìa</button>
-        <button class="chap-btn" onclick="goToSlide(1)"><span class="dot"></span>1. Mục tiêu</button>
-        <button class="chap-btn" onclick="goToSlide(2)"><span class="dot"></span>2. Dữ liệu</button>
-        <button class="chap-btn" onclick="goToSlide(3)"><span class="dot"></span>3. Kiến trúc</button>
-        <button class="chap-btn" onclick="goToSlide(4)"><span class="dot"></span>4. Các tầng</button>
-        <button class="chap-btn" onclick="goToSlide(5)"><span class="dot"></span>5. So sánh</button>
-        <button class="chap-btn" onclick="goToSlide(6)"><span class="dot"></span>6. Unit Tests</button>
-        <button class="chap-btn" onclick="goToSlide(7)"><span class="dot"></span>Tổng kết</button>
+        <button class="chap-btn" onclick="goToSlide(1)"><span class="dot"></span>1. Dữ liệu</button>
+        <button class="chap-btn" onclick="goToSlide(2)"><span class="dot"></span>2. Kiến trúc</button>
+        <button class="chap-btn" onclick="goToSlide(3)"><span class="dot"></span>3. Các tầng</button>
+        <button class="chap-btn" onclick="goToSlide(4)"><span class="dot"></span>4. Unit Tests</button>
       </nav>
 
       <div class="header-tools">
@@ -759,7 +756,7 @@
         <!-- ─── SLIDE 0: HERO (COVER) ─────────────────────── -->
         <section class="slide">
           <div class="slide-inner hero-wrap">
-            <div class="slide-pill pill-cyan">Khóa luận tốt nghiệp kỹ sư CNTT &mdash; 2026–2027</div>
+            <div class="slide-pill pill-cyan">Tiểu Luận Chuyên Ngành &mdash; 2026–2027</div>
             <h1 class="hero-title">Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực</h1>
             <div class="hero-sub">Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring</div>
 
@@ -776,10 +773,6 @@
                 <span class="k">Khoa / Trường</span>
                 <span class="v">Công nghệ Thông tin &mdash; HCMUTE</span>
               </div>
-              <div class="hero-meta-item">
-                <span class="k">Thời gian báo cáo</span>
-                <span class="v">Tháng 09 / 2026</span>
-              </div>
             </div>
 
             <button class="btn-start" onclick="nextSlide()">
@@ -788,75 +781,12 @@
           </div>
         </section>
 
-        <!-- ─── SLIDE 1: RESEARCH QUESTIONS ───────────────── -->
+        <!-- ─── SLIDE 1: DATA & MOCKING ───────────────────── -->
         <section class="slide">
           <div class="slide-inner">
             <div class="slide-pill pill-cyan">Phần 1</div>
-            <h2 class="slide-title">Câu hỏi nghiên cứu &amp; Mục tiêu cốt lõi</h2>
-            <p class="slide-desc">Bài toán: Làm thế nào để một hệ thống vừa phục vụ dữ liệu thời gian thực (gần đúng, độ trễ &lt; 5s) vừa đảm bảo độ chính xác tuyệt đối (Ground Truth) khi dữ liệu lịch sử được tái xử lý?</p>
-
-            <div class="grid-3">
-              <!-- RQ1 -->
-              <div class="card" style="border-top:3px solid var(--cyan);">
-                <div class="card-title">
-                  <span style="font-size:20px;">⚡</span>
-                  <span>RQ1: Query Latency</span>
-                </div>
-                <p class="card-desc" style="margin-bottom:14px;">
-                  Kiến trúc <strong>Lambda</strong> có giúp giảm đáng kể độ trễ truy vấn so với phương pháp <strong>Batch-only</strong> truyền thống không?
-                </p>
-                <div class="code-block">
-                  <strong style="color:var(--cyan)">Benchmark 1:</strong><br>
-                  So sánh read latency giữa Batch-only, Speed-only và Lambda Query Merger trên ClickHouse.
-                </div>
-              </div>
-
-              <!-- RQ2 -->
-              <div class="card" style="border-top:3px solid var(--purple);">
-                <div class="card-title">
-                  <span style="font-size:20px;">🎯</span>
-                  <span>RQ2: Reconciliation Accuracy</span>
-                </div>
-                <p class="card-desc" style="margin-bottom:14px;">
-                  Speed View (gần đúng) có mức sai lệch <strong>bao nhiêu % (MAE / MAPE)</strong> so với Batch View (chính xác) sau khi watermark chốt?
-                </p>
-                <div class="code-block">
-                  <strong style="color:var(--purple)">Benchmark 2:</strong><br>
-                  Đo sai số giá trị VWAP và volume giữa Speed và Batch, kiểm định thuật toán tự đối soát 3 Case.
-                </div>
-              </div>
-
-              <!-- RQ3 -->
-              <div class="card" style="border-top:3px solid var(--green);">
-                <div class="card-title">
-                  <span style="font-size:20px;">📦</span>
-                  <span>RQ3: Iceberg Compaction</span>
-                </div>
-                <p class="card-desc" style="margin-bottom:14px;">
-                  Bin-Packing Compaction giúp <strong>cải thiện hiệu năng đọc bao nhiêu %</strong> sau khi streaming ghi hàng loạt file parquet nhỏ?
-                </p>
-                <div class="code-block">
-                  <strong style="color:var(--green)">Benchmark 3:</strong><br>
-                  Đo thời gian scan dữ liệu trên Apache Iceberg v2 trước và sau khi gộp file nhỏ về kích thước 128 MB.
-                </div>
-              </div>
-            </div>
-
-            <div class="card" style="margin-top:20px; background:rgba(30,41,59,0.5);">
-              <div style="font-size:13.5px;color:var(--text);display:flex;align-items:center;gap:12px;">
-                <span class="status-badge status-ok">ĐẶC BIỆT</span>
-                <span>Hệ thống áp dụng cơ chế <strong>Auto-Correcting</strong>: Tự động ghi đè dữ liệu tạm thời (Provisional) bằng dữ liệu chuẩn (Reconciled) ngay khi Batch Watermark được đồng bộ.</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ─── SLIDE 2: DATA & MOCKING ───────────────────── -->
-        <section class="slide">
-          <div class="slide-inner">
-            <div class="slide-pill pill-emerald">Phần 2</div>
             <h2 class="slide-title">Dữ liệu thực nghiệm — Thu thập &amp; Mock GBM</h2>
-            <p class="slide-desc">Kết hợp giữa dữ liệu thực từ Binance REST API và dữ liệu mô phỏng toán học Geometric Brownian Motion (GBM) có tiêm lỗi kiểm soát để đánh giá khả năng tự phục hồi.</p>
+            <p class="slide-desc">Kết hợp dữ liệu thực từ Binance REST API (13 cặp USDT) với dữ liệu mô phỏng Geometric Brownian Motion (GBM) 1.5M bản ghi, có tiêm lỗi kiểm soát để kiểm tra khả năng tự phục hồi của pipeline.</p>
 
             <!-- Metrics Grid -->
             <div class="grid-4" style="margin-bottom:18px;">
@@ -878,64 +808,77 @@
               </div>
             </div>
 
-            <div class="grid-2">
+            <div class="grid-2" style="margin-bottom:16px;">
               <!-- Data Contract Schema -->
               <div class="card">
-                <div class="card-title">
-                  <span>📑</span> Schema TradeEvent (Data Contract)
-                </div>
+                <div class="card-title"><span>📑</span> Schema TradeEvent (Data Contract)</div>
                 <div class="table-container" style="margin-top:8px;">
                   <table>
                     <thead><tr><th>Trường</th><th>Kiểu</th><th>Ý nghĩa</th></tr></thead>
                     <tbody>
                       <tr><td><code>trade_id</code></td><td>BIGINT</td><td>Mã giao dịch duy nhất</td></tr>
-                      <tr><td><code>symbol</code></td><td>STRING</td><td>Cặp giao dịch (BTCUSDT, ETHUSDT...)</td></tr>
+                      <tr><td><code>symbol</code></td><td>STRING</td><td>Cặp giao dịch (BTCUSDT, ETHUSDT…)</td></tr>
                       <tr><td><code>price, quantity</code></td><td>DOUBLE</td><td>Giá &amp; khối lượng khớp lệnh</td></tr>
                       <tr><td><code>trade_time</code></td><td>BIGINT</td><td>Event-time (epoch ms UTC)</td></tr>
-                      <tr><td><code>ingestion_time</code></td><td>BIGINT</td><td>Processing-time (thời điểm nhận)</td></tr>
+                      <tr><td><code>ingestion_time</code></td><td>BIGINT</td><td>Processing-time khi Kafka nhận</td></tr>
                       <tr><td><code>fault_type</code></td><td>STRING</td><td>Loại lỗi tiêm (nullable)</td></tr>
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <!-- Fault Injection Grid -->
+              <!-- GBM Formula -->
               <div class="card">
-                <div class="card-title">
-                  <span>🧪</span> Tiêm lỗi có kiểm soát (Fault Injection)
+                <div class="card-title"><span>📐</span> Công thức Mock GBM (Geometric Brownian Motion)</div>
+                <p class="card-desc" style="margin-bottom:10px;">Mô hình toán học chuẩn trong tài chính để mô phỏng biến động giá ngẫu nhiên có drift &amp; volatility thực tế:</p>
+                <div class="code-block" style="font-size:12px;line-height:2;">
+                  <span style="color:var(--amber)">dS</span> = μ·S·dt + σ·S·<span style="color:var(--purple)">dW</span><br>
+                  <span style="color:var(--text-dim)">→ Rời rạc hóa (Euler–Maruyama):</span><br>
+                  <span style="color:var(--cyan)">S(t+1)</span> = S(t) · exp(<span style="color:var(--green)">(μ − σ²/2)·dt</span> + <span style="color:var(--rose)">σ·√dt·Z</span>)
                 </div>
-                <p class="card-desc" style="margin-bottom:12px;">Mô phỏng các sự cố mạng viễn thông thực tế để kiểm tra khả năng phục hồi của Spark và Iceberg:</p>
-                <div class="grid-2" style="gap:10px;">
-                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
-                    <div style="font-weight:700;color:var(--amber);font-size:12.5px;">🔁 Duplicate (10%)</div>
-                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">92,612</div>
-                    <div style="font-size:11.5px;color:var(--text-dim);">Test khử trùng lặp (Dedup)</div>
-                  </div>
-                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
-                    <div style="font-weight:700;color:var(--purple);font-size:12.5px;">⏰ Late Data (10%)</div>
-                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">83,486</div>
-                    <div style="font-size:11.5px;color:var(--text-dim);">Lùi 1–5m, test Spark Watermark</div>
-                  </div>
-                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
-                    <div style="font-weight:700;color:var(--cyan);font-size:12.5px;">🔀 Out-of-Order (5%)</div>
-                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">50,713</div>
-                    <div style="font-size:11.5px;color:var(--text-dim);">Test Event-time Tumbling Window</div>
-                  </div>
-                  <div style="background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
-                    <div style="font-weight:700;color:var(--rose);font-size:12.5px;">❌ Schema Invalid (3%)</div>
-                    <div style="font-size:17px;font-weight:800;color:#fff;margin:2px 0;">26,871</div>
-                    <div style="font-size:11.5px;color:var(--text-dim);">Giá âm / q=0 → Test DQ Gate</div>
-                  </div>
+                <div style="margin-top:10px;font-size:12.5px;color:var(--text-muted);line-height:1.9;">
+                  <strong style="color:#fff;">μ</strong> = 0.0 (drift trung tính) &nbsp;·&nbsp;
+                  <strong style="color:#fff;">σ</strong> = 0.02 (độ biến động 2%/phút)<br>
+                  <strong style="color:#fff;">dt</strong> = 1/525,600 (mỗi tick = 1 phút/năm) &nbsp;·&nbsp;
+                  <strong style="color:#fff;">Z</strong> ~ N(0,1)<br>
+                  <strong style="color:#fff;">S₀</strong> = Giá thực tế cuối cùng của từng coin từ Binance
+                </div>
+              </div>
+            </div>
+
+            <!-- Fault Injection full-width -->
+            <div class="card">
+              <div class="card-title"><span>🧪</span> Tiêm lỗi có kiểm soát (Fault Injection) — 253,682 bản ghi bị nhiễm</div>
+              <div class="grid-4" style="margin-top:12px;gap:12px;">
+                <div style="background:rgba(255,255,255,0.03);padding:12px 16px;border-radius:10px;border:1px solid rgba(245,158,11,0.25);">
+                  <div style="font-weight:700;color:var(--amber);font-size:12.5px;margin-bottom:4px;">🔁 Duplicate — 10%</div>
+                  <div style="font-size:22px;font-weight:800;color:#fff;">92,612</div>
+                  <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Gửi lại bản ghi với cùng <code>trade_id</code>. Pipeline phải phát hiện &amp; loại bỏ qua Iceberg <code>MERGE INTO</code>.</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03);padding:12px 16px;border-radius:10px;border:1px solid rgba(168,85,247,0.25);">
+                  <div style="font-weight:700;color:var(--purple);font-size:12.5px;margin-bottom:4px;">⏰ Late Data — 10%</div>
+                  <div style="font-size:22px;font-weight:800;color:#fff;">83,486</div>
+                  <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Lùi <code>trade_time</code> từ 60–300 giây. Kiểm tra Spark Watermark 1m có loại bỏ đúng các nến trễ.</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03);padding:12px 16px;border-radius:10px;border:1px solid rgba(56,189,248,0.25);">
+                  <div style="font-weight:700;color:var(--cyan);font-size:12.5px;margin-bottom:4px;">🔀 Out-of-Order — 5%</div>
+                  <div style="font-size:22px;font-weight:800;color:#fff;">50,713</div>
+                  <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Đảo thứ tự event-time trong Kafka. Kiểm tra Tumbling Window phân cửa sổ theo event-time chứ không phải processing-time.</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03);padding:12px 16px;border-radius:10px;border:1px solid rgba(244,63,94,0.25);">
+                  <div style="font-weight:700;color:var(--rose);font-size:12.5px;margin-bottom:4px;">❌ Schema Invalid — 3%</div>
+                  <div style="font-size:22px;font-weight:800;color:#fff;">26,871</div>
+                  <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Tiêm giá âm hoặc <code>quantity=0</code>. Data Quality Gate phải cách ly vào Dead Letter Queue, không làm sập Spark job.</div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- ─── SLIDE 3: ARCHITECTURE ─────────────────────── -->
+        <!-- ─── SLIDE 2: ARCHITECTURE ─────────────────────── -->
         <section class="slide">
           <div class="slide-inner">
-            <div class="slide-pill pill-purple">Phần 3</div>
+            <div class="slide-pill pill-purple">Phần 2</div>
             <h2 class="slide-title">Kiến trúc tổng thể Lambda Lakehouse</h2>
             <p class="slide-desc">Phân tách luồng dữ liệu 2 nhánh: Speed Layer (độ trễ micro-batch 5s) và Batch Layer (chính xác tuyệt đối, chu kỳ 15 phút), đồng bộ qua System Watermark.</p>
 
@@ -1012,10 +955,10 @@
           </div>
         </section>
 
-        <!-- ─── SLIDE 4: CORE LAYERS ──────────────────────── -->
+        <!-- ─── SLIDE 3: CORE LAYERS ──────────────────────── -->
         <section class="slide">
           <div class="slide-inner">
-            <div class="slide-pill pill-cyan">Phần 4</div>
+            <div class="slide-pill pill-cyan">Phần 3</div>
             <h2 class="slide-title">Chi tiết các tầng đã triển khai hoàn thiện</h2>
             <p class="slide-desc">Toàn bộ 5 tầng cốt lõi đã được xây dựng, kết nối thành công và vượt qua 100% các bộ kiểm thử tự động.</p>
 
@@ -1032,29 +975,31 @@
             <div id="tab-ingest" class="tab-pane active">
               <div class="grid-2">
                 <div class="card">
-                  <div class="card-title">Các module mã nguồn</div>
-                  <div class="table-container" style="margin-top:6px;">
+                  <div class="card-title">🎯 Vai trò tầng Ingestion</div>
+                  <p class="card-desc" style="margin-bottom:10px;">Đây là cửa ngõ duy nhất nhận dữ liệu từ bên ngoài vào hệ thống. Mọi bản ghi phải qua tầng này trước khi vào Lambda Architecture — đảm bảo tính thống nhất &amp; khả năng phục hồi.</p>
+                  <div class="table-container">
                     <table>
-                      <thead><tr><th>File</th><th>Chức năng chính</th></tr></thead>
+                      <thead><tr><th>Module</th><th>Chức năng</th><th>Kỹ thuật cốt lõi</th></tr></thead>
                       <tbody>
-                        <tr><td><code>models.py</code></td><td>TradeEvent, DLQEvent &amp; Data Contract</td></tr>
-                        <tr><td><code>kafka_producer.py</code></td><td>Producer bền vững, exponential backoff, DLQ</td></tr>
-                        <tr><td><code>fault_injector.py</code></td><td>Bộ tiêm 4 loại lỗi phân tán ngẫu nhiên</td></tr>
-                        <tr><td><code>binance_ws.py</code></td><td>WebSocket Top-10 coin, tự phục hồi mạng</td></tr>
+                        <tr><td><code>models.py</code></td><td>Data Contract</td><td>Pydantic validation, TradeEvent schema</td></tr>
+                        <tr><td><code>kafka_producer.py</code></td><td>Ghi vào Kafka</td><td>acks=all, exponential backoff, DLQ fallback</td></tr>
+                        <tr><td><code>fault_injector.py</code></td><td>Tiêm lỗi kiểm soát</td><td>4 fault modes, tỉ lệ cấu hình động</td></tr>
+                        <tr><td><code>binance_ws.py</code></td><td>Thu thập dữ liệu</td><td>WebSocket stream, auto-reconnect, top-13 coin</td></tr>
                       </tbody>
                     </table>
                   </div>
-                  <div class="p-bar-wrap">
+                  <div class="p-bar-wrap" style="margin-top:10px;">
                     <div class="p-bar-label"><span>Unit Tests</span><span style="color:var(--green);font-weight:700;">8/8 PASS (100%)</span></div>
                     <div class="p-bar"><div class="p-bar-fill" style="width:100%"></div></div>
                   </div>
                 </div>
                 <div class="card">
-                  <div class="card-title">Điểm nổi bật kỹ thuật</div>
-                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:1.9;">
-                    <li><strong>Key Partitioning</strong>: Khóa partition bằng <code>symbol</code> đảm bảo thứ tự sự kiện trong từng coin.</li>
-                    <li><strong>Dead Letter Queue (DLQ)</strong>: Dữ liệu vi phạm JSON Schema tự động cách ly vào topic riêng, không làm sập pipeline.</li>
-                    <li><strong>Idempotent Producer</strong>: Cấu hình <code>acks=all</code> và <code>enable.idempotence=true</code> chống duplicate tại tầng mạng.</li>
+                  <div class="card-title">⚙️ Cách xây dựng &amp; điểm kỹ thuật</div>
+                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:2;">
+                    <li><strong>Key Partitioning</strong>: Partition Kafka theo <code>symbol</code> → đảm bảo thứ tự event-time trong mỗi coin, tránh race condition.</li>
+                    <li><strong>Dead Letter Queue</strong>: Bản ghi vi phạm JSON Schema tự động route sang topic <code>crypto_trades_dlq</code>. Pipeline không bị chặn.</li>
+                    <li><strong>Idempotent Producer</strong>: <code>acks=all</code> + <code>enable.idempotence=true</code> → không mất &amp; không nhân đôi message tại tầng mạng.</li>
+                    <li><strong>Resilient Reconnect</strong>: WebSocket tự động kết nối lại tối đa 5 lần với backoff 2ˢ khi mất mạng.</li>
                   </ul>
                 </div>
               </div>
@@ -1064,34 +1009,36 @@
             <div id="tab-batch" class="tab-pane">
               <div class="grid-2">
                 <div class="card">
-                  <div class="card-title">Apache Iceberg v2 + Compaction</div>
-                  <p class="card-desc">Bảng Bronze crypto_trades lưu trên MinIO (S3), phân vùng theo ngày (<code>days(trade_time)</code>). Hỗ trợ 4 chiến lược dọn dẹp:</p>
-                  <div class="table-container" style="margin-top:8px;">
+                  <div class="card-title">🎯 Vai trò tầng Batch</div>
+                  <p class="card-desc" style="margin-bottom:10px;">Tầng Batch là <strong>nguồn Ground Truth</strong> của toàn bộ hệ thống. Chạy theo chu kỳ 15 phút, nó xử lý toàn bộ lịch sử với DQ Gate nghiêm ngặt, tạo ra Batch View chính xác tuyệt đối trong ClickHouse.</p>
+                  <div class="card-title" style="margin-top:12px;">Apache Iceberg v2 — Compaction Strategies</div>
+                  <div class="table-container" style="margin-top:6px;">
                     <table>
-                      <thead><tr><th>Chiến lược</th><th>Lệnh Iceberg API</th><th>Mục đích</th></tr></thead>
+                      <thead><tr><th>Chiến lược</th><th>API Call</th><th>Mục đích &amp; Benchmark</th></tr></thead>
                       <tbody>
-                        <tr><td><strong>Bin-Packing</strong></td><td><code>rewrite_data_files('binpack')</code></td><td>Gộp file nhỏ → 128 MB (RQ3)</td></tr>
-                        <tr><td>Sort Compaction</td><td><code>rewrite_data_files('sort')</code></td><td>Sắp xếp theo symbol &amp; time</td></tr>
-                        <tr><td>Manifest Rewrite</td><td><code>rewrite_manifests()</code></td><td>Tối ưu cây metadata</td></tr>
-                        <tr><td>Expire Snapshots</td><td><code>expire_snapshots()</code></td><td>Xóa snapshot cũ &gt; 7 ngày</td></tr>
+                        <tr><td><strong style="color:var(--green);">Bin-Packing</strong></td><td><code>rewrite_data_files('binpack')</code></td><td>Gộp file &lt;128MB → 1 file 128MB → đo RQ3</td></tr>
+                        <tr><td>Sort Compaction</td><td><code>rewrite_data_files('sort')</code></td><td>Sort theo symbol+time → tăng tốc range scan</td></tr>
+                        <tr><td>Manifest Rewrite</td><td><code>rewrite_manifests()</code></td><td>Tối ưu cây metadata, giảm planning time</td></tr>
+                        <tr><td>Expire Snapshots</td><td><code>expire_snapshots()</code></td><td>Xóa snapshot &gt; 7 ngày, giải phóng MinIO</td></tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
                 <div class="card">
-                  <div class="card-title">Dagster 6 Software-Defined Assets</div>
-                  <div class="code-block" style="font-size:12px;margin-top:8px;line-height:1.9;">
-                    <span style="color:var(--green)">bronze_crypto_trades</span><br>
-                    &nbsp;&nbsp;↓ (Data Quality Gate: deduplicate + quarantine)<br>
+                  <div class="card-title">⚙️ Cách xây dựng — Dagster 6 SDA Pipeline</div>
+                  <div class="code-block" style="font-size:12px;margin-top:8px;line-height:2;">
+                    <span style="color:var(--green)">bronze_crypto_trades</span> <span style="color:var(--text-dim)">← Kafka → Iceberg MinIO</span><br>
+                    &nbsp;&nbsp;↓ <span style="color:var(--text-dim)">DQ Gate: dedup (trade_id) + quarantine schema-invalid</span><br>
                     <span style="color:var(--cyan)">silver_cleaned_trades</span><br>
-                    &nbsp;&nbsp;↓ (Tính OHLCV + VWAP chuẩn Ground Truth)<br>
+                    &nbsp;&nbsp;↓ <span style="color:var(--text-dim)">Spark SQL: OHLCV + VWAP = Σ(price×qty)/Σqty</span><br>
                     <span style="color:var(--amber)">gold_market_aggregates</span><br>
-                    &nbsp;&nbsp;↓ (Đồng bộ ClickHouse &amp; cập nhật Watermark W)<br>
+                    &nbsp;&nbsp;↓ <span style="color:var(--text-dim)">INSERT INTO ClickHouse + cập nhật W</span><br>
                     <span style="color:var(--purple)">clickhouse_batch_sync</span> → <span style="color:var(--green)">system_watermark_sync</span>
                   </div>
-                  <p style="font-size:12.5px;color:var(--text-muted);margin-top:10px;">
-                    Lịch chạy tự động: Pipeline chạy <strong>mỗi 15 phút</strong> &nbsp;|&nbsp; Compaction chạy <strong>mỗi 2 giờ</strong>.
-                  </p>
+                  <ul style="padding-left:18px;color:var(--text-muted);font-size:12.5px;line-height:1.9;margin-top:10px;">
+                    <li>Lịch chạy: Pipeline <strong>mỗi 15 phút</strong>, Compaction <strong>mỗi 2 giờ</strong> qua Dagster Cron.</li>
+                    <li>Watermark W được cập nhật mỗi chu kỳ → Serving Layer tự động chuyển Case 2→Case 1.</li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -1100,61 +1047,72 @@
             <div id="tab-speed" class="tab-pane">
               <div class="grid-2">
                 <div class="card">
-                  <div class="card-title">Spark Structured Streaming Engine</div>
-                  <div class="table-container" style="margin-top:6px;">
+                  <div class="card-title">🎯 Vai trò tầng Speed</div>
+                  <p class="card-desc" style="margin-bottom:10px;">Tầng Speed cung cấp <strong>dữ liệu gần đúng (Provisional)</strong> trong vòng &lt; 5 giây. Nó không thay thế Batch mà bổ sung cho khoảng thời gian chưa được Batch xử lý (sau Watermark W).</p>
+                  <div class="table-container">
                     <table>
-                      <thead><tr><th>File</th><th>Chức năng</th></tr></thead>
+                      <thead><tr><th>Module</th><th>Vai trò</th><th>Tham số kỹ thuật</th></tr></thead>
                       <tbody>
-                        <tr><td><code>spark_streaming.py</code></td><td>Khởi tạo SparkSession local[2], Trigger 5s micro-batch</td></tr>
-                        <tr><td><code>window_aggregator.py</code></td><td>Tumbling Window 1m theo event-time, Watermark 1m</td></tr>
-                        <tr><td><code>metrics_calculator.py</code></td><td>Tính toán song song Open, High, Low, Close, Volume, VWAP</td></tr>
-                        <tr><td><code>spike_detector.py</code></td><td>Cảnh báo biến động bất thường: |Close-Open|/Open ≥ 2%</td></tr>
-                        <tr><td><code>clickhouse_writer.py</code></td><td><code>foreachBatch</code> ghi nạp ClickHouse <code>speed_agg</code></td></tr>
+                        <tr><td><code>spark_streaming.py</code></td><td>Engine chính</td><td>SparkSession local[2], Trigger 5s</td></tr>
+                        <tr><td><code>window_aggregator.py</code></td><td>Phân cửa sổ</td><td>Tumbling Window 1m, Watermark 1m</td></tr>
+                        <tr><td><code>metrics_calculator.py</code></td><td>Tính OHLCV/VWAP</td><td>VWAP = Σ(price×qty)/Σqty per window</td></tr>
+                        <tr><td><code>spike_detector.py</code></td><td>Phát hiện spike</td><td>|Close−Open|/Open ≥ 2% hoặc Range ≥ 3%</td></tr>
+                        <tr><td><code>clickhouse_writer.py</code></td><td>Ghi ClickHouse</td><td>foreachBatch → ReplacingMergeTree upsert</td></tr>
                       </tbody>
                     </table>
                   </div>
-                  <div class="p-bar-wrap">
+                  <div class="p-bar-wrap" style="margin-top:10px;">
                     <div class="p-bar-label"><span>Unit Tests</span><span style="color:var(--green);font-weight:700;">17/17 PASS (100%)</span></div>
                     <div class="p-bar"><div class="p-bar-fill" style="width:100%"></div></div>
                   </div>
                 </div>
                 <div class="card">
-                  <div class="card-title">Cơ chế ClickHouse ReplacingMergeTree</div>
-                  <p class="card-desc" style="margin-bottom:12px;">
-                    Thay vì sử dụng Redis như đề xuất sơ khai, Speed View được nạp trực tiếp vào ClickHouse bảng <code>ReplacingMergeTree(updated_at)</code>:
+                  <div class="card-title">⚙️ Cách xây dựng — Quyết định kiến trúc</div>
+                  <p class="card-desc" style="margin-bottom:10px;">
+                    <strong>Thay Redis bằng ClickHouse ReplacingMergeTree</strong> — quyết định thiết kế quan trọng nhất của tầng Speed:
                   </p>
-                  <ul style="padding-left:18px;color:var(--text-muted);font-size:13.5px;line-height:1.9;">
-                    <li><strong>Tự động Upsert</strong>: Bản ghi mới trong cùng 1 cửa sổ nến sẽ ghi đè bản ghi cũ dựa vào <code>updated_at</code>.</li>
-                    <li><strong>Thống nhất Engine</strong>: Cả Batch View và Speed View đều nằm trên ClickHouse, giúp Serving Layer truy vấn đồng nhất bằng SQL siêu tốc.</li>
-                    <li><strong>Đạt chuẩn SLA</strong>: Thời gian từ khi có giao dịch đến khi hiển thị &lt; 5 giây.</li>
-                  </ul>
+                  <div class="table-container">
+                    <table>
+                      <thead><tr><th>Tiêu chí</th><th style="color:var(--rose);">Redis (ban đầu)</th><th style="color:var(--green);">ClickHouse RMT (thực tế)</th></tr></thead>
+                      <tbody>
+                        <tr><td>Upsert nến</td><td>HSET thủ công</td><td>Tự động qua <code>updated_at</code></td></tr>
+                        <tr><td>Query Batch+Speed</td><td>2 hệ thống khác nhau</td><td>SQL đồng nhất 1 engine</td></tr>
+                        <tr><td>Latency ghi</td><td>~0.3ms</td><td>~2ms (chấp nhận được)</td></tr>
+                        <tr><td>SLA End-to-End</td><td>Khó đo</td><td><strong>&lt; 5 giây</strong> ✓</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
 
             <!-- TAB 4: SERVING -->
             <div id="tab-serving" class="tab-pane">
-              <div class="grid-3" style="margin-bottom:16px;">
+              <p style="font-size:13.5px;color:var(--text-muted);margin-bottom:14px;">🎯 <strong style="color:#fff;">Vai trò:</strong> FastAPI Query Merger là điểm truy vấn duy nhất cho Dashboard &amp; Benchmark. Dựa vào Watermark W, nó tự động chọn nguồn dữ liệu tối ưu — đảm bảo độ chính xác &amp; độ trễ thấp nhất.</p>
+              <div class="grid-3" style="margin-bottom:14px;">
                 <div class="card" style="border-left:3px solid var(--green);">
-                  <div class="card-title"><span class="status-badge status-ok">CASE 1</span> Lịch sử</div>
-                  <p class="card-desc"><strong>T_end ≤ W</strong>: Lấy 100% từ <code>batch_agg</code>. Dữ liệu đã qua DQ Gate, chính xác tuyệt đối, Δ = 0.0.</p>
+                  <div class="card-title"><span class="status-badge status-ok">CASE 1</span> Lịch sử (History)</div>
+                  <p class="card-desc"><strong>T_end ≤ W</strong> → 100% từ <code>batch_agg</code>. Đã qua DQ Gate, chính xác tuyệt đối. Δ = 0.0 bảo đảm.</p>
                 </div>
                 <div class="card" style="border-left:3px solid var(--cyan);">
                   <div class="card-title"><span class="status-badge status-info">CASE 2</span> Thời gian thực</div>
-                  <p class="card-desc"><strong>T_start ≥ W</strong>: Lấy 100% từ <code>speed_agg</code>. Phục vụ tức thời cho trading, chấp nhận gần đúng.</p>
+                  <p class="card-desc"><strong>T_start ≥ W</strong> → 100% từ <code>speed_agg</code>. Dữ liệu gần đúng, phục vụ trading tức thì &lt; 5 giây.</p>
                 </div>
                 <div class="card" style="border-left:3px solid var(--amber);">
                   <div class="card-title"><span class="status-badge status-warn">CASE 3</span> Hybrid Ghép Nguồn</div>
-                  <p class="card-desc"><strong>T_start &lt; W &lt; T_end</strong>: Cắt tại W, nửa trước lấy Batch, nửa sau lấy Speed. <strong>ZERO Double-Counting</strong>.</p>
+                  <p class="card-desc"><strong>T_start &lt; W &lt; T_end</strong>: Cắt tại W — nến trước W lấy Batch, nến sau W lấy Speed. <strong>ZERO Double-Counting</strong>.</p>
                 </div>
               </div>
               <div class="card">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <div>
-                    <strong style="color:#fff;">FastAPI Endpoints (Port 8000):</strong>
-                    <span style="color:var(--text-muted);font-size:13px;margin-left:10px;"><code>/api/market</code> &bull; <code>/api/reconciliation</code> &bull; <code>/api/watermark</code></span>
-                  </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                  <strong style="color:#fff;">FastAPI Endpoints (Port 8000)</strong>
                   <span class="status-badge status-ok">24/24 Tests PASS</span>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <span style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:4px 12px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--cyan);">GET /api/market?symbol=&amp;from=&amp;to=</span>
+                  <span style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:4px 12px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--cyan);">GET /api/reconciliation</span>
+                  <span style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:4px 12px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--cyan);">GET /api/watermark</span>
+                  <span style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:4px 12px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--cyan);">GET /health</span>
                 </div>
               </div>
             </div>
@@ -1192,52 +1150,10 @@
           </div>
         </section>
 
-        <!-- ─── SLIDE 5: COMPARISON & ADAPTATIONS ─────────── -->
+        <!-- ─── SLIDE 4: AUTOMATED TESTS ──────────────────── -->
         <section class="slide">
           <div class="slide-inner">
-            <div class="slide-pill pill-amber">Phần 5</div>
-            <h2 class="slide-title">So sánh Kiến trúc: Đề ra ban đầu vs Thực tế</h2>
-            <p class="slide-desc">Đánh giá mức độ hoàn thiện so với kế hoạch ban đầu và các điểm cải tiến thích nghi nhằm tối ưu hóa hiệu năng hệ thống.</p>
-
-            <div class="table-container">
-              <table>
-                <thead><tr><th>Hạng mục</th><th>Kế hoạch đề ra</th><th>Thực tế đã triển khai</th><th>Đánh giá</th></tr></thead>
-                <tbody>
-                  <tr><td>Nguồn dữ liệu</td><td>Kafka + Batch CSV tĩnh</td><td>Binance REST API + Mock GBM đa dạng</td><td><span class="status-badge status-ok">Vượt mục tiêu</span></td></tr>
-                  <tr><td>Message Broker</td><td>Apache Kafka</td><td>Apache Kafka 3.7.0 (KRaft mode, no ZK)</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
-                  <tr><td>Storage &amp; Table Format</td><td>MinIO + Apache Iceberg</td><td>MinIO S3 + Iceberg v2 REST Catalog</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
-                  <tr><td>Compaction Pipeline</td><td>Iceberg OPTIMIZE cơ bản</td><td>4 chiến lược: Bin-Pack, Sort, Manifest, Expire</td><td><span class="status-badge status-ok">Đầy đủ hơn</span></td></tr>
-                  <tr><td>Stream Processing</td><td>Spark Structured Streaming</td><td>Trigger 5s micro-batch, Watermark, Spike Detection</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
-                  <tr><td><strong>Speed Views Storage</strong></td><td><strong>Redis Cache</strong></td><td><strong>ClickHouse ReplacingMergeTree</strong></td><td><span class="status-badge status-warn">Đổi kiến trúc</span></td></tr>
-                  <tr><td>Serving Layer API</td><td>FastAPI Query Merger</td><td>Thuật toán 3-Case Auto-Correcting + Δ reconciliation</td><td><span class="status-badge status-ok">Nâng cấp lớn</span></td></tr>
-                  <tr><td>Orchestration</td><td>Dagster cơ bản</td><td>Dagster 6 SDA + Data Lineage DAG + 2 Schedules</td><td><span class="status-badge status-ok">Đạt chuẩn</span></td></tr>
-                  <tr><td>Data Quality Gate</td><td>Module riêng biệt</td><td>Tích hợp trong Dagster Silver SDA (Dedup/Quarantine)</td><td><span class="status-badge status-warn">Cần tách module</span></td></tr>
-                  <tr><td>Benchmark Scripts</td><td>3 kịch bản thực nghiệm</td><td>Đã lên phương án chi tiết (chờ chạy đo đạc)</td><td><span class="status-badge status-info">Giai đoạn kế</span></td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="grid-3" style="margin-top:16px;">
-              <div class="card">
-                <div class="card-title">1. Redis → ClickHouse</div>
-                <p class="card-desc">Lưu Speed View trên ClickHouse giúp giảm 1 service phụ thuộc, cho phép Serving Layer JOIN/UNION dữ liệu bằng SQL siêu tốc mà vẫn giữ độ trễ &lt; 5s.</p>
-              </div>
-              <div class="card">
-                <div class="card-title">2. 3-Case Query Merger</div>
-                <p class="card-desc">Thuật toán chia mốc theo Watermark W giải quyết triệt để lỗi tính 2 lần (Double-Counting) và tự động gắn nhãn Reconciled / Provisional.</p>
-              </div>
-              <div class="card">
-                <div class="card-title">3. Dagster SDA Pipeline</div>
-                <p class="card-desc">Thay vì chạy Spark Batch Job rời rạc, Dagster Software-Defined Assets quản lý dòng chảy lineage trực quan từ Bronze đến Watermark.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ─── SLIDE 6: AUTOMATED TESTS ──────────────────── -->
-        <section class="slide">
-          <div class="slide-inner">
-            <div class="slide-pill pill-emerald">Phần 6</div>
+            <div class="slide-pill pill-emerald">Phần 4</div>
             <h2 class="slide-title">Kết quả kiểm thử tự động (Unit &amp; Integration Tests)</h2>
             <p class="slide-desc">Hệ thống áp dụng phương pháp kiểm thử toàn diện với pytest. Tất cả 81 unit tests trên cả 5 tầng kiến trúc đều vượt qua với tỷ lệ thành công 100%.</p>
 
@@ -1260,118 +1176,105 @@
               </div>
             </div>
 
-            <div class="card" style="padding:16px 24px;">
-              <!-- Suite 1 -->
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
-                <div>
-                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_ingestion.py</div>
-                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra Kafka Producer, JSON Schema validator, Fault Injector logic</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;">
-                  <span style="font-size:13px;color:var(--text-muted);">8 tests</span>
-                  <span class="status-badge status-ok">✓ 8/8 PASS</span>
-                </div>
-              </div>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>File Test</th>
+                    <th>Test Case tiêu biểu</th>
+                    <th>Kiểm tra điều gì</th>
+                    <th>Kết quả</th>
+                    <th>Ý nghĩa với đề tài</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- test_ingestion.py -->
+                  <tr>
+                    <td rowspan="3" style="font-family:'JetBrains Mono',monospace;color:var(--cyan);vertical-align:middle;font-weight:700;">test_ingestion.py<br><span style="color:var(--text-dim);font-size:11px;">8 tests</span></td>
+                    <td><code>test_duplicate_injection</code></td>
+                    <td>Tiêm duplicate 100% → pipeline sinh 2 bản ghi cùng <code>trade_id</code></td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Xác nhận FaultInjector hoạt động đúng — tiền đề cho Benchmark dedup</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_late_data_injection</code></td>
+                    <td>Lùi <code>trade_time</code> 60–120s → kiểm tra timestamp thực sự giảm</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Đảm bảo late data thực sự có event-time trước Watermark → Spark sẽ loại đúng</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_schema_invalid_injection</code></td>
+                    <td>Tiêm giá âm → <code>fault_type = "schema_invalid"</code>, <code>price &lt; 0</code></td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Xác nhận DQ Gate nhận dạng đúng bản ghi lỗi để cách ly DLQ</td>
+                  </tr>
 
-              <!-- Suite 2 -->
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
-                <div>
-                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_speed_layer.py</div>
-                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra Window Aggregator, VWAP calculator, Spike Detector, ClickHouse Writer</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;">
-                  <span style="font-size:13px;color:var(--text-muted);">17 tests</span>
-                  <span class="status-badge status-ok">✓ 17/17 PASS</span>
-                </div>
-              </div>
+                  <!-- test_speed_layer.py -->
+                  <tr>
+                    <td rowspan="3" style="font-family:'JetBrains Mono',monospace;color:var(--amber);vertical-align:middle;font-weight:700;">test_speed_layer.py<br><span style="color:var(--text-dim);font-size:11px;">17 tests</span></td>
+                    <td><code>test_vwap_calculation</code></td>
+                    <td>4 giao dịch, qty=[1,2,1,1] → VWAP = 303,500/5 = <strong>60,700.0</strong></td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Xác nhận công thức VWAP = Σ(P×Q)/ΣQ đúng — cốt lõi của Benchmark 2 (RQ2)</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_price_jump_spike</code></td>
+                    <td>Open=60000, Close=61500 → biên độ 2.5% ≥ 2% → <strong>is_spike=1</strong></td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Cảnh báo spike hoạt động đúng ngưỡng, tránh false positive/negative</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_ohlcv_out_of_order_input</code></td>
+                    <td>Xáo trộn thứ tự giao dịch → Open/Close vẫn đúng theo event-time</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Đảm bảo Out-of-Order data không làm lệch giá mở/đóng cửa</td>
+                  </tr>
 
-              <!-- Suite 3 -->
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
-                <div>
-                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_query_merger.py</div>
-                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra thuật toán 3 Case, logic chống double-count, tính sai lệch Δ_reconciliation</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;">
-                  <span style="font-size:13px;color:var(--text-muted);">24 tests</span>
-                  <span class="status-badge status-ok">✓ 24/24 PASS</span>
-                </div>
-              </div>
+                  <!-- test_query_merger.py -->
+                  <tr>
+                    <td rowspan="3" style="font-family:'JetBrains Mono',monospace;color:var(--green);vertical-align:middle;font-weight:700;">test_query_merger.py<br><span style="color:var(--text-dim);font-size:11px;">24 tests</span></td>
+                    <td><code>test_case_1_history_query</code></td>
+                    <td>T_end=12:00 ≤ W=12:00 → 100% Batch, Δ=0.0, status=RECONCILED</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Chứng minh Case 1 trả về Ground Truth chính xác tuyệt đối</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_case_3_hybrid_zero_double_count</code></td>
+                    <td>4 nến: 2 Batch (11:58–12:00) + 2 Speed (12:00–12:02), không nến nào trùng</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td><strong>Điểm cốt lõi RQ2:</strong> Zero Double-Counting — ghép nguồn không sinh bản ghi nhân đôi</td>
+                  </tr>
+                  <tr>
+                    <td><code>test_reconciliation_report</code></td>
+                    <td>Nến 11:59 — Batch VWAP=60200, Speed VWAP=60215 → Δ=<strong>15.0 USDT</strong></td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Đây là dữ liệu mẫu cho Benchmark 2 — đo MAE/MAPE Speed vs Batch sau Watermark</td>
+                  </tr>
 
-              <!-- Suite 4 -->
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
-                <div>
-                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_dashboard_components.py</div>
-                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra nến Plotly, KPI cards, bảng đối soát MAE, cơ chế tự refresh</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;">
-                  <span style="font-size:13px;color:var(--text-muted);">27 tests</span>
-                  <span class="status-badge status-ok">✓ 27/27 PASS</span>
-                </div>
-              </div>
+                  <!-- test_dashboard_components.py -->
+                  <tr>
+                    <td style="font-family:'JetBrains Mono',monospace;color:var(--purple);vertical-align:middle;font-weight:700;">test_dashboard_components.py<br><span style="color:var(--text-dim);font-size:11px;">27 tests</span></td>
+                    <td><code>test_candle_status_badge, test_kpi_cards, test_mae_table</code></td>
+                    <td>Badge Reconciled/Provisional đúng màu, 5 KPI cards render đúng giá trị, MAE tính đúng</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Đảm bảo Dashboard hiển thị đúng kết quả Benchmark — trực quan hóa luận văn</td>
+                  </tr>
 
-              <!-- Suite 5 -->
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
-                <div>
-                  <div style="font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">test_dagster_pipeline.py</div>
-                  <div style="font-size:12px;color:var(--text-dim);">Kiểm tra 6 Software-Defined Assets, Iceberg Compaction schedule &amp; lineage</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:16px;">
-                  <span style="font-size:13px;color:var(--text-muted);">5 tests</span>
-                  <span class="status-badge status-ok">✓ 5/5 PASS</span>
-                </div>
-              </div>
+                  <!-- test_dagster_pipeline.py -->
+                  <tr>
+                    <td style="font-family:'JetBrains Mono',monospace;color:var(--rose);vertical-align:middle;font-weight:700;">test_dagster_pipeline.py<br><span style="color:var(--text-dim);font-size:11px;">5 tests</span></td>
+                    <td><code>test_asset_lineage, test_compaction_schedule</code></td>
+                    <td>6 SDA có dependency graph đúng, Compaction job được lên lịch mỗi 2 giờ</td>
+                    <td><span class="status-badge status-ok">PASS</span></td>
+                    <td>Xác nhận Batch pipeline tự động hóa hoàn toàn — tiền đề chạy Benchmark 1 &amp; 3</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
 
-        <!-- ─── SLIDE 7: CONCLUSION & SUMMARY ─────────────── -->
-        <section class="slide">
-          <div class="slide-inner" style="text-align:center;padding-top:20px;">
-            <div class="slide-pill pill-cyan">Tổng kết báo cáo</div>
-            <h2 class="slide-title" style="margin-bottom:14px;">Hệ thống đã sẵn sàng cho giai đoạn đo đạc thực nghiệm</h2>
-            <p class="slide-desc" style="margin:0 auto 30px;max-width:760px;">
-              Hạ tầng Lambda Lakehouse hoàn chỉnh, các tầng Ingestion &rarr; Batch &rarr; Speed &rarr; Serving &rarr; Dashboard đã liên kết thông suốt và được kiểm chứng bằng 81 tests tự động.
-            </p>
 
-            <div class="grid-3" style="text-align:left;margin-bottom:32px;">
-              <div class="card" style="border-top:3px solid var(--green);">
-                <div class="card-title">✅ Đã hoàn thành</div>
-                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
-                  <li>Thu thập 15K bản ghi thực + 1.5M Mock GBM.</li>
-                  <li>Apache Iceberg v2 Bronze Table &amp; Compaction.</li>
-                  <li>Spark Streaming trigger 5s &rarr; ClickHouse.</li>
-                  <li>FastAPI Auto-Correcting Merger 3 Case.</li>
-                  <li>Streamlit Dashboard phân loại nến theo Watermark.</li>
-                </ul>
-              </div>
-
-              <div class="card" style="border-top:3px solid var(--cyan);">
-                <div class="card-title">🚀 Bước tiếp theo (Trọng tâm)</div>
-                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
-                  <li>Chạy thực nghiệm <strong>Benchmark 1</strong>: Query Latency.</li>
-                  <li>Chạy thực nghiệm <strong>Benchmark 2</strong>: Reconciliation Accuracy.</li>
-                  <li>Chạy thực nghiệm <strong>Benchmark 3</strong>: Compaction Efficiency.</li>
-                  <li>Trích xuất dữ liệu kết quả ra CSV để vẽ đồ thị luận văn.</li>
-                </ul>
-              </div>
-
-              <div class="card" style="border-top:3px solid var(--purple);">
-                <div class="card-title">🎓 Luận văn tốt nghiệp</div>
-                <ul style="padding-left:16px;color:var(--text-muted);font-size:13px;line-height:1.8;">
-                  <li>Hoàn thiện chương 3: Thiết kế kiến trúc Lambda.</li>
-                  <li>Hoàn thiện chương 4: Triển khai kỹ thuật chi tiết.</li>
-                  <li>Tổng hợp chương 5: Kết quả thực nghiệm &amp; Đánh giá.</li>
-                  <li>Chuẩn bị slide bảo vệ khóa luận chính thức.</li>
-                </ul>
-              </div>
-            </div>
-
-            <div style="background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:16px;padding:20px;display:inline-block;">
-              <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px;">Cảm ơn Thầy và các bạn đã lắng nghe!</div>
-              <div style="font-size:13.5px;color:var(--cyan);">Hỏi &amp; Đáp (Q&amp;A Session)</div>
-            </div>
-          </div>
-        </section>
 
       </div>
     </main>
@@ -1391,7 +1294,7 @@
       <div style="display:flex;align-items:center;gap:18px;">
         <div class="dots-wrap" id="dotsWrap"></div>
         <div class="slide-counter">
-          <span id="curSlideNum">01</span> / <span id="totalSlideNum">08</span>
+          <span id="curSlideNum">01</span> / <span id="totalSlideNum">05</span>
         </div>
       </div>
 

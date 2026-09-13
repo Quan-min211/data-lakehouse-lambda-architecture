@@ -10,7 +10,6 @@
 | **GVHD** | ThS. Đoàn Minh Trí |
 | **Khoa** | Công nghệ Thông tin — ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE) |
 | **Học kỳ** | HK1 — Năm học 2026–2027 |
-| **Ngày báo cáo** | 10/09/2026 |
 
 ---
 
