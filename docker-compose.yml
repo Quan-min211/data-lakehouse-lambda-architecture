@@ -119,6 +119,89 @@ services:
     mem_limit: 512m
 
   # ---------------------------------------------------------------------------
+  # SPARK MASTER / WORKER / THRIFT SERVER
+  # ---------------------------------------------------------------------------
+  spark-master:
+    image: bitnami/spark:3.5.1
+    container_name: lakehouse-spark-master
+    hostname: spark-master
+    ports:
+      - "7077:7077"    # Spark master
+      - "8080:8080"    # Spark master UI
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+    networks:
+      - lakehouse-net
+    mem_limit: 768m
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    container_name: lakehouse-spark-worker
+    hostname: spark-worker
+    ports:
+      - "8081:8081"    # Spark worker UI
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+    depends_on:
+      - spark-master
+    networks:
+      - lakehouse-net
+    mem_limit: 2500m
+
+  spark-thrift:
+    image: bitnami/spark:3.5.1
+    container_name: lakehouse-spark-thrift
+    hostname: spark-thrift
+    ports:
+      - "10000:10000"  # dbt-spark Thrift endpoint
+      - "4040:4040"    # Spark app UI
+    environment:
+      SPARK_MODE: client
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: >
+      /bin/bash -lc "
+        /opt/bitnami/spark/sbin/start-thriftserver.sh
+        --master spark://spark-master:7077
+        --hiveconf hive.server2.thrift.bind.host=0.0.0.0
+        --hiveconf hive.server2.thrift.port=10000
+        --conf spark.jars.packages=org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262
+        --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        --conf spark.sql.catalog.iceberg_catalog=org.apache.iceberg.spark.SparkCatalog
+        --conf spark.sql.catalog.iceberg_catalog.type=rest
+        --conf spark.sql.catalog.iceberg_catalog.uri=http://iceberg-rest:8181
+        --conf spark.sql.catalog.iceberg_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO
+        --conf spark.sql.catalog.iceberg_catalog.warehouse=s3://warehouse/
+        --conf spark.sql.catalog.iceberg_catalog.s3.endpoint=http://minio:9000
+        --conf spark.sql.catalog.iceberg_catalog.s3.path-style-access=true
+        --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+        --conf spark.hadoop.fs.s3a.access.key=${MINIO_ROOT_USER:-minioadmin}
+        --conf spark.hadoop.fs.s3a.secret.key=${MINIO_ROOT_PASSWORD:-minioadmin}
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+        --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false;
+        tail -f /opt/bitnami/spark/logs/*"
+    depends_on:
+      - spark-master
+      - spark-worker
+      - iceberg-rest
+      - minio-setup
+    networks:
+      - lakehouse-net
+    mem_limit: 1500m
+
+  # ---------------------------------------------------------------------------
   # CLICKHOUSE (OLAP Engine — Batch Views + Speed Views)
   # ---------------------------------------------------------------------------
   clickhouse:
@@ -187,7 +270,8 @@ services:
     ports:
       - "8000:8000"    # REST API  →  http://localhost:8000/docs
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
@@ -229,6 +313,43 @@ services:
       - lakehouse-net
     mem_limit: 512m
 
+  # ---------------------------------------------------------------------------
+  # DAGSTER (Batch Orchestration UI + Schedules)
+  # ---------------------------------------------------------------------------
+  dagster:
+    build:
+      context: .
+      dockerfile: Dockerfile.dagster
+    container_name: lakehouse-dagster
+    hostname: dagster
+    ports:
+      - "3000:3000"    # Dagster UI -> http://localhost:3000
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DAGSTER_HOME=/opt/dagster/dagster_home
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - MINIO_ENDPOINT=http://minio:9000
+      - ICEBERG_REST_URI=http://iceberg-rest:8181
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - BATCH_WRITE_ICEBERG=false
+    volumes:
+      - ./src:/app/src
+      - ./dagster_project:/app/dagster_project
+      - ./datasets:/app/datasets
+      - ./results:/app/results
+      - dagster-home:/opt/dagster/dagster_home
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      spark-thrift:
+        condition: service_started
+    networks:
+      - lakehouse-net
+    mem_limit: 1g
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
@@ -237,6 +358,7 @@ volumes:
   minio-data:
   clickhouse-data:
   redis-data:
+  dagster-home:
 
 # =============================================================================
 # NETWORKS

@@ -23,7 +23,7 @@ class KafkaConfig:
     """Cau hinh ket noi Apache Kafka."""
     bootstrap_servers: str = "localhost:9094" if os.name == "nt" and os.getenv("KAFKA_BOOTSTRAP_SERVERS") in [None, "kafka:9092"] else os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
     external_servers: str = os.getenv("KAFKA_EXTERNAL_SERVERS", "localhost:9094")
-    topic_raw: str = os.getenv("KAFKA_TOPIC_RAW", "crypto_trades_raw")
+    topic_raw: str = os.getenv("KAFKA_TOPIC_RAW", os.getenv("KAFKA_TOPIC_RAW_EVENTS", "crypto_trades_raw"))
     topic_dlq: str = os.getenv("KAFKA_TOPIC_DLQ", "crypto_trades_dlq")
 
 
@@ -60,7 +60,16 @@ class ClickHouseConfig:
     port: int = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     user: str = os.getenv("CLICKHOUSE_USER", "default")
     password: str = os.getenv("CLICKHOUSE_PASSWORD", "")
-    database: str = os.getenv("CLICKHOUSE_DB", "lakehouse")
+    database: str = os.getenv("CLICKHOUSE_DATABASE", os.getenv("CLICKHOUSE_DB", "lakehouse"))
+
+
+@dataclass
+class RedisConfig:
+    """Cau hinh ket noi Redis Speed Cache."""
+    host: str = _resolve_host("REDIS_HOST", "localhost")
+    port: int = int(os.getenv("REDIS_PORT", "6379"))
+    password: str = os.getenv("REDIS_PASSWORD", "")
+    ttl_seconds: int = int(os.getenv("REDIS_TTL_SECONDS", "3600"))
 
 
 @dataclass
@@ -70,6 +79,7 @@ class AppConfig:
     binance: BinanceConfig = field(default_factory=BinanceConfig)
     minio: MinIOConfig = field(default_factory=MinIOConfig)
     clickhouse: ClickHouseConfig = field(default_factory=ClickHouseConfig)
+    redis: RedisConfig = field(default_factory=RedisConfig)
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
 
@@ -90,3 +100,7 @@ def get_binance_config() -> BinanceConfig:
 
 def get_minio_config() -> MinIOConfig:
     return MinIOConfig()
+
+
+def get_redis_config() -> RedisConfig:
+    return RedisConfig()

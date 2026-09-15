@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: bronze_crypto_trades
+    description: "Typed view over the Iceberg Bronze TradeEvent table."
+    columns:
+      - name: trade_id
+        tests:
+          - not_null
+      - name: symbol
+        tests:
+          - not_null
+
+  - name: silver_cleaned_trades
+    description: "Validated and deduplicated TradeEvent records."
+    columns:
+      - name: trade_id
+        tests:
+          - not_null
+      - name: symbol
+        tests:
+          - not_null
+      - name: price
+        tests:
+          - not_null
+      - name: quantity
+        tests:
+          - not_null
+
+  - name: gold_market_aggregates
+    description: "Reconciled one-minute OHLCV/VWAP candles for ClickHouse batch views."
+    columns:
+      - name: symbol
+        tests:
+          - not_null
+      - name: window_start
+        tests:
+          - not_null

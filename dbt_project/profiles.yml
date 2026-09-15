@@ -4,6 +4,8 @@ lambda_spark:
     dev:
       type: spark
       method: thrift
-      host: localhost
+      host: "{{ env_var('DBT_SPARK_HOST', 'localhost') }}"
       port: 10000
       schema: default
+      connect_timeout: 30
+      connect_retries: 3
