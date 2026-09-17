@@ -57,3 +57,14 @@ dbt_project/dbt_packages/
 dagster_project/.dagster/
 
 .dagster_home/
+
+# Hadoop binaries (winutils.exe for Windows) -- khong commit binary, chi commit README
+hadoop/bin/*.exe
+hadoop/bin/*.dll
+hadoop/bin/*.cmd
+hadoop/bin/*.sh
+hadoop/lib/
+
+# Spark Structured Streaming checkpoints
+.checkpoints/
+checkpoints/

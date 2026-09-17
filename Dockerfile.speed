@@ -1,0 +1,32 @@
+FROM bitnami/spark:3.5.1
+
+# Chay voi user root de co quyen cai dat them package
+USER root
+
+# Cai dat Python 3.10 dependencies cho Speed Layer
+RUN pip install --no-cache-dir \
+    clickhouse-connect==0.7.0 \
+    kafka-python==2.0.2 \
+    python-dotenv==1.0.0 \
+    pyyaml==6.0.0 \
+    tenacity==8.2.3
+
+# Copy source code
+WORKDIR /app
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+# Bien moi truong mac dinh cho Spark Structured Streaming
+# - Ket noi Kafka qua bridge network
+# - Checkpoint luu vao volume /app/checkpoints
+ENV PYTHONPATH=/app
+ENV SPARK_MASTER_URL=local[2]
+ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+ENV KAFKA_TOPIC_RAW=crypto_trades_raw
+ENV CLICKHOUSE_HOST=clickhouse
+ENV CLICKHOUSE_PORT=8123
+ENV CHECKPOINT_DIR=/app/checkpoints/speed_layer
+
+# Entry point: khoi dong Speed Layer Streaming Job
+CMD ["python", "-u", "src/speed_layer/spark_streaming.py", \
+     "--trigger", "5 seconds"]

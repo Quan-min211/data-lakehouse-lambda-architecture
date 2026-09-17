@@ -202,6 +202,56 @@ services:
     mem_limit: 1500m
 
   # ---------------------------------------------------------------------------
+  # SPEED LAYER — Spark Structured Streaming (Kafka → ClickHouse)
+  # Giai phap thay the cho viec chay Spark tren Windows Host (tranh loi winutils.exe).
+  # Container nay chay tren Linux nen khong bi anh huong boi van de Windows Hadoop.
+  # ---------------------------------------------------------------------------
+  speed-layer:
+    build:
+      context: .
+      dockerfile: Dockerfile.speed
+    container_name: lakehouse-speed-layer
+    hostname: speed-layer
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Spark chay che do local[2] trong container (khong can Spark cluster)
+      - SPARK_MASTER_URL=local[2]
+      # Ket noi Kafka qua bridge network (ten service = hostname trong Docker)
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_RAW=${KAFKA_TOPIC_RAW:-crypto_trades_raw}
+      # Ket noi ClickHouse
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-lakehouse}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      # Checkpoint luu vao volume de giu trang thai khi container restart
+      - CHECKPOINT_DIR=/app/checkpoints/speed_layer
+      # Trigger moi 5 giay (SLA < 5s end-to-end)
+      - SPEED_TRIGGER_INTERVAL=5 seconds
+      - PYTHONPATH=/app
+    volumes:
+      - ./src:/app/src
+      - speed-checkpoints:/app/checkpoints
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - lakehouse-net
+    mem_limit: 2g
+    # Ghi log ra stdout de theo doi qua: docker compose logs -f speed-layer
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
   # CLICKHOUSE (OLAP Engine — Batch Views + Speed Views)
   # ---------------------------------------------------------------------------
   clickhouse:
@@ -359,6 +409,7 @@ volumes:
   clickhouse-data:
   redis-data:
   dagster-home:
+  speed-checkpoints:
 
 # =============================================================================
 # NETWORKS
