@@ -23,6 +23,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+try:
+    import urllib.request
+except ImportError:
+    pass
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
@@ -168,9 +173,71 @@ def write_batch_run_log(
     return path
 
 
-def maybe_write_bronze_to_iceberg(records: List[Dict[str, Any]], batch_run_id: str) -> Optional[Dict[str, Any]]:
-    """Write Bronze records to Iceberg when Spark and Iceberg services are configured."""
+def check_iceberg_services_reachable() -> Dict[str, bool]:
+    """
+    Pre-flight check: ping MinIO S3 endpoint va Iceberg REST Catalog truoc khi
+    khoi dong Spark. Giup phat hien loi ket noi som hon thay vi sau khi Spark
+    da mat nhieu phut khoi dong.
+
+    Returns:
+        dict voi keys 'minio' va 'iceberg_rest', gia tri True/False.
+    """
+    import urllib.request
+    import urllib.error
+
+    minio_url    = os.getenv("MINIO_ENDPOINT",    "http://localhost:9000") + "/minio/health/live"
+    iceberg_url  = os.getenv("ICEBERG_REST_URI",  "http://localhost:8181") + "/v1/config"
+
+    result = {"minio": False, "iceberg_rest": False}
+    for key, url in [("minio", minio_url), ("iceberg_rest", iceberg_url)]:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                result[key] = resp.status < 400
+        except Exception as exc:
+            logger.warning("Pre-flight check FAILED (%s -> %s): %s", key, url, exc)
+    return result
+
+
+def write_bronze_to_iceberg(
+    records: List[Dict[str, Any]],
+    batch_run_id: str,
+    strict: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """
+    Ghi Bronze records vao Iceberg table.
+
+    Khi chay voi flag --write-iceberg, ham nay se RAISE loi thay vi im lang bo qua
+    (strict=True). Dieu nay dam bao nguoi dung biet ro rang Iceberg ghi that bai.
+
+    Args:
+        records:      Danh sach TradeEvent records da clean.
+        batch_run_id: ID cua batch job hien tai.
+        strict:       Neu True, raise RuntimeError thay vi tra ve None khi that bai.
+
+    Returns:
+        dict ket qua ghi Iceberg, hoac None neu khong kha dung (va strict=False).
+
+    Raises:
+        RuntimeError: Khi strict=True va Spark/Iceberg khong kha dung.
+    """
     if not records:
+        logger.warning("write_bronze_to_iceberg: khong co records nao de ghi.")
+        return None
+
+    # Pre-flight check truoc khi ton nhieu thoi gian khoi dong Spark
+    service_status = check_iceberg_services_reachable()
+    missing = [svc for svc, ok in service_status.items() if not ok]
+    if missing:
+        msg = (
+            f"Iceberg write that bai — cac service sau khong phan hoi: {missing}.\n"
+            "Hay dam bao Docker dang chay:\n"
+            "  docker compose up -d minio iceberg-rest\n"
+            "Sau do chay lai:"
+            "  python src/batch_layer/spark_batch_jobs.py --write-iceberg"
+        )
+        if strict:
+            raise RuntimeError(msg)
+        logger.warning(msg)
         return None
 
     try:
@@ -185,23 +252,47 @@ def maybe_write_bronze_to_iceberg(records: List[Dict[str, Any]], batch_run_id: s
         from src.batch_layer.iceberg_utils import IcebergTableManager, get_spark_session
 
         schema = StructType([
-            StructField("trade_id", LongType(), False),
-            StructField("symbol", StringType(), False),
-            StructField("price", DoubleType(), False),
-            StructField("quantity", DoubleType(), False),
-            StructField("trade_time", LongType(), False),
+            StructField("trade_id",      LongType(),   False),
+            StructField("symbol",        StringType(), False),
+            StructField("price",         DoubleType(), False),
+            StructField("quantity",      DoubleType(), False),
+            StructField("trade_time",    LongType(),   False),
             StructField("is_buyer_maker", BooleanType(), True),
-            StructField("ingestion_time", LongType(), True),
-            StructField("is_injected", BooleanType(), True),
-            StructField("fault_type", StringType(), True),
+            StructField("ingestion_time", LongType(),   True),
+            StructField("is_injected",   BooleanType(), True),
+            StructField("fault_type",    StringType(),  True),
         ])
         spark = get_spark_session("LambdaLakehouse-BatchPipeline")
         df = spark.createDataFrame(records, schema=schema)
         manager = IcebergTableManager(spark)
-        return manager.write_to_bronze(df, batch_run_id=batch_run_id)
+        result = manager.write_to_bronze(df, batch_run_id=batch_run_id)
+        logger.info(
+            "Iceberg Bronze write thanh cong: %d records | snapshot_id=%s",
+            result.get("record_count", 0),
+            result.get("snapshot_id"),
+        )
+        return result
+
     except Exception as exc:
-        logger.warning("Skipping Iceberg Bronze write because Spark/Iceberg is unavailable: %s", exc)
+        msg = f"Iceberg Bronze write that bai: {exc}"
+        if strict:
+            raise RuntimeError(msg) from exc
+        logger.warning(
+            "%s\nDe thu lai voi Iceberg that su:\n"
+            "  docker compose up -d minio iceberg-rest\n"
+            "  python src/batch_layer/spark_batch_jobs.py --write-iceberg",
+            msg,
+        )
         return None
+
+
+def maybe_write_bronze_to_iceberg(
+    records: List[Dict[str, Any]],
+    batch_run_id: str,
+    strict: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Backward-compatible wrapper around write_bronze_to_iceberg."""
+    return write_bronze_to_iceberg(records, batch_run_id, strict=strict)
 
 
 def run_batch_pipeline(
@@ -209,15 +300,29 @@ def run_batch_pipeline(
     batch_run_id: Optional[str] = None,
     sync_clickhouse: bool = True,
     write_iceberg: bool = False,
+    iceberg_strict: bool = False,
 ) -> Dict[str, Any]:
-    """Run the batch pipeline and return a structured summary."""
+    """
+    Run the batch pipeline and return a structured summary.
+
+    Args:
+        input_path:     Path to JSON/CSV file or directory. None = load default datasets.
+        batch_run_id:   Optional deterministic ID for this run.
+        sync_clickhouse: If True, push Gold candles and watermark to ClickHouse.
+        write_iceberg:  If True, append clean Bronze records to Iceberg table.
+        iceberg_strict: If True (and write_iceberg=True), raise RuntimeError on Iceberg
+                        failure instead of silently skipping. Use this in Docker pipelines.
+    """
     batch_run_id = batch_run_id or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     raw_records = load_records_from_path(input_path) if input_path else load_default_records()
     clean_records, rejected_records, quality = clean_and_deduplicate(raw_records)
     candles = aggregate_gold_candles(clean_records)
     watermark = max((row["window_end"] for row in candles), default=None)
 
-    iceberg_result = maybe_write_bronze_to_iceberg(clean_records, batch_run_id) if write_iceberg else None
+    iceberg_result = (
+        write_bronze_to_iceberg(clean_records, batch_run_id, strict=iceberg_strict)
+        if write_iceberg else None
+    )
 
     clickhouse_rows = 0
     watermark_synced = False
@@ -256,13 +361,58 @@ def run_batch_pipeline(
 
 def main() -> None:
     """Command-line entry point."""
-    parser = argparse.ArgumentParser(description="Run the Batch Layer pipeline")
-    parser.add_argument("--mode", default="full", choices=["full", "sample"], help="Execution mode")
-    parser.add_argument("--input", default=None, help="JSON/CSV file or directory to load")
-    parser.add_argument("--batch-run-id", default=None, help="Optional deterministic batch run id")
-    parser.add_argument("--no-clickhouse", action="store_true", help="Skip ClickHouse sync")
-    parser.add_argument("--write-iceberg", action="store_true", help="Also append clean Bronze records to Iceberg")
+    parser = argparse.ArgumentParser(
+        description="Batch Layer Pipeline — Bronze -> Silver -> Gold -> ClickHouse",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Vi du:\n"
+            "  # Chay pipeline thong thuong (chi ClickHouse):\n"
+            "  python src/batch_layer/spark_batch_jobs.py\n"
+            "\n"
+            "  # Chay pipeline + ghi Bronze vao Iceberg (can MinIO + Iceberg REST dang chay):\n"
+            "  docker compose up -d minio iceberg-rest\n"
+            "  python src/batch_layer/spark_batch_jobs.py --write-iceberg\n"
+            "\n"
+            "  # Chay ben trong Docker (iceberg-strict de bao loi ro rang):\n"
+            "  docker compose up -d batch-pipeline"
+        ),
+    )
+    parser.add_argument("--mode", default="full", choices=["full", "sample"],
+                        help="Execution mode")
+    parser.add_argument("--input", default=None,
+                        help="JSON/CSV file or directory to load")
+    parser.add_argument("--batch-run-id", default=None,
+                        help="Optional deterministic batch run id")
+    parser.add_argument("--no-clickhouse", action="store_true",
+                        help="Skip ClickHouse sync")
+    parser.add_argument("--write-iceberg", action="store_true",
+                        help=(
+                            "Append clean Bronze records to Iceberg Bronze table. "
+                            "Yeu cau: docker compose up -d minio iceberg-rest"
+                        ))
+    parser.add_argument("--iceberg-strict", action="store_true",
+                        help=(
+                            "Khi --write-iceberg duoc chi dinh, raise loi ngay lap tuc "
+                            "thay vi im lang bo qua neu Iceberg khong kha dung."
+                        ))
     args = parser.parse_args()
+
+    # Pre-flight Iceberg check khi --write-iceberg duoc chi dinh
+    if args.write_iceberg:
+        logger.info("--write-iceberg duoc chi dinh. Dang kiem tra ket noi dich vu...")
+        status = check_iceberg_services_reachable()
+        all_ok = all(status.values())
+        for svc, ok in status.items():
+            icon = "OK" if ok else "FAIL"
+            logger.info("  [%s] %s", icon, svc)
+        if not all_ok:
+            logger.error(
+                "Mot so dich vu Iceberg chua san sang. Hay chay:\n"
+                "  docker compose up -d minio iceberg-rest\n"
+                "Sau do thu lai."
+            )
+            if args.iceberg_strict:
+                sys.exit(1)
 
     input_path = Path(args.input).resolve() if args.input else None
     summary = run_batch_pipeline(
@@ -270,6 +420,7 @@ def main() -> None:
         batch_run_id=args.batch_run_id,
         sync_clickhouse=not args.no_clickhouse,
         write_iceberg=args.write_iceberg,
+        iceberg_strict=args.iceberg_strict,
     )
     print(json.dumps(summary, indent=2, default=str))
 

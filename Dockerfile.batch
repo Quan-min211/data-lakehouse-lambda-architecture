@@ -1,0 +1,47 @@
+FROM bitnami/spark:3.5.1
+
+# Chay voi user root de co quyen cai dat them package
+USER root
+
+# Cai dat Python dependencies cho Batch Pipeline
+RUN pip install --no-cache-dir \
+    clickhouse-connect==0.7.0 \
+    kafka-python==2.0.2 \
+    python-dotenv==1.0.0 \
+    pyyaml==6.0.0 \
+    tenacity==8.2.3
+
+# Copy source code va datasets
+WORKDIR /app
+COPY src/      ./src/
+COPY scripts/  ./scripts/
+COPY datasets/ ./datasets/
+
+# Bien moi truong mac dinh
+ENV PYTHONPATH=/app
+ENV SPARK_MASTER_URL=local[*]
+
+# Ket noi MinIO (ghi Bronze Iceberg)
+ENV MINIO_ENDPOINT=http://minio:9000
+ENV MINIO_ACCESS_KEY=minioadmin
+ENV MINIO_SECRET_KEY=minioadmin
+
+# Ket noi Iceberg REST Catalog
+ENV ICEBERG_REST_URI=http://iceberg-rest:8181
+
+# Ket noi ClickHouse (ghi Gold candles + watermark)
+ENV CLICKHOUSE_HOST=clickhouse
+ENV CLICKHOUSE_PORT=8123
+ENV CLICKHOUSE_DATABASE=lakehouse
+ENV CLICKHOUSE_USER=default
+ENV CLICKHOUSE_PASSWORD=
+
+# Ghi Bronze vao Iceberg va bao loi ro rang khi dich vu khong san sang
+ENV BATCH_WRITE_ICEBERG=true
+ENV BATCH_ICEBERG_STRICT=true
+
+# Entry point:
+#   --write-iceberg  : ghi Bronze records vao Iceberg Bronze table
+#   --iceberg-strict : thoat voi loi ro rang neu MinIO/Iceberg REST khong san sang
+CMD ["python", "-u", "src/batch_layer/spark_batch_jobs.py", \
+     "--write-iceberg", "--iceberg-strict"]

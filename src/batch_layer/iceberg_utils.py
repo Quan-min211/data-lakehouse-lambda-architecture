@@ -121,12 +121,27 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
     spark = (
         SparkSession.builder
         .appName(app_name)
+        # Master: mac dinh local[*], co the override bang env SPARK_MASTER_URL
+        .master(os.getenv("SPARK_MASTER_URL", "local[*]"))
 
-        # ── Iceberg Extensions ──────────────────────────────────────────────
+        # ── Maven JARs tu dong tai khi khoi dong ──────────────────────────────
+        # Iceberg Spark Runtime (Spark 3.5 / Scala 2.12) + Hadoop AWS S3A
+        .config(
+            "spark.jars.packages",
+            ",".join([
+                "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2",
+                "org.apache.hadoop:hadoop-aws:3.3.4",
+                "com.amazonaws:aws-java-sdk-bundle:1.12.262",
+            ]),
+        )
+        # Tich hop jar tu Maven local cache neu co san (tranh tai lai moi lan)
+        .config("spark.jars.ivy", os.path.join(os.path.expanduser("~"), ".ivy2"))
+
+        # ── Iceberg Extensions ────────────────────────────────────────────────
         .config("spark.sql.extensions",
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
 
-        # ── Iceberg REST Catalog ────────────────────────────────────────────
+        # ── Iceberg REST Catalog ──────────────────────────────────────────────
         .config(f"spark.sql.catalog.{CATALOG_NAME}",
                 "org.apache.iceberg.spark.SparkCatalog")
         .config(f"spark.sql.catalog.{CATALOG_NAME}.type", "rest")
@@ -139,7 +154,7 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
         .config(f"spark.sql.catalog.{CATALOG_NAME}.s3.access-key-id", minio_access)
         .config(f"spark.sql.catalog.{CATALOG_NAME}.s3.secret-access-key", minio_secret)
 
-        # ── Hadoop S3A (dùng spark.read.parquet, v.v.) ─────────────────────
+        # ── Hadoop S3A (dung spark.read.parquet, v.v.) ───────────────────────
         .config("spark.hadoop.fs.s3a.endpoint",              minio_endpoint)
         .config("spark.hadoop.fs.s3a.access.key",            minio_access)
         .config("spark.hadoop.fs.s3a.secret.key",            minio_secret)
@@ -148,7 +163,7 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
                 "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
 
-        # ── Tài nguyên Spark ────────────────────────────────────────────────
+        # ── Tai nguyen Spark ──────────────────────────────────────────────────
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.default.parallelism",    "4")
         .config("spark.driver.memory",          "1g")
@@ -158,8 +173,9 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
     )
 
     spark.sparkContext.setLogLevel("WARN")
-    logger.info("✓ SparkSession khởi tạo thành công")
+    logger.info("SparkSession khoi tao thanh cong")
     return spark
+
 
 
 # ── IcebergTableManager ────────────────────────────────────────────────────────
