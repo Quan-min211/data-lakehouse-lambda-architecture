@@ -9,9 +9,12 @@ Hỗ trợ cả:
 2. PySpark Column expressions (dành cho Spark Structured Streaming trên cluster)
 """
 
-from typing import Dict, Any, List
-from pyspark.sql import functions as F
-from pyspark.sql.column import Column
+from __future__ import annotations
+
+from typing import Dict, Any, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.column import Column
 
 
 class MetricsCalculator:
@@ -68,26 +71,29 @@ class MetricsCalculator:
         }
 
     @staticmethod
-    def get_spark_aggregation_exprs() -> List[Column]:
+    def get_spark_aggregation_exprs() -> "List[Column]":
         """
-        Trả về danh sách các Spark Aggregation Expressions cho Window Aggregation.
-        Sử dụng kỹ thuật struct(trade_time, price) để trích xuất chính xác Open và Close.
+        Tra ve danh sach cac Spark Aggregation Expressions cho Window Aggregation.
+        Su dung ky thuat struct(trade_time, price) de trich xuat chinh xac Open va Close.
+        PySpark duoc import lazy khi ham nay duoc goi (can Spark Session dang chay).
         """
-        # Struct kết hợp trade_time và price
+        from pyspark.sql import functions as F  # lazy import
+
+        # Struct ket hop trade_time va price
         time_price_struct = F.struct(F.col("trade_time"), F.col("price"))
 
         return [
-            # Open: giá của giao dịch có trade_time sớm nhất trong window
+            # Open: gia cua giao dich co trade_time som nhat trong window
             F.min(time_price_struct).getItem("price").alias("open_price"),
-            # High: giá cao nhất trong window
+            # High: gia cao nhat trong window
             F.max(F.col("price")).alias("high_price"),
-            # Low: giá thấp nhất trong window
+            # Low: gia thap nhat trong window
             F.min(F.col("price")).alias("low_price"),
-            # Close: giá của giao dịch có trade_time muộn nhất trong window
+            # Close: gia cua giao dich co trade_time muon nhat trong window
             F.max(time_price_struct).getItem("price").alias("close_price"),
-            # Volume: tổng khối lượng giao dịch
+            # Volume: tong khoi luong giao dich
             F.sum(F.col("quantity")).alias("volume"),
-            # Trade count: tổng số giao dịch
+            # Trade count: tong so giao dich
             F.count(F.lit(1)).alias("trade_count"),
             # VWAP = sum(price * quantity) / sum(quantity)
             (F.sum(F.col("price") * F.col("quantity")) / F.sum(F.col("quantity"))).alias("vwap"),

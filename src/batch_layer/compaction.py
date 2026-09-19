@@ -25,52 +25,63 @@ Sử dụng:
   job.run_full_compaction()
 """
 
+from __future__ import annotations
+
 import time
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from pyspark.sql import SparkSession
+if TYPE_CHECKING:
+    from pyspark.sql import SparkSession
 
-from .iceberg_utils import (
-    IcebergTableManager,
-    CATALOG_NAME,
-    BRONZE_NAMESPACE,
-    BRONZE_TABLE,
-    BRONZE_FULL_NAME,
-    get_spark_session,
-)
-from ..utils.logger import setup_logger
+# Hang so catalog / namespace — khong can import iceberg_utils
+CATALOG_NAME     = "iceberg_catalog"
+BRONZE_NAMESPACE = "bronze"
+BRONZE_TABLE     = "crypto_trades"
+BRONZE_FULL_NAME = f"{CATALOG_NAME}.{BRONZE_NAMESPACE}.{BRONZE_TABLE}"
+
+from ..utils.logger import setup_logger  # noqa: E402
 
 logger = setup_logger("compaction")
 
 # ── Compaction Config ──────────────────────────────────────────────────────────
-TARGET_FILE_SIZE_BYTES = 134_217_728    # 128 MB — Iceberg default target
-MIN_FILE_SIZE_BYTES    = 67_108_864     # 64 MB  — file nhỏ hơn này cần compact
-MAX_CONCURRENT_WRITES  = 2             # Số luồng ghi song song
-SNAPSHOT_RETENTION_MS  = 7 * 24 * 3600 * 1000   # 7 ngày
+TARGET_FILE_SIZE_BYTES = 134_217_728    # 128 MB
+MIN_FILE_SIZE_BYTES    = 67_108_864     # 64 MB
+MAX_CONCURRENT_WRITES  = 2
+SNAPSHOT_RETENTION_MS  = 7 * 24 * 3600 * 1000   # 7 ngay
+
+
+def get_spark_session(app_name: str = "LambdaLakehouse-Compaction") -> SparkSession:
+    """
+    Lazy wrapper: khoi tao SparkSession voi cau hinh Iceberg + MinIO.
+    PySpark chi duoc import khi ham nay duoc goi lan dau.
+    """
+    from .iceberg_utils import get_spark_session as _get  # lazy
+    return _get(app_name)
 
 
 class CompactionJob:
     """
-    Thực thi các chiến lược Compaction cho Iceberg Bronze table.
+    Thuc thi cac chien luoc Compaction cho Iceberg Bronze table.
 
-    Chiến lược:
-    1. Bin-Packing Compaction (Benchmark 3 — chủ đạo)
-    2. Sort Compaction (tùy chọn — cải thiện query selective)
-    3. Manifest Rewrite (dọn dẹp metadata)
-    4. Expire Snapshots (giải phóng dung lượng MinIO)
+    Chien luoc:
+    1. Bin-Packing Compaction (Benchmark 3 -- chu dao)
+    2. Sort Compaction (tuy chon -- cai thien query selective)
+    3. Manifest Rewrite (don dep metadata)
+    4. Expire Snapshots (giai phong dung luong MinIO)
     """
 
     def __init__(self, spark: SparkSession):
         """
         Args:
-            spark: SparkSession đã cấu hình Iceberg + MinIO.
+            spark: SparkSession da cau hinh Iceberg + MinIO.
         """
+        from .iceberg_utils import IcebergTableManager  # lazy import
         self.spark      = spark
         self.table_mgr  = IcebergTableManager(spark)
         self.table_name = BRONZE_FULL_NAME
-        logger.info(f"CompactionJob khởi tạo — target table: {self.table_name}")
+        logger.info(f"CompactionJob khoi tao -- target table: {self.table_name}")
 
     # ── Diagnostic ────────────────────────────────────────────────────────────
 

@@ -5,9 +5,12 @@ Module phát hiện bất thường biến động giá (Price Spike Detection) 
 Cảnh báo các biến động giá vượt ngưỡng (ví dụ: biến động đột ngột > 2% hoặc biên độ High-Low > 3% trong 1 phút).
 """
 
-from typing import Dict, Any
-from pyspark.sql import functions as F
-from pyspark.sql.column import Column
+from __future__ import annotations
+
+from typing import Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.column import Column
 
 
 class SpikeDetector:
@@ -46,10 +49,13 @@ class SpikeDetector:
             return 1
         return 0
 
-    def get_spark_spike_expr(self) -> Column:
+    def get_spark_spike_expr(self) -> "Column":
         """
-        Trả về biểu thức Spark Column tính toán cột 'is_spike' (0 hoặc 1).
+        Tra ve bieu thuc Spark Column tinh toan cot 'is_spike' (0 hoac 1).
+        PySpark duoc import lazy khi ham nay duoc goi (can Spark Session dang chay).
         """
+        from pyspark.sql import functions as F  # lazy import
+
         price_change_cond = (
             F.abs(F.col("close_price") - F.col("open_price")) / F.col("open_price")
             >= self.price_change_threshold

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from src.speed_layer.metrics_calculator import MetricsCalculator
 from src.speed_layer.spike_detector import SpikeDetector
-from src.speed_layer.window_aggregator import TRADE_EVENT_SPARK_SCHEMA
+from src.speed_layer.trade_schema import TRADE_EVENT_FIELD_NAMES
 
 
 class TestMetricsCalculator(unittest.TestCase):
@@ -92,10 +92,10 @@ class TestSpikeDetector(unittest.TestCase):
 
 
 class TestSchemaAndFormatting(unittest.TestCase):
-    """Kiểm thử cấu trúc Schema."""
+    """Kiem thu cau truc Schema (khong can PySpark/JVM)."""
 
     def test_spark_schema_field_names(self):
-        field_names = [f.name for f in TRADE_EVENT_SPARK_SCHEMA.fields]
+        """Kiem tra danh sach ten cot dung theo Data Contract."""
         expected = [
             "trade_id",
             "symbol",
@@ -107,7 +107,8 @@ class TestSchemaAndFormatting(unittest.TestCase):
             "is_injected",
             "fault_type",
         ]
-        self.assertEqual(field_names, expected)
+        # Dung TRADE_EVENT_FIELD_NAMES tu trade_schema (khong can Spark JVM)
+        self.assertEqual(TRADE_EVENT_FIELD_NAMES, expected)
 
 
 if __name__ == "__main__":
