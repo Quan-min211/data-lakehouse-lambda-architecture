@@ -1,7 +1,7 @@
-FROM bitnami/spark:3.5.1
+FROM apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
 
-# Chay voi user root de co quyen cai dat them package
 USER root
+
 
 # Cai dat Python 3.10 dependencies cho Speed Layer
 RUN pip install --no-cache-dir \
