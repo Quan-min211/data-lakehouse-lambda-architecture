@@ -63,36 +63,75 @@ BASE_PRICES = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. ClickHouse Client Helper
+# 1. ClickHouse Client Helper (Hỗ trợ cả clickhouse-connect & HTTP fallback)
 # ─────────────────────────────────────────────────────────────────────────────
+class ClickHouseClientWrapper:
+    """Client ClickHouse linh hoạt: ưu tiên clickhouse-connect, tự fallback sang HTTP (urllib)."""
+
+    def __init__(self, host: str = CLICKHOUSE_HOST, port: int = CLICKHOUSE_PORT, database: str = CLICKHOUSE_DB):
+        self.host = host
+        self.port = port
+        self.database = database
+        self.mode = "http"
+        self._ch_client = None
+
+        try:
+            import clickhouse_connect
+            self._ch_client = clickhouse_connect.get_client(
+                host=self.host, port=self.port, database=self.database, connect_timeout=5
+            )
+            self.mode = "clickhouse-connect"
+        except ImportError:
+            self.mode = "http_fallback"
+        except Exception:
+            self.mode = "http_fallback"
+
+    def query(self, sql: str) -> list[list]:
+        """Thực thi câu lệnh SQL và trả về danh sách các dòng kết quả."""
+        if self._ch_client is not None:
+            try:
+                res = self._ch_client.query(sql)
+                return res.result_rows
+            except Exception as e:
+                # Nếu native client lỗi, thử tiếp qua HTTP fallback
+                pass
+
+        # Fallback qua ClickHouse HTTP API bằng urllib chuẩn của Python
+        import urllib.request
+        import json
+
+        url = f"http://{self.host}:{self.port}/?database={self.database}&default_format=JSONCompactEachRow"
+        req = urllib.request.Request(url, data=sql.encode("utf-8"), method="POST")
+        req.add_header("Content-Type", "text/plain; charset=utf-8")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("utf-8").strip()
+                if not raw:
+                    return []
+                return [json.loads(line) for line in raw.split("\n") if line.strip()]
+        except Exception as e:
+            print(f"  {RED}[FAIL] Lỗi truy vấn ClickHouse ({self.mode}): {e}{RESET}")
+            return []
+
+    def get_count(self, table: str = "speed_agg") -> int:
+        """Đếm số bản ghi trong bảng."""
+        rows = self.query(f"SELECT count() FROM {self.database}.{table}")
+        if rows and len(rows[0]) > 0:
+            return int(rows[0][0])
+        return 0
+
+
 def get_ch_client():
-    """Tạo kết nối ClickHouse client qua HTTP (port 8123)."""
-    try:
-        import clickhouse_connect
-        return clickhouse_connect.get_client(
-            host=CLICKHOUSE_HOST,
-            port=CLICKHOUSE_PORT,
-            database=CLICKHOUSE_DB,
-            connect_timeout=10,
-        )
-    except ImportError:
-        print(f"  {RED}[FAIL] Thiếu thư viện: pip install clickhouse-connect{RESET}")
-        return None
-    except Exception as e:
-        print(f"  {RED}[FAIL] Không kết nối được ClickHouse tại {CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}: {e}{RESET}")
-        print(f"  {YELLOW}Kiểm tra container ClickHouse: docker compose ps clickhouse{RESET}")
-        return None
+    client = ClickHouseClientWrapper()
+    if client.mode == "http_fallback":
+        print(f"  {YELLOW}[INFO] Sử dụng ClickHouse HTTP API trực tiếp (port {CLICKHOUSE_PORT}){RESET}")
+    else:
+        print(f"  {GREEN}[PASS] Đã kết nối ClickHouse qua clickhouse-connect{RESET}")
+    return client
 
 
 def get_current_candle_count(client) -> int:
-    """Đếm tổng số bản ghi hiện tại trong speed_agg."""
-    if client is None:
-        return 0
-    try:
-        res = client.query(f"SELECT count() FROM {CLICKHOUSE_DB}.speed_agg")
-        return res.result_rows[0][0] if res.result_rows else 0
-    except Exception:
-        return 0
+    return client.get_count("speed_agg") if client else 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,8 +279,7 @@ def query_clickhouse(client, symbols: list[str], test_start_iso: str, initial_co
     """
 
     try:
-        result = client.query(sql_test)
-        rows = result.result_rows
+        rows = client.query(sql_test)
     except Exception as e:
         print(f"  {YELLOW}[WARN] Query lọc created_at lỗi: {e}. Thử query tổng quát...{RESET}")
         rows = []
@@ -268,8 +306,7 @@ def query_clickhouse(client, symbols: list[str], test_start_iso: str, initial_co
             ORDER BY symbol
         """
         try:
-            res_fb = client.query(sql_fallback)
-            rows = res_fb.result_rows
+            rows = client.query(sql_fallback)
         except Exception as e:
             print(f"  {RED}[FAIL] Fallback query lỗi: {e}{RESET}")
             rows = []

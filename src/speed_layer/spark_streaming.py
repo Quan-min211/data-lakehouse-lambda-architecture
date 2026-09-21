@@ -87,6 +87,33 @@ def _configure_windows_hadoop() -> None:
 # Goi ngay khi import module (truoc ca pyspark import)
 _configure_windows_hadoop()
 
+
+def _configure_spark_python_path() -> None:
+    """
+    Tu dong tim va them PySpark & Py4J vao sys.path neu chay trong Spark container (/opt/spark).
+    Dieu nay giup import pyspark thanh cong ngay ca khi PYTHONPATH bi ghi de boi Docker environment.
+    """
+    candidates = [
+        os.environ.get("SPARK_HOME", "/opt/spark"),
+        "/opt/spark",
+        "/usr/local/spark",
+        "/opt/bitnami/spark",
+    ]
+    for base in candidates:
+        p = Path(base) / "python"
+        if p.exists():
+            if str(p) not in sys.path:
+                sys.path.insert(0, str(p))
+            lib_dir = p / "lib"
+            if lib_dir.exists():
+                for z in sorted(lib_dir.glob("*.zip")):
+                    if str(z) not in sys.path:
+                        sys.path.insert(0, str(z))
+            break
+
+
+_configure_spark_python_path()
+
 # ── imports ──────────────────────────────────────────────────────────────────
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -205,6 +232,29 @@ class SpeedLayerStreamingJob:
         )
         self.ch_writer = ClickHouseSpeedWriter()
 
+    def _ensure_topic_exists(self) -> None:
+        """Kiem tra va tu dong tao Kafka topic neu chua ton tai."""
+        try:
+            from kafka.admin import KafkaAdminClient, NewTopic
+            from kafka.errors import TopicAlreadyExistsError
+
+            admin = KafkaAdminClient(
+                bootstrap_servers=self.kafka_bootstrap,
+                client_id="speed_layer_admin",
+                request_timeout_ms=5000,
+            )
+            existing = admin.list_topics()
+            if self.topic not in existing:
+                logger.info("Kafka topic '%s' chua ton tai. Dang tao moi...", self.topic)
+                new_topic = NewTopic(name=self.topic, num_partitions=3, replication_factor=1)
+                admin.create_topics(new_topics=[new_topic], validate_only=False)
+                logger.info("Da tao thanh cong Kafka topic '%s' (3 partitions)!", self.topic)
+                import time
+                time.sleep(2)  # Cho metadata propagate tren cac broker
+            admin.close()
+        except Exception as e:
+            logger.warning("Khong the tu dong tao topic qua KafkaAdminClient: %s", e)
+
     def run(self, trigger_interval: Optional[str] = None, once: bool = False):
         """
         Khoi dong luong Structured Streaming.
@@ -218,6 +268,9 @@ class SpeedLayerStreamingJob:
             StreamingQuery dang chay.
         """
         _trigger = trigger_interval or SPEED_TRIGGER_INTERVAL
+
+        # 0. Dam bao topic Kafka ton tai truoc khi Spark readStream
+        self._ensure_topic_exists()
 
         logger.info(
             "Bat dau doc tu Kafka topic '%s' tai %s...",

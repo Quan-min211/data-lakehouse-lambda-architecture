@@ -3,8 +3,11 @@ FROM apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
 USER root
 
 
-# Cai dat Python 3.10 dependencies cho Speed Layer
-RUN pip install --no-cache-dir \
+# Tao symlink python -> python3 va cau hinh PySpark su dung python3
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Cai dat Python dependencies cho Speed Layer
+RUN pip3 install --no-cache-dir \
     clickhouse-connect==0.7.0 \
     kafka-python==2.0.2 \
     python-dotenv==1.0.0 \
@@ -19,7 +22,9 @@ COPY scripts/ ./scripts/
 # Bien moi truong mac dinh cho Spark Structured Streaming
 # - Ket noi Kafka qua bridge network
 # - Checkpoint luu vao volume /app/checkpoints
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
+ENV PYSPARK_PYTHON=/usr/bin/python3
+ENV PYSPARK_DRIVER_PYTHON=/usr/bin/python3
 ENV SPARK_MASTER_URL=local[2]
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 ENV KAFKA_TOPIC_RAW=crypto_trades_raw
@@ -28,5 +33,5 @@ ENV CLICKHOUSE_PORT=8123
 ENV CHECKPOINT_DIR=/app/checkpoints/speed_layer
 
 # Entry point: khoi dong Speed Layer Streaming Job
-CMD ["python", "-u", "src/speed_layer/spark_streaming.py", \
+CMD ["python3", "-u", "src/speed_layer/spark_streaming.py", \
      "--trigger", "5 seconds"]

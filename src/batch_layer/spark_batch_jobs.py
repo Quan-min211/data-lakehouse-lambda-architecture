@@ -28,6 +28,19 @@ try:
 except ImportError:
     pass
 
+# Tu dong tim va them PySpark & Py4J vao sys.path neu chay trong Spark container (/opt/spark)
+for _base in [os.environ.get("SPARK_HOME", "/opt/spark"), "/opt/spark", "/usr/local/spark"]:
+    _p = Path(_base) / "python"
+    if _p.exists():
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
+        _lib = _p / "lib"
+        if _lib.exists():
+            for _z in sorted(_lib.glob("*.zip")):
+                if str(_z) not in sys.path:
+                    sys.path.insert(0, str(_z))
+        break
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync

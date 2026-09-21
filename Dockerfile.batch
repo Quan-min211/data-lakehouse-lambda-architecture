@@ -3,8 +3,11 @@ FROM apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
 # Chay voi user root de co quyen cai dat them package
 USER root
 
+# Tao symlink python -> python3 va cau hinh PySpark su dung python3
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
 # Cai dat Python dependencies cho Batch Pipeline
-RUN pip install --no-cache-dir \
+RUN pip3 install --no-cache-dir \
     clickhouse-connect==0.7.0 \
     kafka-python==2.0.2 \
     python-dotenv==1.0.0 \
@@ -18,7 +21,9 @@ COPY scripts/  ./scripts/
 COPY datasets/ ./datasets/
 
 # Bien moi truong mac dinh
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
+ENV PYSPARK_PYTHON=/usr/bin/python3
+ENV PYSPARK_DRIVER_PYTHON=/usr/bin/python3
 ENV SPARK_MASTER_URL=local[*]
 
 # Ket noi MinIO (ghi Bronze Iceberg)
@@ -43,5 +48,5 @@ ENV BATCH_ICEBERG_STRICT=true
 # Entry point:
 #   --write-iceberg  : ghi Bronze records vao Iceberg Bronze table
 #   --iceberg-strict : thoat voi loi ro rang neu MinIO/Iceberg REST khong san sang
-CMD ["python", "-u", "src/batch_layer/spark_batch_jobs.py", \
+CMD ["python3", "-u", "src/batch_layer/spark_batch_jobs.py", \
      "--write-iceberg", "--iceberg-strict"]

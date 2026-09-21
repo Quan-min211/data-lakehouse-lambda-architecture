@@ -230,7 +230,7 @@ services:
       - CHECKPOINT_DIR=/app/checkpoints/speed_layer
       # Trigger moi 5 giay (SLA < 5s end-to-end)
       - SPEED_TRIGGER_INTERVAL=5 seconds
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
     volumes:
       - ./src:/app/src
       - speed-checkpoints:/app/checkpoints
@@ -285,7 +285,7 @@ services:
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-lakehouse}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
     volumes:
       - ./src:/app/src
       - ./datasets:/app/datasets
