@@ -43,20 +43,39 @@ def print_banner(title: str):
     print(f"{BOLD}{'='*68}{RESET}")
 
 
-def check_thrift_port(retries: int = 15, delay: float = 2.0) -> bool:
+def check_thrift_port(retries: int = 30, delay: float = 2.0) -> bool:
     print(f"\n{CYAN}{BOLD}[BƯỚC 1] Kiểm tra cổng Spark Thrift Server ({THRIFT_HOST}:{THRIFT_PORT}){RESET}")
     for attempt in range(1, retries + 1):
         try:
             s = socket.create_connection((THRIFT_HOST, THRIFT_PORT), timeout=2)
             s.close()
-            print(f"  {GREEN}[PASS]{RESET} Port {THRIFT_PORT} đang mở và sẵn sàng nhận kết nối JDBC/Thrift!")
-            return True
-        except Exception as e:
+            # Thử thực hiện kết nối Thrift thực tế qua PyHive nếu đã cài
+            try:
+                from pyhive import hive
+                conn = hive.Connection(host=THRIFT_HOST, port=THRIFT_PORT, username="dbt")
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+                conn.close()
+                print(f"  {GREEN}[PASS]{RESET} Spark Thrift Server ({THRIFT_PORT}) đã sẵn sàng và phản hồi truy vấn!")
+                return True
+            except ImportError:
+                print(f"  {GREEN}[PASS]{RESET} Port {THRIFT_PORT} đang mở và sẵn sàng nhận kết nối JDBC/Thrift!")
+                return True
+            except Exception as thrift_err:
+                if attempt < retries:
+                    print(f"  [Đang chờ] Spark Thrift Server đang khởi tạo JVM ({attempt}/{retries})... ({delay}s)", end="\r")
+                    time.sleep(delay)
+                else:
+                    print(f"\n  {RED}[FAIL]{RESET} Thrift service chưa sẵn sàng sau {int(retries * delay)}s: {thrift_err}")
+                    print(f"  {YELLOW}Xem log: docker compose logs --tail=40 spark-thrift{RESET}")
+                    return False
+        except Exception as sock_err:
             if attempt < retries:
-                print(f"  [Đang chờ] Port {THRIFT_PORT} chưa mở (thử {attempt}/{retries}). Đang khởi động... ({delay}s)", end="\r")
+                print(f"  [Đang chờ] Port {THRIFT_PORT} chưa mở ({attempt}/{retries}). Đang khởi động... ({delay}s)", end="\r")
                 time.sleep(delay)
             else:
-                print(f"\n  {RED}[FAIL]{RESET} Không kết nối được port {THRIFT_PORT}: {e}")
+                print(f"\n  {RED}[FAIL]{RESET} Không kết nối được port {THRIFT_PORT}: {sock_err}")
                 print(f"  {YELLOW}Khởi động spark-thrift: docker compose up -d spark-thrift{RESET}")
                 print(f"  {YELLOW}Xem log: docker compose logs -f spark-thrift{RESET}")
                 return False
@@ -102,7 +121,7 @@ def run_dbt_command(cmd_args: list[str], desc: str) -> bool:
     print(f"  Lệnh: {' '.join(cmd)}")
     t0 = time.time()
     try:
-        result = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=180)
+        result = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=600)
         elapsed = time.time() - t0
         print(result.stdout)
         if result.stderr:
@@ -115,7 +134,7 @@ def run_dbt_command(cmd_args: list[str], desc: str) -> bool:
             print(f"  {RED}[FAIL]{RESET} {desc} thất bại (exit code: {result.returncode})")
             return False
     except subprocess.TimeoutExpired:
-        print(f"  {RED}[FAIL]{RESET} {desc} bị timeout sau 180s.")
+        print(f"  {RED}[FAIL]{RESET} {desc} bị timeout sau 600s.")
         return False
     except Exception as e:
         print(f"  {RED}[FAIL]{RESET} Lỗi thực thi: {e}")

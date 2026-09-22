@@ -1,0 +1,39 @@
+FROM apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
+
+USER root
+
+# -------------------------------------------------------------------
+# Pre-download Iceberg runtime, AWS bundle & Hadoop-AWS JARs at build
+# time so they are baked into /opt/spark/jars/ and always on the JVM
+# classpath when start-thriftserver.sh launches HiveServer2.
+# Using wget to fetch directly from Maven Central - avoids Spark submit
+# classloader complications during image build.
+# -------------------------------------------------------------------
+ARG ICEBERG_VERSION=1.5.2
+ARG HADOOP_AWS_VERSION=3.3.4
+ARG AWS_SDK_VERSION=1.12.262
+ARG MAVEN=https://repo1.maven.org/maven2
+
+RUN apt-get install -y wget 2>/dev/null || true && \
+    # iceberg-spark-runtime-3.5_2.12
+    wget -q "${MAVEN}/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar" \
+         -O "/opt/spark/jars/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar" && \
+    # iceberg-aws-bundle (contains shaded AWS SDK v2 for S3FileIO)
+    wget -q "${MAVEN}/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar" \
+         -O "/opt/spark/jars/iceberg-aws-bundle-${ICEBERG_VERSION}.jar" && \
+    # hadoop-aws (for S3AFileSystem used by spark.read.parquet)
+    wget -q "${MAVEN}/org/apache/hadoop/hadoop-aws/${HADOOP_AWS_VERSION}/hadoop-aws-${HADOOP_AWS_VERSION}.jar" \
+         -O "/opt/spark/jars/hadoop-aws-${HADOOP_AWS_VERSION}.jar" && \
+    # aws-java-sdk-bundle (AWS SDK v1, required by Hadoop S3A)
+    wget -q "${MAVEN}/com/amazonaws/aws-java-sdk-bundle/${AWS_SDK_VERSION}/aws-java-sdk-bundle-${AWS_SDK_VERSION}.jar" \
+         -O "/opt/spark/jars/aws-java-sdk-bundle-${AWS_SDK_VERSION}.jar" && \
+    echo "=== Pre-baked JARs ===" && \
+    ls /opt/spark/jars | grep -E "iceberg|hadoop-aws|aws-java-sdk"
+
+# Ensure logs directory exists
+RUN mkdir -p /opt/spark/logs
+
+ENV PYSPARK_PYTHON=/usr/bin/python3
+ENV PYSPARK_DRIVER_PYTHON=/usr/bin/python3
+ENV AWS_REGION=us-east-1
+ENV AWS_DEFAULT_REGION=us-east-1

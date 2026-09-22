@@ -130,7 +130,9 @@ services:
   # SPARK MASTER / WORKER / THRIFT SERVER
   # ---------------------------------------------------------------------------
   spark-master:
-    image: apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-thrift
     container_name: lakehouse-spark-master
     hostname: spark-master
     user: root
@@ -145,7 +147,9 @@ services:
     mem_limit: 768m
 
   spark-worker:
-    image: apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-thrift
     container_name: lakehouse-spark-worker
     hostname: spark-worker
     user: root
@@ -153,15 +157,23 @@ services:
       - "8081:8081"    # Spark worker UI
     environment:
       SPARK_NO_DAEMONIZE: "true"
-    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 3g
+      SPARK_WORKER_CORES: 2
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker -m 3g -c 2 spark://spark-master:7077
     depends_on:
       - spark-master
     networks:
       - lakehouse-net
-    mem_limit: 2500m
+    mem_limit: 4g
 
   spark-thrift:
-    image: apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu
+    build:
+      context: .
+      dockerfile: Dockerfile.spark-thrift
     container_name: lakehouse-spark-thrift
     hostname: spark-thrift
     user: root
@@ -177,13 +189,15 @@ services:
       - /bin/bash
       - -c
       - |
-        mkdir -p /opt/spark/logs
         /opt/spark/sbin/start-thriftserver.sh \
-          --master spark://spark-master:7077 \
+          --master local[*] \
+          --driver-memory 4g \
+          --driver-java-options "-XX:MaxMetaspaceSize=256m -XX:+UseG1GC" \
+          --conf spark.sql.adaptive.enabled=true \
+          --conf spark.sql.adaptive.coalescePartitions.enabled=true \
+          --conf spark.sql.shuffle.partitions=8 \
           --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
           --hiveconf hive.server2.thrift.port=10000 \
-          --conf spark.jars.packages=org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.iceberg:iceberg-aws-bundle:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
-          --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
           --conf spark.sql.catalog.iceberg_catalog=org.apache.iceberg.spark.SparkCatalog \
           --conf spark.sql.catalog.iceberg_catalog.type=rest \
           --conf spark.sql.catalog.iceberg_catalog.uri=http://iceberg-rest:8181 \
@@ -201,13 +215,11 @@ services:
         sleep 3
         tail -f /opt/spark/logs/* 2>/dev/null || tail -f /dev/null
     depends_on:
-      - spark-master
-      - spark-worker
       - iceberg-rest
       - minio-setup
     networks:
       - lakehouse-net
-    mem_limit: 2g
+    mem_limit: 6g
 
   # ---------------------------------------------------------------------------
   # SPEED LAYER — Spark Structured Streaming (Kafka → ClickHouse)
@@ -304,6 +316,7 @@ services:
       - ./src:/app/src
       - ./datasets:/app/datasets
       - ./results:/app/results
+      - spark-ivy-cache:/root/.ivy2
     depends_on:
       minio:
         condition: service_healthy
@@ -474,6 +487,7 @@ volumes:
   redis-data:
   dagster-home:
   speed-checkpoints:
+  spark-ivy-cache:
 
 # =============================================================================
 # NETWORKS
