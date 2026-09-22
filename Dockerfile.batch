@@ -30,6 +30,10 @@ ENV SPARK_MASTER_URL=local[*]
 ENV MINIO_ENDPOINT=http://minio:9000
 ENV MINIO_ACCESS_KEY=minioadmin
 ENV MINIO_SECRET_KEY=minioadmin
+ENV AWS_ACCESS_KEY_ID=minioadmin
+ENV AWS_SECRET_ACCESS_KEY=minioadmin
+ENV AWS_REGION=us-east-1
+ENV AWS_DEFAULT_REGION=us-east-1
 
 # Ket noi Iceberg REST Catalog
 ENV ICEBERG_REST_URI=http://iceberg-rest:8181

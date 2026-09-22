@@ -114,6 +114,12 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
     minio_secret    = os.getenv("MINIO_SECRET_KEY", "minioadmin")
     iceberg_uri     = os.getenv("ICEBERG_REST_URI", "http://iceberg-rest:8181")
 
+    # Dam bao AWS SDK v2 (S3FileIO) nhan credentials va region qua env
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", minio_access)
+    os.environ.setdefault("AWS_SECRET_ACCESS_KEY", minio_secret)
+    os.environ.setdefault("AWS_REGION", "us-east-1")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
     logger.info(f"Khởi tạo SparkSession: {app_name}")
     logger.info(f"  Iceberg REST  : {iceberg_uri}")
     logger.info(f"  MinIO endpoint: {minio_endpoint}")
@@ -125,11 +131,12 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
         .master(os.getenv("SPARK_MASTER_URL", "local[*]"))
 
         # ── Maven JARs tu dong tai khi khoi dong ──────────────────────────────
-        # Iceberg Spark Runtime (Spark 3.5 / Scala 2.12) + Hadoop AWS S3A
+        # Iceberg Spark Runtime (Spark 3.5 / Scala 2.12) + Iceberg AWS Bundle (S3FileIO) + Hadoop AWS S3A
         .config(
             "spark.jars.packages",
             ",".join([
                 "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2",
+                "org.apache.iceberg:iceberg-aws-bundle:1.5.2",
                 "org.apache.hadoop:hadoop-aws:3.3.4",
                 "com.amazonaws:aws-java-sdk-bundle:1.12.262",
             ]),
@@ -153,6 +160,7 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
         .config(f"spark.sql.catalog.{CATALOG_NAME}.s3.path-style-access", "true")
         .config(f"spark.sql.catalog.{CATALOG_NAME}.s3.access-key-id", minio_access)
         .config(f"spark.sql.catalog.{CATALOG_NAME}.s3.secret-access-key", minio_secret)
+        .config(f"spark.sql.catalog.{CATALOG_NAME}.client.region", "us-east-1")
 
         # ── Hadoop S3A (dung spark.read.parquet, v.v.) ───────────────────────
         .config("spark.hadoop.fs.s3a.endpoint",              minio_endpoint)
