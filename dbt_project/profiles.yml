@@ -7,14 +7,6 @@ lambda_spark:
       host: "{{ env_var('DBT_SPARK_HOST', 'localhost') }}"
       port: 10000
       schema: default
-      # Tăng timeout để tránh connection abort khi Spark thực thi query lâu
+      # Tăng timeout và retries để tránh connection abort khi Spark thực thi query lâu
       connect_timeout: 120
       connect_retries: 5
-      # Số lần retry khi mất kết nối giữa chừng (TTransportException)
-      query_retries: 3
-      # Thêm server-side parameters để tối ưu hóa Spark Thrift execution
-      server_side_parameters:
-        "spark.sql.execution.arrow.pyspark.enabled": "false"
-        "spark.sql.adaptive.enabled": "true"
-        "spark.sql.adaptive.coalescePartitions.enabled": "true"
-        "hive.server2.thrift.http.socket.timeout": "120000"

@@ -192,10 +192,14 @@ services:
         /opt/spark/sbin/start-thriftserver.sh \
           --master local[*] \
           --driver-memory 4g \
-          --driver-java-options "-XX:MaxMetaspaceSize=256m -XX:+UseG1GC" \
+          --driver-java-options "-XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
           --conf spark.sql.adaptive.enabled=true \
           --conf spark.sql.adaptive.coalescePartitions.enabled=true \
           --conf spark.sql.shuffle.partitions=8 \
+          --conf spark.sql.iceberg.vectorization.enabled=false \
+          --conf spark.sql.parquet.enableVectorizedReader=false \
+          --conf spark.sql.legacy.createHiveTableByDefault=false \
+          --conf spark.sql.sources.default=parquet \
           --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
           --hiveconf hive.server2.thrift.port=10000 \
           --conf spark.sql.catalog.iceberg_catalog=org.apache.iceberg.spark.SparkCatalog \

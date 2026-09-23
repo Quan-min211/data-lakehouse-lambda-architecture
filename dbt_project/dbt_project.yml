@@ -17,8 +17,9 @@ clean-targets:
 
 models:
   lambda_lakehouse_dbt:
+    +file_format: parquet
     bronze:
-      +materialized: table
+      +materialized: view
     silver:
       +materialized: incremental
     gold:
