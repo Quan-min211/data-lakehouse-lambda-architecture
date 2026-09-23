@@ -1,8 +1,16 @@
-{{ config(materialized='incremental', unique_key=['symbol', 'trade_id']) }}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    partition_by={
+        'field': 'trade_date',
+        'data_type': 'date'
+    }
+) }}
 
 with valid_records as (
     select
         *,
+        -- Deduplicate: giữ bản ghi mới nhất theo (symbol, trade_id)
         row_number() over (
             partition by symbol, trade_id
             order by ingestion_time desc, bronze_written_at desc
@@ -28,13 +36,16 @@ select
     fault_type,
     batch_run_id,
     bronze_written_at,
+    -- Partition column: rút gọn ngày từ event-time (mửs phân vùng hiệu quả INSERT OVERWRITE)
+    cast(date_trunc('day', trade_time_ts) as date) as trade_date,
     current_timestamp() as silver_written_at
 from valid_records
 where dedupe_rank = 1
 
 {% if is_incremental() %}
-  and trade_time_ts >= (
-      select coalesce(max(trade_time_ts), timestamp('1970-01-01 00:00:00'))
+  -- Chỉ xử lý các partition ngày có dữ liệu mới, không quét lại toàn bộ
+  and cast(date_trunc('day', trade_time_ts) as date) >= (
+      select coalesce(max(trade_date), date('1970-01-01'))
       from {{ this }}
   )
 {% endif %}

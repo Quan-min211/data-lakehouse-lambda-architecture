@@ -141,6 +141,38 @@ def run_dbt_command(cmd_args: list[str], desc: str) -> bool:
         return False
 
 
+def check_silver_schema(thrift_host: str, thrift_port: int) -> str:
+    """
+    Kiểm tra xem bảng default.silver_cleaned_trades đã có cột trade_date chưa.
+    Trả về: 'ok', 'needs_refresh', hoặc 'not_exists'.
+    """
+    print(f"\n{CYAN}{BOLD}[BƯỚC 3.5] Kiểm tra schema bảng silver_cleaned_trades{RESET}")
+    try:
+        from pyhive import hive
+        conn = hive.Connection(host=thrift_host, port=thrift_port, username="dbt")
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DESCRIBE default.silver_cleaned_trades")
+            cols = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            if "trade_date" in cols:
+                print(f"  {GREEN}[OK]{RESET} Bảng đã có cột trade_date — schema hợp lệ.")
+                return "ok"
+            else:
+                print(f"  {YELLOW}[WARN]{RESET} Bảng tồn tại nhưng THIẾU cột trade_date — cần full-refresh.")
+                return "needs_refresh"
+        except Exception:
+            conn.close()
+            print(f"  {CYAN}[INFO]{RESET} Bảng silver_cleaned_trades chưa tồn tại — sẽ được tạo mới.")
+            return "not_exists"
+    except ImportError:
+        print(f"  {YELLOW}[SKIP]{RESET} PyHive chưa cài, bỏ qua kiểm tra schema. Chạy full-refresh để an toàn.")
+        return "needs_refresh"
+    except Exception as e:
+        print(f"  {YELLOW}[WARN]{RESET} Không thể kiểm tra schema: {e}. Chạy full-refresh để an toàn.")
+        return "needs_refresh"
+
+
 def main():
     print_banner("KIỂM TRA & XÁC THỰC DBT RUN QUA SPARK THRIFT SERVER")
     print(f"  dbt Project Dir  : {DBT_DIR}")
@@ -165,8 +197,16 @@ def main():
         print(f"\n{RED}{BOLD}Dừng: dbt debug không thành công.{RESET}\n")
         sys.exit(1)
 
+    # 3.5 Kiểm tra schema bảng silver
+    # Nếu schema cũ (không có trade_date), phải full-refresh để rebuild với partition mới
+    schema_state = check_silver_schema(THRIFT_HOST, THRIFT_PORT)
+
     # 4. dbt run
-    run_ok = run_dbt_command(["run"], "Chạy dbt run (Bronze -> Silver -> Gold)")
+    if schema_state == "needs_refresh":
+        print(f"\n{YELLOW}{BOLD}Schema bảng silver cũ không hợp lệ — chạy dbt run --full-refresh để rebuild.{RESET}")
+        run_ok = run_dbt_command(["run", "--full-refresh"], "Chạy dbt run --full-refresh (rebuild toàn bộ models)")
+    else:
+        run_ok = run_dbt_command(["run"], "Chạy dbt run (Bronze -> Silver -> Gold)")
 
     # 5. dbt test
     test_ok = False
@@ -179,6 +219,7 @@ def main():
     color = GREEN if status == "PASS" else (YELLOW if status == "PARTIAL" else RED)
     print(f"  Thrift Port 10000 : {GREEN}ONLINE{RESET}")
     print(f"  dbt debug         : {GREEN if debug_ok else RED}{'PASS' if debug_ok else 'FAIL'}{RESET}")
+    print(f"  Schema check      : {YELLOW if schema_state == 'needs_refresh' else GREEN}{schema_state.upper()}{RESET}")
     print(f"  dbt run           : {GREEN if run_ok else RED}{'PASS' if run_ok else 'FAIL'}{RESET}")
     print(f"  dbt test          : {GREEN if test_ok else RED}{'PASS' if test_ok else 'FAIL'}{RESET}")
     print(f"\n  {color}{BOLD}KẾT QUẢ: {status}{RESET}")
