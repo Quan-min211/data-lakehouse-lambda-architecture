@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from dagster import (
-    AssetExecutionContext,
     AssetIn,
     Definitions,
     MetadataValue,
@@ -25,6 +24,7 @@ from dagster import (
     ScheduleDefinition,
     asset,
     define_asset_job,
+    in_process_executor,
     repository,
 )
 
@@ -57,7 +57,7 @@ def _batch_run_id() -> str:
         "table": "iceberg_catalog.bronze.crypto_trades",
     },
 )
-def bronze_crypto_trades(context: AssetExecutionContext) -> Output[Dict[str, Any]]:
+def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
     """Load raw records for the current batch window."""
     batch_run_id = _batch_run_id()
     records = load_default_records()
@@ -90,7 +90,7 @@ def bronze_crypto_trades(context: AssetExecutionContext) -> Output[Dict[str, Any
         "rules": "required fields, positive price/quantity, positive event time, latest duplicate wins",
     },
 )
-def silver_cleaned_trades(context: AssetExecutionContext, bronze: Dict[str, Any]) -> Output[Dict[str, Any]]:
+def silver_cleaned_trades(context, bronze: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Clean and deduplicate Bronze records."""
     clean_records, rejected_records, report = clean_and_deduplicate(bronze["records"])
     context.log.info(
@@ -127,7 +127,7 @@ def silver_cleaned_trades(context: AssetExecutionContext, bronze: Dict[str, Any]
         "status": "Reconciled",
     },
 )
-def gold_market_aggregates(context: AssetExecutionContext, silver: Dict[str, Any]) -> Output[Dict[str, Any]]:
+def gold_market_aggregates(context, silver: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Build reconciled Gold candles from Silver records."""
     candles = aggregate_gold_candles(silver["records"])
     watermark = max((row["window_end"] for row in candles), default=None)
@@ -156,7 +156,7 @@ def gold_market_aggregates(context: AssetExecutionContext, silver: Dict[str, Any
         "target_table": "lakehouse.batch_agg",
     },
 )
-def clickhouse_batch_sync(context: AssetExecutionContext, gold: Dict[str, Any]) -> Output[Dict[str, Any]]:
+def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Publish Gold candles to ClickHouse."""
     sync = ClickHouseBatchSync()
     rows_inserted = sync.insert_batch_aggregates(gold["candles"], batch_run_id=gold["batch_run_id"])
@@ -193,7 +193,7 @@ def clickhouse_batch_sync(context: AssetExecutionContext, gold: Dict[str, Any]) 
         "serving_impact": "Separates reconciled batch windows from provisional speed windows",
     },
 )
-def system_watermark_sync(context: AssetExecutionContext, ch_sync: Dict[str, Any]) -> Output[Dict[str, Any]]:
+def system_watermark_sync(context, ch_sync: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Advance the batch watermark in ClickHouse."""
     watermark = ch_sync.get("watermark")
     synced = False
@@ -222,7 +222,7 @@ def system_watermark_sync(context: AssetExecutionContext, ch_sync: Dict[str, Any
         "target": "iceberg_catalog.bronze.crypto_trades",
     },
 )
-def iceberg_small_files_compaction(context: AssetExecutionContext) -> Output[Dict[str, Any]]:
+def iceberg_small_files_compaction(context) -> Output[Dict[str, Any]]:
     """Run the Iceberg compaction job with graceful fallback."""
     try:
         spark = get_spark_session("Dagster-IcebergCompaction")
@@ -252,12 +252,14 @@ batch_lakehouse_pipeline_job = define_asset_job(
         "system_watermark_sync",
     ],
     description="Run Bronze -> Silver -> Gold -> ClickHouse -> Watermark for the Batch Layer.",
+    executor_def=in_process_executor,
 )
 
 iceberg_compaction_job = define_asset_job(
     name="iceberg_compaction_job",
     selection=["iceberg_small_files_compaction"],
     description="Run Iceberg small-file compaction maintenance.",
+    executor_def=in_process_executor,
 )
 
 batch_pipeline_schedule = ScheduleDefinition(
