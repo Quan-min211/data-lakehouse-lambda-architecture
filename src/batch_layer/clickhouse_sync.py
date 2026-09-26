@@ -61,6 +61,24 @@ class ClickHouseBatchSync:
     ORDER BY (layer);
     """
 
+    DDL_INIT_QUARANTINE = """
+    CREATE TABLE IF NOT EXISTS lakehouse.dq_quarantine
+    (
+        batch_run_id    String,
+        trade_id        String,
+        symbol          String,
+        price           String,
+        quantity        String,
+        trade_time      String,
+        dq_error        String,
+        raw_record      String,
+        quarantined_at  DateTime64(3, 'UTC') DEFAULT now64(3)
+    )
+    ENGINE = MergeTree()
+    PARTITION BY toYYYYMM(quarantined_at)
+    ORDER BY (batch_run_id, quarantined_at);
+    """
+
     def __init__(
         self,
         host: Optional[str] = None,
@@ -103,6 +121,7 @@ class ClickHouseBatchSync:
         client.command(self.DDL_INIT_DATABASE)
         client.command(self.DDL_INIT_BATCH_AGG)
         client.command(self.DDL_INIT_WATERMARK)
+        client.command(self.DDL_INIT_QUARANTINE)
         return True
 
     def insert_batch_aggregates(self, candles: Iterable[Dict[str, Any]], batch_run_id: str) -> int:
@@ -163,6 +182,73 @@ class ClickHouseBatchSync:
             ],
         )
         logger.info("Inserted %s batch candles into lakehouse.batch_agg", len(data))
+        return len(data)
+
+    def insert_quarantine_records(
+        self,
+        rejected: Iterable[Dict[str, Any]],
+        batch_run_id: str,
+    ) -> int:
+        """Persist rejected / quarantined records to ``lakehouse.dq_quarantine``.
+
+        Each row stores the raw field values as strings so nothing is lost even
+        when a record has malformed numeric fields.  A ``raw_record`` column
+        keeps the full JSON dump for forensic inspection.
+
+        Args:
+            rejected: Records that failed DQ checks (have a ``dq_error`` field).
+            batch_run_id: Identifier of the batch run that produced these rejects.
+
+        Returns:
+            Number of rows inserted. Returns 0 if ClickHouse is unavailable.
+        """
+        import json
+
+        rows = list(rejected)
+        if not rows:
+            logger.info("No quarantine records to insert.")
+            return 0
+
+        client = self.get_client()
+        if client is None:
+            return 0
+
+        self.initialize_tables()
+        now_utc = datetime.now(timezone.utc)
+        data: List[List[Any]] = []
+        for rec in rows:
+            data.append([
+                batch_run_id,
+                str(rec.get("trade_id", "")),
+                str(rec.get("symbol", "")),
+                str(rec.get("price", "")),
+                str(rec.get("quantity", "")),
+                str(rec.get("trade_time", "")),
+                str(rec.get("dq_error", "unknown")),
+                json.dumps(rec, default=str),
+                now_utc,
+            ])
+
+        client.insert(
+            "lakehouse.dq_quarantine",
+            data,
+            column_names=[
+                "batch_run_id",
+                "trade_id",
+                "symbol",
+                "price",
+                "quantity",
+                "trade_time",
+                "dq_error",
+                "raw_record",
+                "quarantined_at",
+            ],
+        )
+        logger.info(
+            "Quarantined %s rejected records into lakehouse.dq_quarantine (run=%s)",
+            len(data),
+            batch_run_id,
+        )
         return len(data)
 
     def update_watermark(self, watermark_time: datetime, layer: str = "batch_layer") -> bool:
