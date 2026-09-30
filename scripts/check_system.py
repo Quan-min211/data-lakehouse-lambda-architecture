@@ -99,6 +99,8 @@ def check_internal_imports() -> list[str]:
         "src.utils.logger":                   "Logger utility",
         "src.utils.config":                   "Config utility",
         "src.data_quality.dq_checks":         "DQ checks",
+        "src.data_quality.quarantine":        "DQ QuarantineManager",
+        "src.data_quality.dq_metrics":        "DQ MetricsCollector",
     }
     for mod, label in modules.items():
         try:

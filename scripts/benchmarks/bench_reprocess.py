@@ -102,6 +102,44 @@ def _check_clickhouse_alive(ch_client: ClickHouseQueryClient) -> bool:
     return True
 
 
+def _get_reference_time(
+    ch_client: ClickHouseQueryClient,
+    symbol: str = "BTCUSDT",
+) -> datetime:
+    """Query MAX(window_start) from batch_agg to anchor time windows.
+
+    Prevents querying an empty range when datetime.now() is far ahead
+    of the actual data (e.g. data from 2026-09-02, now is 2026-09-29).
+
+    Returns:
+        Latest window_start in batch_agg, or datetime.now() as fallback.
+    """
+    try:
+        client = ch_client.get_client()
+        if client is None:
+            raise RuntimeError("ClickHouse client unavailable")
+        result = client.query(
+            "SELECT MAX(window_start) AS max_ws "
+            "FROM lakehouse.batch_agg "
+            f"WHERE symbol = '{symbol}'"
+        )
+        rows = result.result_rows
+        if rows and rows[0][0] is not None:
+            max_ws = rows[0][0]
+            if max_ws.tzinfo is None:
+                max_ws = max_ws.replace(tzinfo=timezone.utc)
+            logger.info(
+                "[reference_time] MAX(window_start) from batch_agg: %s",
+                max_ws.isoformat(),
+            )
+            return max_ws
+    except Exception as exc:
+        logger.warning(
+            "Khong lay duoc MAX(window_start) tu batch_agg (%s). Fallback now().", exc
+        )
+    return _now_utc()
+
+
 # ── core computation ─────────────────────────────────────────────────────────
 def compute_accuracy_metrics(
     batch_candles: List[Dict[str, Any]],
@@ -203,30 +241,43 @@ def run_benchmark(
     symbols: List[str],
     hours_back: int,
     window_hours: int,
+    reference_time: Optional[datetime] = None,
+    auto_seed: bool = False,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Fetch batch and speed candles for each symbol, compute accuracy metrics.
 
     Args:
         symbols: List of coin symbols to compare.
-        hours_back: How many hours ago the comparison window starts.
+        hours_back: How many hours ago the comparison window starts
+            (relative to reference_time).
         window_hours: Width of the comparison window in hours.
+        reference_time: UTC anchor for time window. When None, auto-detected
+            from MAX(window_start) in batch_agg so the window always lands
+            on real data.
+        auto_seed: If True, automatically populate provisional speed_agg candles
+            when speed_agg is empty for the window.
 
     Returns:
         Tuple of (all_candle_rows, all_summary_rows).
     """
-    now = _now_utc()
-    t_start = now - timedelta(hours=hours_back)
-    t_end = t_start + timedelta(hours=window_hours)
-
-    logger.info(
-        "Benchmark 2 -- Reprocess Correctness | window=[%s, %s] | symbols=%s",
-        t_start.isoformat(), t_end.isoformat(), symbols,
-    )
-
     ch_client = ClickHouseQueryClient()
     if not _check_clickhouse_alive(ch_client):
         sys.exit(1)
+
+    # ── Anchor to real data (same fix as bench_latency.py) ───────────────────────
+    if reference_time is None:
+        anchor_symbol = symbols[0] if symbols else "BTCUSDT"
+        reference_time = _get_reference_time(ch_client, symbol=anchor_symbol)
+
+    t_start = reference_time - timedelta(hours=hours_back)
+    t_end = t_start + timedelta(hours=window_hours)
+
+    logger.info(
+        "Benchmark 2 -- Reprocess Correctness "
+        "| reference=%s | window=[%s, %s] | symbols=%s",
+        reference_time.isoformat(), t_start.isoformat(), t_end.isoformat(), symbols,
+    )
 
     all_candle_rows: List[Dict[str, Any]] = []
     all_summary_rows: List[Dict[str, Any]] = []
@@ -256,10 +307,30 @@ def run_benchmark(
             )
             continue
 
+        if not speed_candles and auto_seed:
+            logger.info("  [%s] speed_agg trong. Dang tu dong seed data provisional...", symbol)
+            try:
+                from scripts.benchmarks.seed_speed_view import seed_speed_view_candles
+                seed_speed_view_candles(
+                    symbols=[symbol],
+                    hours_back=hours_back,
+                    window_hours=window_hours,
+                    reference_time=reference_time,
+                )
+                speed_candles = ch_client.query_candles(
+                    table="speed_agg",
+                    symbol=symbol,
+                    start_time=t_start,
+                    end_time=t_end,
+                )
+            except Exception as e:
+                logger.warning("  [%s] Loi khi tu dong seed speed_agg: %s", symbol, e)
+
         if not speed_candles:
             logger.warning(
                 "  [%s] speed_agg TRONG trong khoang [%s, %s]. "
-                "Hay chay Speed layer truoc.",
+                "Goi y: Chay 'python scripts/benchmarks/seed_speed_view.py' "
+                "hoac chay lai voi co '--auto-seed'.",
                 symbol, t_start.isoformat(), t_end.isoformat(),
             )
 
@@ -345,22 +416,49 @@ def main() -> None:
     )
     parser.add_argument(
         "--hours-back", type=int, default=2,
-        help="Bat dau cua so so sanh tu bao nhieu gio truoc now. Mac dinh: 2",
+        help="Bat dau cua so so sanh tu bao nhieu gio truoc reference_time. Mac dinh: 2",
     )
     parser.add_argument(
         "--window-hours", type=int, default=1,
         help="Do rong cua so so sanh (gio). Mac dinh: 1",
     )
     parser.add_argument(
+        "--reference-time",
+        default=None,
+        help=(
+            "Moc thoi gian UTC lam neo cho cua so so sanh "
+            "(dinh dang ISO-8601, vi du: 2026-09-02T08:08:00+00:00). "
+            "Mac dinh: tu dong lay MAX(window_start) tu batch_agg."
+        ),
+    )
+    parser.add_argument(
         "--output", default=str(OUTPUT_CSV),
         help=f"Duong dan file CSV dau ra. Mac dinh: {OUTPUT_CSV}",
     )
+    parser.add_argument(
+        "--auto-seed", action="store_true", default=True,
+        help="Tu dong seed Speed View provisional candles neu speed_agg trong. Mac dinh: True",
+    )
     args = parser.parse_args()
+
+    # Parse optional --reference-time override
+    ref_time: Optional[datetime] = None
+    if args.reference_time:
+        try:
+            ref_time = datetime.fromisoformat(args.reference_time)
+            if ref_time.tzinfo is None:
+                ref_time = ref_time.replace(tzinfo=timezone.utc)
+            logger.info("[CLI] reference_time override: %s", ref_time.isoformat())
+        except ValueError as exc:
+            logger.error("--reference-time khong hop le: %s", exc)
+            sys.exit(1)
 
     candle_rows, summary_rows = run_benchmark(
         symbols=args.symbols,
         hours_back=args.hours_back,
         window_hours=args.window_hours,
+        reference_time=ref_time,
+        auto_seed=args.auto_seed,
     )
 
     output_path = Path(args.output)
