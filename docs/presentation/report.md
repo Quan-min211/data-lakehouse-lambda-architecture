@@ -616,18 +616,30 @@ Thay vì dùng Redis làm Speed View cache, nhóm sử dụng trực tiếp Clic
 
 ---
 
-## 8. Những phần còn lại cần hoàn thiện
+## 8. Tổng kết hiện trạng & Hướng phát triển
 
-| Hạng mục | Uu tien | Ghi chu |
+### 8.1 Các hạng mục đã hoàn thành
+
+| Hạng mục | Trạng thái | Minh chứng |
 |:---|:---:|:---|
-| **Benchmark 1** — Query Latency (`bench_latency.py`) | CAO | So sanh Batch-only vs Lambda |
-| **Benchmark 2** — Reconciliation Accuracy (`bench_reprocess.py`) | CAO | Do sai so VWAP Speed vs Batch |
-| **Benchmark 3** — Compaction Efficiency (`bench_compaction.py`) | CAO | Do cai thien read latency sau Bin-Pack |
-| **Ghi ket qua CSV vao `results/logs/`** | CAO | Lam bang du lieu cho luan van |
-| **Data Quality Module** (`src/data_quality/`) | TRUNG BINH | Tach logic DQ ra module doc lap |
-| **dbt Models** (`dbt_project/models/`) | TRUNG BINH | Bronze/Silver/Gold SQL models |
-| **Bao cao luan van** | CAO | Viet noi dung tung chuong |
+| **Benchmark 1** — Query Latency | ✅ Hoàn thành | `results/logs/bench_latency.csv` (630 mốc đo) + `results/plots/benchmark1_latency.png` |
+| **Benchmark 2** — Reconciliation Accuracy | ✅ Hoàn thành | `results/logs/bench_reprocess.csv` + summary (MAPE ≈ 0.08%) + `results/plots/benchmark2_reconciliation.png` |
+| **Benchmark 3** — Compaction Efficiency | ✅ Hoàn thành | `results/logs/bench_compaction.csv` + `results/plots/benchmark3_compaction.png` |
+| **Kết quả CSV & Biểu đồ** | ✅ Hoàn thành | 4 file CSV trong `results/logs/`, 4 biểu đồ PNG trong `results/plots/` |
+| **Data Quality Module** | ✅ Hoàn thành | `src/data_quality/dq_checks.py` + Quarantine Table trong `src/batch_layer/clickhouse_sync.py` |
+| **dbt Models** | ✅ Hoàn thành | `dbt_project/models/` gồm Bronze, Silver, Gold SQL models + `schema.yml` |
+| **Integration Test Suite** | ✅ Hoàn thành | `tests/test_integration.py` — 18 test cases (ClickHouse, Kafka, Redis, E2E Query Merger) |
+| **Stream Demo Report** | ✅ Hoàn thành | `docs/presentation/stream_demo.md` — Báo cáo thực nghiệm E2E đầy đủ |
+
+### 8.2 Hướng phát triển
+
+| Hạng mục | Mô tả |
+|:---|:---|
+| **Triển khai VPS 24/7** | Đưa toàn bộ hệ thống lên VPS Linux để thu thập dữ liệu liên tục từ Binance WebSocket |
+| **Mở rộng đa sàn** | Hỗ trợ thêm OKX, Bybit, Coinbase ngoài Binance |
+| **Alerting & Notification** | Tích hợp cảnh báo qua Telegram/Email khi phát hiện Price Spike |
+| **ML Price Prediction** | Bổ sung module dự đoán giá bằng LSTM/Transformer trên dữ liệu nến lịch sử |
 
 ---
 
-*Ngay cap nhat: 10/09/2026 — Pham Minh Quan*
+*Ngày cập nhật: 29/09/2026 — Nguyễn Đặng Quốc Anh & Phạm Minh Quân*

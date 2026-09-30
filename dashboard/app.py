@@ -24,6 +24,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from dashboard.components.candlestick import render_candlestick_chart
 from dashboard.components.metrics_cards import render_metrics_cards
 from dashboard.components.reconciliation_view import render_reconciliation_table
+from dashboard.components.benchmark_charts import (
+    render_benchmark_overview,
+    render_benchmark1_latency,
+    render_benchmark2_reconciliation,
+    render_benchmark3_compaction,
+    render_benchmark_images,
+)
 
 
 # =============================================================================
@@ -274,21 +281,21 @@ def main():
     fig = render_candlestick_chart(candles, symbol=selected_symbol)
     st.plotly_chart(fig, use_container_width=True)
 
-    # 3. Các Tab Phân Tích & Đối Soát
-    tab1, tab2, tab3 = st.tabs([
-        "📊 Đối Soát Hai Tầng (Benchmark 2)",
-        "⚠️ Cảnh Báo Sốc Giá (Price Spike)",
-        "🏛️ Cơ Chế Lambda & Query Merger"
+    # 3. Tabs: Market + Benchmark + Architecture
+    tab_market, tab_bench, tab_spike, tab_arch = st.tabs([
+        "📊 Doi Soat Hai Tang",
+        "🏆 Benchmark & Danh Gia",
+        "⚠️ Canh Bao Soc Gia",
+        "🏛️ Kien Truc Lambda"
     ])
 
-    with tab1:
+    with tab_market:
         st.markdown(
-            "Cơ chế **Auto-Correcting Query Merger** liên tục so sánh nến tạo bởi Tầng Tốc Độ (**Speed Layer**) "
-            "với dữ liệu chuẩn sau khi Tầng Xử Lý Theo Lô (**Batch Layer**) chốt mốc Watermark để tính sai số hiệu chỉnh $\\Delta$."
+            "Co che **Auto-Correcting Query Merger** lien tuc so sanh nen tao boi Tang Toc Do (**Speed Layer**) "
+            "voi du lieu chuan sau khi Tang Xu Ly Theo Lo (**Batch Layer**) chot moc Watermark de tinh sai so hieu chinh."
         )
         report_data = fetch_reconciliation_report(api_base_url, selected_symbol, start_time, end_time)
         if not report_data and candles:
-            # Mô phỏng mẫu dữ liệu đối soát dựa trên nến hiện có
             report_data = [
                 {
                     "window_start": c["window_start"],
@@ -305,31 +312,48 @@ def main():
             ]
         render_reconciliation_table(report_data)
 
-    with tab2:
-        st.subheader("🚨 Nhật Ký Phát Hiện Biến Động Bất Thường (Spike Detection)")
+    with tab_bench:
+        bench_sub = st.radio(
+            "Chon Benchmark can xem:",
+            ["Tong Quan", "BM1: Query Latency", "BM2: Reconciliation", "BM3: Compaction", "Bieu Do Goc (PNG)"],
+            horizontal=True,
+        )
+        st.markdown("---")
+        if bench_sub == "Tong Quan":
+            render_benchmark_overview()
+        elif bench_sub == "BM1: Query Latency":
+            render_benchmark1_latency()
+        elif bench_sub == "BM2: Reconciliation":
+            render_benchmark2_reconciliation()
+        elif bench_sub == "BM3: Compaction":
+            render_benchmark3_compaction()
+        elif bench_sub == "Bieu Do Goc (PNG)":
+            render_benchmark_images()
+
+    with tab_spike:
+        st.subheader("Nhat Ky Phat Hien Bien Dong Bat Thuong (Spike Detection)")
         spike_candles = [c for c in candles if c.get("is_spike") == 1]
         if spike_candles:
             spike_df = pd.DataFrame(spike_candles)[[
                 "window_start", "open_price", "close_price", "high_price", "low_price", "volume", "status"
             ]]
-            spike_df["Biên độ (%)"] = (
+            spike_df["Bien do (%)"] = (
                 abs(spike_df["close_price"] - spike_df["open_price"]) / spike_df["open_price"] * 100
             ).round(2)
             st.dataframe(spike_df, use_container_width=True, hide_index=True)
         else:
-            st.success("✅ Không ghi nhận biến động sốc giá bất thường nào trong khung thời gian này.")
+            st.success("Khong ghi nhan bien dong soc gia bat thuong nao trong khung thoi gian nay.")
 
-    with tab3:
-        st.subheader("Kiến Trúc Auto-Correcting Query Merger")
+    with tab_arch:
+        st.subheader("Kien Truc Auto-Correcting Query Merger")
         st.markdown(
             """
-            * **Case 1 (History):** $T_{\\text{end}} \le W \implies$ Lấy $100\%$ từ **Batch View** (\`lakehouse.batch_agg\`) — Nhãn: **`Reconciled`**.
-            * **Case 2 (Realtime):** $T_{\\text{start}} \ge W \implies$ Lấy $100\%$ từ **Speed View** (\`lakehouse.speed_agg\`) — Nhãn: **`Provisional`**.
-            * **Case 3 (Hybrid):** $T_{\\text{start}} < W < T_{\\text{end}} \implies$ Tự động phân tách tại Watermark $W$:
-              * $[T_{\\text{start}}, W]$ lấy từ Batch View.
-              * $(W, T_{\\text{end}}]$ lấy từ Speed View.
-              * **ZERO DOUBLE-COUNTING:** Bảo đảm không bao giờ tính trùng lặp cây nến tại biên.
-              * **Tự động đối soát:** $\\Delta_{\\text{reconciliation}} = |\\text{VWAP}_{\\text{speed}} - \\text{VWAP}_{\\text{batch}}|$.
+            * **Case 1 (History):** Lay 100% tu **Batch View** (`lakehouse.batch_agg`) — Nhan: **`Reconciled`**.
+            * **Case 2 (Realtime):** Lay 100% tu **Speed View** (`lakehouse.speed_agg`) — Nhan: **`Provisional`**.
+            * **Case 3 (Hybrid):** Tu dong phan tach tai Watermark W:
+              * `[T_start, W]` lay tu Batch View.
+              * `(W, T_end]` lay tu Speed View.
+              * **ZERO DOUBLE-COUNTING:** Bao dam khong bao gio tinh trung lap cay nen tai bien.
             """
         )
 
