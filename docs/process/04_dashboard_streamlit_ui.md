@@ -63,3 +63,14 @@
   Ran 27 tests in 0.840s
   OK
   ```
+
+---
+
+## 3. Bổ Sung Trực Quan Hóa 3 Benchmark Hệ Thống (`benchmark_charts.py`)
+
+* **Ngày cập nhật:** 29/09/2026
+* **Các thành phần được bổ sung:**
+  1. **Tự động dò tìm thư mục dữ liệu (`_find_results_dir`):** Thích ứng linh hoạt khi chạy môi trường cục bộ Windows hoặc container Docker (`/app/results`).
+  2. **Tương thích đa phiên bản Streamlit (`_show_image`):** Hỗ trợ liền mạch tham số `use_column_width` (Streamlit 1.30.0) và `use_container_width` (Streamlit 1.39+), tránh phát sinh lỗi `TypeError`.
+  3. **Hỗ trợ đa cặp coin (BTC, ETH, SOL, BNB, XRP):** Tích hợp mã màu nhận diện thương hiệu Crypto chuẩn quốc tế và bộ lọc dropdown theo từng cặp coin.
+  4. **Mount Volume Docker:** Bổ sung `- ./results:/app/results` vào service `streamlit` trong `docker-compose.yml`.

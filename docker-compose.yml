@@ -438,6 +438,7 @@ services:
       - REDIS_HOST=redis
     volumes:
       - ./dashboard:/app/dashboard
+      - ./results:/app/results
     depends_on:
       - fastapi
     networks:
