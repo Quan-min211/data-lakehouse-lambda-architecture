@@ -31,6 +31,8 @@ from dashboard.components.benchmark_charts import (
     render_benchmark3_compaction,
     render_benchmark_images,
 )
+from dashboard.components.dq_panel import render_dq_quarantine_panel
+from dashboard.components.watermark_status import render_watermark_status_bar
 
 
 # =============================================================================
@@ -274,6 +276,9 @@ def main():
     # 1. Vẽ hàng thẻ chỉ số KPI & Phân luồng Query Merger
     render_metrics_cards(market_data, watermark_info)
 
+    # Thanh trạng thái System Watermark & Huy hiệu thời gian thực
+    render_watermark_status_bar(watermark_info, market_data)
+
     st.markdown("---")
 
     # 2. Vẽ biểu đồ nến Plotly chuyên nghiệp
@@ -281,12 +286,13 @@ def main():
     fig = render_candlestick_chart(candles, symbol=selected_symbol)
     st.plotly_chart(fig, use_container_width=True)
 
-    # 3. Tabs: Market + Benchmark + Architecture
-    tab_market, tab_bench, tab_spike, tab_arch = st.tabs([
-        "📊 Doi Soat Hai Tang",
-        "🏆 Benchmark & Danh Gia",
-        "⚠️ Canh Bao Soc Gia",
-        "🏛️ Kien Truc Lambda"
+    # 3. Tabs: Market + Benchmark + Data Quality + Architecture
+    tab_market, tab_bench, tab_dq, tab_spike, tab_arch = st.tabs([
+        "📊 Đối Soát Hai Tầng",
+        "🏆 Benchmark & Đánh Giá",
+        "🛡️ Data Quality & Quarantine",
+        "⚠️ Cảnh Báo Sốc Giá",
+        "🏛️ Kiến Trúc Lambda",
     ])
 
     with tab_market:
@@ -329,6 +335,11 @@ def main():
             render_benchmark3_compaction()
         elif bench_sub == "Bieu Do Goc (PNG)":
             render_benchmark_images()
+
+    with tab_dq:
+        ch_host = os.getenv("CLICKHOUSE_HOST", "localhost")
+        ch_port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+        render_dq_quarantine_panel(clickhouse_host=ch_host, clickhouse_port=ch_port)
 
     with tab_spike:
         st.subheader("Nhat Ky Phat Hien Bien Dong Bat Thuong (Spike Detection)")

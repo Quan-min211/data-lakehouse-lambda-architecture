@@ -36,7 +36,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # ── path setup ──────────────────────────────────────────────────────────────
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -106,6 +106,56 @@ def _check_clickhouse_alive(ch_client: ClickHouseQueryClient) -> bool:
     return True
 
 
+def _get_reference_time(
+    ch_client: ClickHouseQueryClient,
+    symbol: str = "BTCUSDT",
+) -> datetime:
+    """Query MAX(window_start) from batch_agg to use as the reference anchor.
+
+    This avoids querying an empty time range when datetime.now() is far
+    ahead of the actual data in the table (e.g. data is from Aug-2026 but
+    now() is Sep-2026).
+
+    Args:
+        ch_client: Connected ClickHouseQueryClient instance.
+        symbol: Symbol to filter on; only used to get a representative anchor.
+
+    Returns:
+        The latest window_start found in batch_agg, or now() if the table is
+        empty / unreachable.
+    """
+    try:
+        client = ch_client.get_client()
+        if client is None:
+            raise RuntimeError("ClickHouse client unavailable")
+        result = client.query(
+            "SELECT MAX(window_start) AS max_ws "
+            "FROM lakehouse.batch_agg "
+            f"WHERE symbol = '{symbol}'"
+        )
+        rows = result.result_rows
+        if rows and rows[0][0] is not None:
+            max_ws = rows[0][0]
+            # clickhouse_connect returns datetime objects already timezone-aware
+            # (UTC).  Ensure we always return a UTC-aware datetime.
+            if max_ws.tzinfo is None:
+                max_ws = max_ws.replace(tzinfo=timezone.utc)
+            logger.info(
+                "[Bug-A fix] reference_time=MAX(window_start) from batch_agg: %s",
+                max_ws.isoformat(),
+            )
+            return max_ws
+    except Exception as exc:
+        logger.warning(
+            "Khong lay duoc MAX(window_start) tu batch_agg (%s). "
+            "Fallback sang datetime.now().",
+            exc,
+        )
+    fallback = _now_utc()
+    logger.info("[Bug-A fix] reference_time fallback: %s", fallback.isoformat())
+    return fallback
+
+
 def build_time_ranges(now: datetime) -> Dict[str, tuple]:
     """Build the 3 canonical query windows relative to `now`."""
     return {
@@ -120,6 +170,7 @@ def run_benchmark(
     symbols: List[str],
     runs: int,
     watermark_offset_hours: int,
+    reference_time: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     """
     Execute all benchmark runs and return a list of raw result dicts.
@@ -127,17 +178,27 @@ def run_benchmark(
     Args:
         symbols: List of coin symbols to benchmark.
         runs: Number of repetitions per (query_type, strategy, symbol).
-        watermark_offset_hours: Hours before now to set the mock watermark.
+        watermark_offset_hours: Hours before reference_time to set the mock
+            watermark.
+        reference_time: Optional UTC datetime to use as the anchor for all
+            query windows.  When None (default), the value is auto-detected
+            from MAX(window_start) in batch_agg so that queries always scan
+            a non-empty time range.
 
     Returns:
         List of result dicts with keys matching FIELDNAMES.
     """
-    now = _now_utc()
-    mock_watermark = now - timedelta(hours=watermark_offset_hours)
-
     ch_client = ClickHouseQueryClient()
     if not _check_clickhouse_alive(ch_client):
         sys.exit(1)
+
+    # ── Bug-A fix: anchor time windows to real data ───────────────────────────
+    if reference_time is None:
+        # Use the first symbol as the representative for the reference query
+        anchor_symbol = symbols[0] if symbols else "BTCUSDT"
+        reference_time = _get_reference_time(ch_client, symbol=anchor_symbol)
+
+    mock_watermark = reference_time - timedelta(hours=watermark_offset_hours)
 
     watermark_reader = WatermarkReader(mock_watermark=mock_watermark)
     merger = AutoCorrectingQueryMerger(
@@ -146,11 +207,12 @@ def run_benchmark(
     )
 
     live_watermark = watermark_reader.get_watermark()
-    time_ranges = build_time_ranges(now)
+    time_ranges = build_time_ranges(reference_time)
 
     logger.info(
-        "Bat dau Benchmark 1 -- Latency | symbols=%s | runs=%d | watermark=%s",
-        symbols, runs, live_watermark.isoformat(),
+        "Bat dau Benchmark 1 -- Latency | symbols=%s | runs=%d "
+        "| reference_time=%s | watermark=%s",
+        symbols, runs, reference_time.isoformat(), live_watermark.isoformat(),
     )
 
     all_rows: List[Dict[str, Any]] = []
@@ -167,7 +229,8 @@ def run_benchmark(
                 ts_str = _now_utc().isoformat()
 
                 # ── Batch-only ──────────────────────────────────────────────
-                _, ms_b = _timed_call(
+                # Bug-B fix: capture the query result to count actual rows
+                result_b, ms_b = _timed_call(
                     ch_client.query_candles,
                     table="batch_agg",
                     symbol=symbol,
@@ -181,13 +244,14 @@ def run_benchmark(
                     "strategy": "batch_only",
                     "symbol": symbol,
                     "latency_ms": round(ms_b, 3),
-                    "rows_returned": 0,
+                    "rows_returned": _rows_from_result(result_b),
                     "watermark": live_watermark.isoformat(),
                     "ts": ts_str,
                 })
 
                 # ── Speed-only ──────────────────────────────────────────────
-                _, ms_s = _timed_call(
+                # Bug-B fix: capture the query result to count actual rows
+                result_s, ms_s = _timed_call(
                     ch_client.query_candles,
                     table="speed_agg",
                     symbol=symbol,
@@ -201,7 +265,7 @@ def run_benchmark(
                     "strategy": "speed_only",
                     "symbol": symbol,
                     "latency_ms": round(ms_s, 3),
-                    "rows_returned": 0,
+                    "rows_returned": _rows_from_result(result_s),
                     "watermark": live_watermark.isoformat(),
                     "ts": ts_str,
                 })
@@ -294,7 +358,16 @@ def main() -> None:
     )
     parser.add_argument(
         "--watermark-offset-hours", type=int, default=24,
-        help="Gio truoc now() de dat mock watermark (dung cho Q3 Hybrid). Mac dinh: 24",
+        help="Gio truoc reference_time de dat mock watermark (dung cho Q3 Hybrid). Mac dinh: 24",
+    )
+    parser.add_argument(
+        "--reference-time",
+        default=None,
+        help=(
+            "Moc thoi gian UTC lam neo cho cac cua so truy van "
+            "(dinh dang ISO-8601, vi du: 2026-09-02T08:00:00+00:00). "
+            "Mac dinh: tu dong lay MAX(window_start) tu batch_agg."
+        ),
     )
     parser.add_argument(
         "--output", default=str(OUTPUT_CSV),
@@ -302,10 +375,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Parse optional --reference-time override
+    ref_time: Optional[datetime] = None
+    if args.reference_time:
+        try:
+            ref_time = datetime.fromisoformat(args.reference_time)
+            if ref_time.tzinfo is None:
+                ref_time = ref_time.replace(tzinfo=timezone.utc)
+            logger.info("[CLI] reference_time override: %s", ref_time.isoformat())
+        except ValueError as exc:
+            logger.error("--reference-time khong hop le: %s", exc)
+            sys.exit(1)
+
     rows = run_benchmark(
         symbols=args.symbols,
         runs=args.runs,
         watermark_offset_hours=args.watermark_offset_hours,
+        reference_time=ref_time,
     )
 
     if rows:

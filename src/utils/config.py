@@ -7,7 +7,18 @@ Tu dong nhan dien moi truong Host (Windows/macOS) va Container (Linux) de fallba
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List
+
+# ── Load .env tự động nếu tồn tại (host machine dev mode) ────────────────────────
+# override=False: không ghi đè biến đã có sẵn trong môi trường (Docker env)
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parents[2] / ".env"
+    if _env_file.exists():
+        load_dotenv(dotenv_path=_env_file, override=False)
+except ImportError:
+    pass  # python-dotenv chua cai -- env vars phai set thu cong
 
 
 def _resolve_host(env_var: str, default_host: str) -> str:

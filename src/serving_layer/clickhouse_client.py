@@ -50,6 +50,10 @@ class ClickHouseQueryClient:
         """Khởi tạo kết nối ClickHouse."""
         if self._client is None:
             if clickhouse_connect is None:
+                logger.error(
+                    "Thu vien clickhouse-connect CHUA duoc cai dat. "
+                    "Chay: pip install clickhouse-connect"
+                )
                 return None
             try:
                 self._client = clickhouse_connect.get_client(
@@ -60,9 +64,14 @@ class ClickHouseQueryClient:
                     database=self.database,
                 )
             except Exception as e:
-                logger.warning(f"Chưa thể kết nối ClickHouse tại {self.host}:{self.port}: {e}")
+                logger.warning(
+                    "Khong the ket noi ClickHouse tai %s:%s (user=%s db=%s) — %s: %s",
+                    self.host, self.port, self.user, self.database,
+                    type(e).__name__, e,
+                )
                 return None
         return self._client
+
 
     def query_candles(
         self,

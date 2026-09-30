@@ -15,6 +15,13 @@ from dashboard.components.candlestick import render_candlestick_chart
 from dashboard.app import generate_fallback_market_data
 
 
+from dashboard.components.watermark_status import get_badge_html, render_watermark_badge
+from dashboard.components.dq_panel import (
+    _generate_fallback_quarantine_records,
+    fetch_quarantine_data_from_clickhouse,
+)
+
+
 class TestDashboardComponents(unittest.TestCase):
     """Kiểm thử các thành phần trực quan hóa của Dashboard."""
 
@@ -74,6 +81,35 @@ class TestDashboardComponents(unittest.TestCase):
         self.assertIn(data["overall_status"], ["Reconciled", "Provisional", "Partially Reconciled"])
         self.assertGreater(len(data["candles"]), 0)
 
+    def test_watermark_status_badge(self):
+        """Kiểm tra badge watermark trạng thái Provisional / Reconciled."""
+        badge_reconciled = get_badge_html("Reconciled")
+        self.assertIn("Reconciled", badge_reconciled)
+        self.assertIn("#00E676", badge_reconciled)
+
+        badge_provisional = get_badge_html("Provisional")
+        self.assertIn("Provisional", badge_provisional)
+        self.assertIn("#B388FF", badge_provisional)
+
+        badge_partial = get_badge_html("Partially Reconciled")
+        self.assertIn("Partially Reconciled", badge_partial)
+
+    def test_dq_quarantine_fallback_and_schema(self):
+        """Kiểm tra fallback generator và trường dữ liệu của DQ quarantine."""
+        fallback_records = _generate_fallback_quarantine_records()
+        self.assertIsInstance(fallback_records, list)
+        self.assertGreater(len(fallback_records), 0)
+
+        required_keys = {"batch_run_id", "trade_id", "symbol", "price", "quantity", "dq_error", "raw_record", "quarantined_at"}
+        first_record = fallback_records[0]
+        self.assertTrue(required_keys.issubset(first_record.keys()))
+
+        # fetch_quarantine_data_from_clickhouse fallback khi không có host
+        records, is_live = fetch_quarantine_data_from_clickhouse(host="invalid_host_12345", port=9999)
+        self.assertFalse(is_live)
+        self.assertGreater(len(records), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
