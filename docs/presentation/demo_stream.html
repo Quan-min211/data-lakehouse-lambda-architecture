@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Lakehouse Lambda — Demo Pipeline Flow</title>
+  <style>
+    /* ── RESET & BASE ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-main: #0B0E14;
+      --bg-card: #131722;
+      --bg-card-hover: #1A1F2C;
+      --border: #2A2E39;
+      --border-glow: #3B82F6;
+      --text-primary: #EAECEF;
+      --text-secondary: #848E9C;
+      --text-muted: #5E6673;
+      --accent-blue: #3B82F6;
+      --accent-cyan: #06B6D4;
+      --accent-green: #10B981;
+      --accent-yellow: #F59E0B;
+      --accent-orange: #F97316;
+      --accent-red: #EF4444;
+      --accent-purple: #8B5CF6;
+      --accent-pink: #EC4899;
+      --gradient-blue: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
+      --gradient-green: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+      --gradient-purple: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%);
+      --gradient-orange: linear-gradient(135deg, #F97316 0%, #FB923C 100%);
+      --gradient-red: linear-gradient(135deg, #EF4444 0%, #F87171 100%);
+      --gradient-pink: linear-gradient(135deg, #EC4899 0%, #F472B6 100%);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-primary);
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED BACKGROUND ─────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse 600px 400px at 10% 20%, rgba(59,130,246,0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 500px 300px at 85% 70%, rgba(139,92,246,0.05) 0%, transparent 70%),
+        radial-gradient(ellipse 400px 400px at 50% 50%, rgba(6,182,212,0.03) 0%, transparent 70%);
+      z-index: -1;
+      animation: bgPulse 8s ease-in-out infinite alternate;
+    }
+    @keyframes bgPulse {
+      0% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* ── HEADER ───────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 60px 20px 40px;
+      position: relative;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 10%; right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 18px;
+      border-radius: 20px;
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.3);
+      color: var(--accent-blue);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero-badge .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+      50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+    }
+    .hero h1 {
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #EAECEF 30%, #3B82F6 60%, #06B6D4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 0 auto 8px;
+    }
+    .hero .meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 14px;
+    }
+    .hero .meta span { margin: 0 8px; }
+
+    /* ── CONTAINER ────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── SECTION HEADER ──────────────────────────── */
+    .section-header {
+      text-align: center;
+      padding: 50px 0 30px;
+    }
+    .section-header h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .section-header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* ── PIPELINE FLOW ───────────────────────────── */
+    .pipeline {
+      position: relative;
+      padding: 20px 0 40px;
+    }
+    /* Vertical connector line */
+    .pipeline::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg,
+        transparent 0%,
+        var(--accent-blue) 5%,
+        var(--accent-cyan) 25%,
+        var(--accent-green) 45%,
+        var(--accent-yellow) 60%,
+        var(--accent-purple) 80%,
+        var(--accent-pink) 95%,
+        transparent 100%
+      );
+      transform: translateX(-50%);
+      z-index: 0;
+    }
+
+    /* ── STAGE NODES ─────────────────────────────── */
+    .stage {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      z-index: 1;
+      opacity: 0;
+      transform: translateY(30px);
+      animation: fadeUp 0.6s ease forwards;
+    }
+    .stage:nth-child(1)  { animation-delay: 0.1s; }
+    .stage:nth-child(2)  { animation-delay: 0.25s; }
+    .stage:nth-child(3)  { animation-delay: 0.4s; }
+    .stage:nth-child(4)  { animation-delay: 0.55s; }
+    .stage:nth-child(5)  { animation-delay: 0.7s; }
+    .stage:nth-child(6)  { animation-delay: 0.85s; }
+    .stage:nth-child(7)  { animation-delay: 1.0s; }
+    .stage:nth-child(8)  { animation-delay: 1.15s; }
+    .stage:nth-child(9)  { animation-delay: 1.3s; }
+    .stage:nth-child(10) { animation-delay: 1.45s; }
+    .stage:nth-child(11) { animation-delay: 1.6s; }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Alternating layout */
+    .stage.left  { flex-direction: row; }
+    .stage.right { flex-direction: row-reverse; }
+
+    .stage-content {
+      width: calc(50% - 40px);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+      transition: all 0.35s ease;
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+    }
+    .stage-content::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 14px 14px 0 0;
+      opacity: 0.8;
+    }
+    .stage-content:hover {
+      border-color: rgba(59,130,246,0.4);
+      background: var(--bg-card-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 30px rgba(59,130,246,0.08);
+    }
+
+    /* Color themes per stage */
+    .stage[data-color="blue"]    .stage-content::before { background: var(--gradient-blue); }
+    .stage[data-color="cyan"]    .stage-content::before { background: linear-gradient(90deg, #06B6D4, #22D3EE); }
+    .stage[data-color="green"]   .stage-content::before { background: var(--gradient-green); }
+    .stage[data-color="yellow"]  .stage-content::before { background: linear-gradient(90deg, #F59E0B, #FBBF24); }
+    .stage[data-color="orange"]  .stage-content::before { background: var(--gradient-orange); }
+    .stage[data-color="red"]     .stage-content::before { background: var(--gradient-red); }
+    .stage[data-color="purple"]  .stage-content::before { background: var(--gradient-purple); }
+    .stage[data-color="pink"]    .stage-content::before { background: var(--gradient-pink); }
+
+    /* Center node */
+    .stage-node {
+      width: 56px;
+      min-width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 24px;
+      font-weight: 700;
+      z-index: 2;
+      margin: 0 12px;
+      border: 3px solid var(--border);
+      background: var(--bg-card);
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      transition: all 0.35s;
+      position: relative;
+      align-self: center;
+    }
+    .stage:hover .stage-node {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 25px rgba(59,130,246,0.3);
+      transform: scale(1.12);
+    }
+
+    /* Spacer on the opposite side */
+    .stage-spacer {
+      width: calc(50% - 40px);
+    }
+
+    /* Stage text elements */
+    .stage-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .stage[data-color="blue"]    .stage-label { color: var(--accent-blue); }
+    .stage[data-color="cyan"]    .stage-label { color: var(--accent-cyan); }
+    .stage[data-color="green"]   .stage-label { color: var(--accent-green); }
+    .stage[data-color="yellow"]  .stage-label { color: var(--accent-yellow); }
+    .stage[data-color="orange"]  .stage-label { color: var(--accent-orange); }
+    .stage[data-color="red"]     .stage-label { color: var(--accent-red); }
+    .stage[data-color="purple"]  .stage-label { color: var(--accent-purple); }
+    .stage[data-color="pink"]    .stage-label { color: var(--accent-pink); }
+
+    .stage-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .stage-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+
+    /* Tech tags */
+    .tech-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .tech-tag {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+    .tech-tag:hover {
+      background: rgba(59,130,246,0.12);
+      border-color: rgba(59,130,246,0.3);
+      color: var(--accent-blue);
+    }
+
+    /* Details toggle */
+    .stage-details {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+    .stage-content.expanded .stage-details { display: block; }
+    .detail-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .detail-row .icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .detail-row .text { color: var(--text-secondary); }
+    .detail-row code {
+      background: rgba(59,130,246,0.1);
+      color: var(--accent-cyan);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .expand-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-blue);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 4px 0;
+      transition: color 0.2s;
+    }
+    .expand-btn:hover { color: var(--accent-cyan); }
+
+    /* ── FLOW ARROW ANIMATION ────────────────────── */
+    .flow-pulse {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 12px var(--accent-cyan);
+      animation: flowDown 4s ease-in-out infinite;
+      z-index: 1;
+      opacity: 0.8;
+    }
+    @keyframes flowDown {
+      0%   { top: 2%; opacity: 0; }
+      5%   { opacity: 0.9; }
+      90%  { opacity: 0.9; }
+      100% { top: 98%; opacity: 0; }
+    }
+
+    /* ── QUERY SECTION ───────────────────────────── */
+    .query-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      margin: 30px 0 50px;
+      position: relative;
+      overflow: hidden;
+    }
+    .query-section::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--gradient-purple);
+    }
+    .query-section h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .query-case {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      transition: all 0.3s;
+    }
+    .query-case:hover {
+      border-color: rgba(139,92,246,0.4);
+      background: rgba(139,92,246,0.05);
+    }
+    .query-case-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .case-badge {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .case-badge.c1 { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+    .case-badge.c2 { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
+    .case-badge.c3 { background: rgba(249,115,22,0.15); color: var(--accent-orange); }
+    .case-title { font-size: 14px; font-weight: 600; }
+    .case-desc { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
+    .case-desc code {
+      background: rgba(6,182,212,0.1);
+      color: var(--accent-cyan);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    /* ── FOOTER ───────────────────────────────────── */
+    .footer {
+      text-align: center;
+      padding: 30px 20px 50px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+    }
+    .footer a {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────── */
+    @media (max-width: 768px) {
+      .pipeline::before { left: 28px; }
+      .stage { flex-direction: column !important; align-items: flex-start; padding-left: 60px; }
+      .stage-content { width: 100% !important; }
+      .stage-spacer { display: none; }
+      .stage-node {
+        position: absolute;
+        left: 0;
+        width: 44px; min-width: 44px; height: 44px;
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═════════════════ HERO ═════════════════ -->
+  <header class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Data Lakehouse — Lambda Architecture
+    </div>
+    <h1>Pipeline Dòng Dữ Liệu End-to-End</h1>
+    <p>
+      Hành trình dữ liệu từ sàn giao dịch Binance đến Dashboard giám sát thời gian thực —
+      trải qua 11 trạm xử lý trong kiến trúc Lambda.
+    </p>
+    <p style="font-size:13px; color: var(--text-muted); margin-top: 6px;">
+      Đề tài KLTN: <em>Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda
+      hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa</em>
+    </p>
+    <div class="meta">
+      <span>👨‍🎓 Nguyễn Đặng Quốc Anh &amp; Phạm Minh Quân</span>
+      <span>|</span>
+      <span>🏫 HCMUTE — CNTT</span>
+      <span>|</span>
+      <span>👨‍🏫 GVHD: ThS. Đoàn Minh Trí</span>
+    </div>
+  </header>
+
+  <!-- ═════════════════ PIPELINE ═════════════════ -->
+  <div class="container">
+    <div class="section-header">
+      <h2>🔄 Hành Trình Dòng Dữ Liệu</h2>
+      <p>Nhấn vào mỗi trạm để xem chi tiết kỹ thuật • Dữ liệu đi từ trên xuống dưới</p>
+    </div>
+
+    <div class="pipeline">
+      <div class="flow-pulse"></div>
+
+      <!-- ───── STAGE 1: BINANCE MARKET ───── -->
+      <div class="stage left" data-color="blue">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Nguồn dữ liệu</div>
+          <div class="stage-title">① Sàn Binance Global — aggTrade WebSocket</div>
+          <div class="stage-desc">
+            Dữ liệu giao dịch khớp lệnh thực tế của <b>Top 10 cặp USDT</b> được lấy qua kết nối
+            <b>WebSocket real-time</b> từ sàn Binance. Mỗi sự kiện mang thông tin:
+            <code>trade_id</code>, <code>symbol</code>, <code>price</code>, <code>quantity</code>,
+            <code>trade_time</code> (epoch ms).
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Binance aggTrade WS</span>
+            <span class="tech-tag">wss://stream.binance.com</span>
+            <span class="tech-tag">~500-2000 events/s</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>src/ingestion/binance_ws.py</code></span></div>
+            <div class="detail-row"><span class="icon">📦</span><span class="text">Model: <code>TradeEvent</code> dataclass (9 fields) — <code>src/ingestion/models.py</code></span></div>
+            <div class="detail-row"><span class="icon">🌐</span><span class="text">Symbols: BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, DOTUSDT, LINKUSDT, AVAXUSDT</span></div>
+            <div class="detail-row"><span class="icon">⚡</span><span class="text">Mỗi tick là 1 lần khớp lệnh thực trên thị trường — event-time timestamp chính xác ms</span></div>
+          </div>
+        </div>
+        <div class="stage-node">📡</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+      <!-- ───── STAGE 2: FAULT INJECTOR ───── -->
+      <div class="stage right" data-color="red">
+        <div class="stage-spacer"></div>
+        <div class="stage-node">🧪</div>
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Tiêm lỗi thực nghiệm</div>
+          <div class="stage-title">② Fault Injector — Tạo Ground Truth cho Benchmark</div>
+          <div class="stage-desc">
+            Trước khi đẩy vào Kafka, <b>FaultInjector</b> chủ động tiêm 3 loại lỗi phân tán có kiểm soát
+            để tạo bộ dữ liệu benchmark có Ground Truth chính xác.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">10% Duplicate</span>
+            <span class="tech-tag">10% Late Data</span>
+            <span class="tech-tag">5% Schema Invalid</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>src/ingestion/fault_injector.py</code></span></div>
+            <div class="detail-row"><span class="icon">🔁</span><span class="text"><b>Duplicate:</b> Nhân đôi trade_id, Batch dedup loại → Speed không triệt để → sai lệch VWAP</span></div>
+            <div class="detail-row"><span class="icon">⏰</span><span class="text"><b>Late Data:</b> Lùi trade_time 1-5 phút. Speed Layer bỏ (quá watermark), Batch giữ lại</span></div>
+            <div class="detail-row"><span class="icon">💥</span><span class="text"><b>Schema Invalid:</b> Giá âm, qty=0 → DQ Gate lọc ra → bảng <code>dq_quarantine</code></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── STAGE 3: KAFKA ───── -->
+      <div class="stage left" data-color="cyan">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Message Broker</div>
+          <div class="stage-title">③ Apache Kafka (KRaft) — Trung tâm Streaming</div>
+          <div class="stage-desc">
+            TradeEvent được serialize thành <b>JSON</b> và đẩy vào topic <code>crypto_trades_raw</code>
+            (3 partitions). Kafka đóng vai trò <b>backbone</b> cho cả 2 tầng Batch &amp; Speed.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Apache Kafka 3.7</span>
+            <span class="tech-tag">KRaft (No ZooKeeper)</span>
+            <span class="tech-tag">3 partitions</span>
+            <span class="tech-tag">Port 9092/9094</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>src/ingestion/kafka_producer.py</code></span></div>
+            <div class="detail-row"><span class="icon">📨</span><span class="text">Topic: <code>crypto_trades_raw</code> — partition key = symbol (đảm bảo thứ tự)</span></div>
+            <div class="detail-row"><span class="icon">💾</span><span class="text">Retention: 24h / 1GB per partition. Segment size: 100MB</span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-kafka</code> — 1GB RAM</span></div>
+          </div>
+        </div>
+        <div class="stage-node">📨</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+      <!-- ───── STAGE 4: SPEED LAYER ───── -->
+      <div class="stage right" data-color="purple">
+        <div class="stage-spacer"></div>
+        <div class="stage-node">⚡</div>
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Tầng tốc độ (Speed Layer)</div>
+          <div class="stage-title">④ Spark Structured Streaming → speed_agg</div>
+          <div class="stage-desc">
+            Spark đọc Kafka theo <b>micro-batch mỗi 5 giây</b>, tính OHLCV + VWAP + Spike Detection
+            cho cửa sổ 1 phút, rồi ghi trực tiếp vào <b>ClickHouse</b> bảng <code>speed_agg</code>.
+            Dữ liệu gần đúng (Provisional) — <b>SLA &lt; 5s end-to-end</b>.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Spark 3.5</span>
+            <span class="tech-tag">Structured Streaming</span>
+            <span class="tech-tag">Trigger: 5s</span>
+            <span class="tech-tag">Window: 1 phút</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>src/speed_layer/spark_streaming.py</code>, <code>window_aggregator.py</code></span></div>
+            <div class="detail-row"><span class="icon">🧮</span><span class="text">Tính VWAP = Σ(price×qty) / Σ(qty), Spike detection nếu biến động &gt; 5%</span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-speed-layer</code> — 2GB RAM, local[2] mode</span></div>
+            <div class="detail-row"><span class="icon">💾</span><span class="text">Checkpoint: volume <code>speed-checkpoints</code> (giữ state khi restart)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── STAGE 5: BATCH LAYER ───── -->
+      <div class="stage left" data-color="green">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Tầng xử lý theo lô (Batch Layer)</div>
+          <div class="stage-title">⑤ Spark Batch → Bronze → Silver → Gold → batch_agg</div>
+          <div class="stage-desc">
+            Pipeline Batch chạy <b>theo lịch</b> (Dagster schedule mỗi giờ): đọc raw data từ Kafka,
+            ghi <b>Bronze Parquet</b> lên MinIO/Iceberg, biến đổi qua <b>dbt</b> (Silver → Gold),
+            rồi tổng hợp OHLCV+VWAP chính xác ghi vào <code>batch_agg</code> (Reconciled).
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Spark Batch</span>
+            <span class="tech-tag">Apache Iceberg</span>
+            <span class="tech-tag">dbt-spark</span>
+            <span class="tech-tag">Dagster</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>src/batch_layer/spark_batch_jobs.py</code></span></div>
+            <div class="detail-row"><span class="icon">🗂️</span><span class="text">Bronze → <code>s3://bronze/</code> (MinIO Iceberg), Silver → lọc + dedup, Gold → OHLCV aggregation</span></div>
+            <div class="detail-row"><span class="icon">🔄</span><span class="text">dbt models: <code>bronze_raw_trades</code> → <code>silver_cleaned_trades</code> → <code>gold_ohlcv_1m</code></span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-batch-pipeline</code> — 3GB RAM, chạy xong thoát</span></div>
+          </div>
+        </div>
+        <div class="stage-node">🏗️</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+      <!-- ───── STAGE 6: DATA QUALITY GATE ───── -->
+      <div class="stage right" data-color="red">
+        <div class="stage-spacer"></div>
+        <div class="stage-node">🛡️</div>
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Cổng kiểm soát chất lượng</div>
+          <div class="stage-title">⑥ DQ Gate — Quarantine Pattern</div>
+          <div class="stage-desc">
+            Tại ranh giới Bronze → Silver, <b>Data Quality Gate</b> kiểm tra tính hợp lệ: price &gt; 0,
+            qty &gt; 0, trade_id hợp lệ. Bản ghi vi phạm bị <b>cách ly</b> vào bảng
+            <code>dq_quarantine</code>, bảo vệ tầng Silver &amp; Gold không bị ô nhiễm.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">dq_checks.py</span>
+            <span class="tech-tag">quarantine.py</span>
+            <span class="tech-tag">dq_metrics.py</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">Module: <code>src/data_quality/</code></span></div>
+            <div class="detail-row"><span class="icon">📊</span><span class="text">Metrics: total_records, passed, failed, quarantined, pass_rate_%</span></div>
+            <div class="detail-row"><span class="icon">💾</span><span class="text">Quarantine table: <code>lakehouse.dq_quarantine</code> (ClickHouse)</span></div>
+            <div class="detail-row"><span class="icon">📈</span><span class="text">Dashboard Tab DQ hiển thị Donut chart phân bố lỗi + bảng records bị cách ly</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── STAGE 7: STORAGE LAYER ───── -->
+      <div class="stage left" data-color="yellow">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Tầng lưu trữ</div>
+          <div class="stage-title">⑦ MinIO (S3) + Apache Iceberg — Data Lakehouse</div>
+          <div class="stage-desc">
+            Tầng lưu trữ kép: <b>MinIO</b> (S3-compatible) lưu file Parquet/Iceberg theo 3 zone
+            (<code>bronze/</code>, <code>silver/</code>, <code>gold/</code>).
+            <b>Iceberg REST Catalog</b> quản lý metadata, hỗ trợ time-travel &amp; schema evolution.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">MinIO</span>
+            <span class="tech-tag">Apache Iceberg</span>
+            <span class="tech-tag">Parquet</span>
+            <span class="tech-tag">REST Catalog</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">🗄️</span><span class="text">Buckets: <code>s3://warehouse/</code>, <code>s3://bronze/</code>, <code>s3://silver/</code>, <code>s3://gold/</code></span></div>
+            <div class="detail-row"><span class="icon">📋</span><span class="text">Iceberg REST Catalog: <code>http://localhost:8181</code> — schema versioning</span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">MinIO Console: <code>http://localhost:9001</code> (minioadmin/minioadmin)</span></div>
+            <div class="detail-row"><span class="icon">🔧</span><span class="text">Compaction tối ưu kích thước file Parquet (Benchmark 3 đo hiệu suất trước/sau)</span></div>
+          </div>
+        </div>
+        <div class="stage-node">🗄️</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+      <!-- ───── STAGE 8: CLICKHOUSE OLAP ───── -->
+      <div class="stage right" data-color="orange">
+        <div class="stage-spacer"></div>
+        <div class="stage-node">🔥</div>
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">OLAP Engine</div>
+          <div class="stage-title">⑧ ClickHouse — Batch View + Speed View</div>
+          <div class="stage-desc">
+            ClickHouse lưu trữ <b>2 bảng song song</b>: <code>batch_agg</code> (Ground Truth, Reconciled)
+            và <code>speed_agg</code> (Approximate, Provisional). Cả 2 dùng <b>ReplacingMergeTree</b>
+            để tự động dedup, hỗ trợ truy vấn OLAP nhanh cỡ ms.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">ClickHouse</span>
+            <span class="tech-tag">ReplacingMergeTree</span>
+            <span class="tech-tag">batch_agg</span>
+            <span class="tech-tag">speed_agg</span>
+            <span class="tech-tag">Port 8123</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📊</span><span class="text"><code>batch_agg</code>: OHLCV + VWAP + is_spike + status='Reconciled' | ORDER BY (symbol, window_start)</span></div>
+            <div class="detail-row"><span class="icon">⚡</span><span class="text"><code>speed_agg</code>: OHLCV + VWAP + is_spike (Provisional) | Ghi mỗi 5s từ Speed Layer</span></div>
+            <div class="detail-row"><span class="icon">🛡️</span><span class="text"><code>dq_quarantine</code>: Bản ghi bị cách ly bởi DQ Gate</span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-clickhouse</code> — 1.5GB RAM</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── STAGE 9: SERVING LAYER ───── -->
+      <div class="stage left" data-color="purple">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Tầng phục vụ (Serving Layer)</div>
+          <div class="stage-title">⑨ FastAPI — Auto-Correcting Query Merger</div>
+          <div class="stage-desc">
+            <b>Cơ chế cốt lõi</b> của kiến trúc Lambda: FastAPI nhận truy vấn, đọc <b>System Watermark W</b>
+            (mốc chốt sổ của Batch), rồi tự động phân luồng 1 trong 3 Case: lấy từ Batch View,
+            Speed View, hoặc ghép Hybrid — <b>không trùng lặp dữ liệu (Zero Double-Counting)</b>.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">FastAPI</span>
+            <span class="tech-tag">Query Merger</span>
+            <span class="tech-tag">Redis (Hot Cache)</span>
+            <span class="tech-tag">Port 8000</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">Files: <code>src/serving_layer/query_merger.py</code>, <code>api_routes.py</code>, <code>watermark_reader.py</code></span></div>
+            <div class="detail-row"><span class="icon">📖</span><span class="text">API Docs: <code>http://localhost:8000/docs</code> (Swagger UI)</span></div>
+            <div class="detail-row"><span class="icon">🔑</span><span class="text">Endpoints: <code>/api/candles</code>, <code>/api/watermark</code>, <code>/api/reconciliation</code></span></div>
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-fastapi</code> — 512MB RAM</span></div>
+          </div>
+        </div>
+        <div class="stage-node">🔀</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+      <!-- ───── STAGE 10: REDIS ───── -->
+      <div class="stage right" data-color="red">
+        <div class="stage-spacer"></div>
+        <div class="stage-node">⚡</div>
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Hot cache</div>
+          <div class="stage-title">⑩ Redis — Speed View Cache (LRU)</div>
+          <div class="stage-desc">
+            Redis cache lưu nến realtime mới nhất để <b>giảm tải ClickHouse</b>.
+            Serving Layer kiểm tra Redis trước, nếu miss mới fallback sang ClickHouse.
+            Chính sách <b>allkeys-lru</b> (256MB) tự động loại bỏ keys cũ.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Redis 7.2 Alpine</span>
+            <span class="tech-tag">256MB LRU</span>
+            <span class="tech-tag">Port 6379</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">🐳</span><span class="text">Container: <code>lakehouse-redis</code> — 384MB RAM</span></div>
+            <div class="detail-row"><span class="icon">💾</span><span class="text">Persistence: disabled (<code>save ""</code>) — chỉ là cache, mất mát chấp nhận được</span></div>
+            <div class="detail-row"><span class="icon">⏱️</span><span class="text">TTL: key tự hết hạn, LRU eviction khi đầy</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── STAGE 11: DASHBOARD ───── -->
+      <div class="stage left" data-color="pink">
+        <div class="stage-content" onclick="this.classList.toggle('expanded')">
+          <div class="stage-label">Giao diện người dùng</div>
+          <div class="stage-title">⑪ Streamlit Dashboard — Giám sát &amp; Đối soát</div>
+          <div class="stage-desc">
+            Giao diện web cho người dùng cuối: <b>biểu đồ nến Plotly</b> real-time, bảng đối soát
+            Speed vs Batch, huy hiệu trạng thái (Reconciled / Provisional), và <b>5 Tab</b>:
+            Market, Benchmark, Data Quality, Cảnh báo sốc giá, Kiến trúc Lambda.
+          </div>
+          <div class="tech-tags">
+            <span class="tech-tag">Streamlit</span>
+            <span class="tech-tag">Plotly</span>
+            <span class="tech-tag">Auto-refresh 5s</span>
+            <span class="tech-tag">Port 8501</span>
+          </div>
+          <button class="expand-btn">▼ Chi tiết</button>
+          <div class="stage-details">
+            <div class="detail-row"><span class="icon">📁</span><span class="text">File: <code>dashboard/app.py</code>, <code>dashboard/components/</code></span></div>
+            <div class="detail-row"><span class="icon">🌐</span><span class="text">URL: <code>http://localhost:8501</code></span></div>
+            <div class="detail-row"><span class="icon">📊</span><span class="text">Tabs: Market (nến OHLCV), Benchmark (3 kịch bản), DQ Quarantine, Spike Alert, Architecture</span></div>
+            <div class="detail-row"><span class="icon">🔄</span><span class="text">Tự động gọi <code>/api/candles</code> mỗi 5 giây để cập nhật biểu đồ real-time</span></div>
+          </div>
+        </div>
+        <div class="stage-node">📊</div>
+        <div class="stage-spacer"></div>
+      </div>
+
+    </div><!-- /.pipeline -->
+
+    <!-- ═══════════════ QUERY MERGER SECTION ═══════════════ -->
+    <div class="query-section">
+      <h3>🔀 Auto-Correcting Query Merger — 3 Case phân luồng truy vấn</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
+        Khi người dùng truy vấn khoảng thời gian <code>[T_start, T_end]</code>, Serving Layer đọc mốc
+        <b>System Watermark W</b> (thời điểm Batch Layer chốt sổ lần cuối) rồi tự động chọn 1 trong 3 trường hợp:
+      </p>
+
+      <div class="query-case">
+        <div class="query-case-header">
+          <span class="case-badge c1">CASE 1</span>
+          <span class="case-title">History — 100% Batch View (Ground Truth)</span>
+        </div>
+        <div class="case-desc">
+          Khi toàn bộ khoảng truy vấn nằm <b>trước Watermark</b>: <code>T_end ≤ W</code>.<br>
+          → Lấy 100% từ <code>lakehouse.batch_agg</code> — dữ liệu chuẩn, đã dedup, đã lọc DQ.<br>
+          → Nhãn: <span style="color: var(--accent-green); font-weight: 600;">Reconciled ✓</span>
+        </div>
+      </div>
+
+      <div class="query-case">
+        <div class="query-case-header">
+          <span class="case-badge c2">CASE 2</span>
+          <span class="case-title">Realtime — 100% Speed View (Approximate)</span>
+        </div>
+        <div class="case-desc">
+          Khi toàn bộ khoảng truy vấn nằm <b>sau Watermark</b>: <code>T_start > W</code>.<br>
+          → Lấy 100% từ <code>lakehouse.speed_agg</code> — dữ liệu gần đúng, chưa qua Batch reprocess.<br>
+          → Nhãn: <span style="color: var(--accent-purple); font-weight: 600;">Provisional ⏳</span>
+        </div>
+      </div>
+
+      <div class="query-case">
+        <div class="query-case-header">
+          <span class="case-badge c3">CASE 3</span>
+          <span class="case-title">Hybrid — Batch + Speed, Zero Double-Counting</span>
+        </div>
+        <div class="case-desc">
+          Khi khoảng truy vấn <b>cắt ngang Watermark</b>: <code>T_start ≤ W &lt; T_end</code>.<br>
+          → Phần <code>[T_start, W]</code> lấy từ <code>batch_agg</code> (chuẩn).<br>
+          → Phần <code>(W, T_end]</code> lấy từ <code>speed_agg</code> (tức thời).<br>
+          → <b>Merge không trùng lặp</b> tại mốc W.<br>
+          → Nhãn: <span style="color: var(--accent-orange); font-weight: 600;">Partially Reconciled 🔀</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.container -->
+
+  <footer class="footer">
+    <p>
+      KLTN — Data Lakehouse Lambda Architecture | HCMUTE 2026<br>
+      <span style="font-size: 11px; margin-top: 4px; display: inline-block;">
+        Stack: Kafka · Spark · Iceberg · MinIO · ClickHouse · Redis · FastAPI · Streamlit · Dagster · dbt
+      </span>
+    </p>
+  </footer>
+
+</body>
+</html>
