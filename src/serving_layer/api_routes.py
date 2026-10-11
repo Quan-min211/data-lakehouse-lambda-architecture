@@ -9,8 +9,10 @@ Cung cấp các endpoint:
 - GET /api/reconciliation: Báo cáo đối soát chi tiết phục vụ Benchmark 2
 """
 
+import json
+import socket
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +25,7 @@ from src.serving_layer.schemas import (
 from src.serving_layer.query_merger import AutoCorrectingQueryMerger
 from src.serving_layer.watermark_reader import WatermarkReader
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+from src.utils.config import get_kafka_config, get_redis_config, get_clickhouse_config
 
 app = FastAPI(
     title="Lambda Lakehouse Serving API",
@@ -73,6 +76,47 @@ def parse_datetime_param(dt_str: Optional[str], default_offset_minutes: int = 0)
         )
 
 
+def _tcp_status(name: str, host: str, port: int, timeout: float = 0.3) -> Dict[str, Any]:
+    """Check TCP connectivity for a dependency."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return {"name": name, "status": "ok", "host": host, "port": port}
+    except Exception as exc:
+        return {
+            "name": name,
+            "status": "unavailable",
+            "host": host,
+            "port": port,
+            "error": str(exc),
+        }
+
+
+def _clickhouse_status() -> Dict[str, Any]:
+    """Check ClickHouse TCP availability without blocking on a query client."""
+    cfg = get_clickhouse_config()
+    status = _tcp_status("clickhouse", cfg.host, cfg.port)
+    status["database"] = cfg.database
+    return status
+
+
+def _redis_status() -> Dict[str, Any]:
+    """Check Redis TCP availability without making it required for API health."""
+    cfg = get_redis_config()
+    return _tcp_status("redis", cfg.host, cfg.port)
+
+
+def _kafka_status() -> Dict[str, Any]:
+    """Check Kafka bootstrap TCP availability."""
+    cfg = get_kafka_config()
+    bootstrap = cfg.bootstrap_servers.split(",")[0].strip()
+    host, _, port_s = bootstrap.partition(":")
+    try:
+        port = int(port_s or "9092")
+    except ValueError:
+        port = 9092
+    return _tcp_status("kafka", host, port)
+
+
 @app.get("/health", tags=["System"])
 async def health_check():
     """Kiểm tra trạng thái sẵn sàng của Serving Layer."""
@@ -82,6 +126,80 @@ async def health_check():
         "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/api/system/status", tags=["System"])
+async def get_system_status():
+    """Return dependency and freshness status for dashboard/demo readiness."""
+    now = datetime.now(timezone.utc)
+    watermark = _watermark_reader.get_watermark(layer="batch_layer")
+    if watermark.tzinfo is None:
+        watermark = watermark.replace(tzinfo=timezone.utc)
+
+    dependencies = [
+        _clickhouse_status(),
+        _redis_status(),
+        _kafka_status(),
+    ]
+    required_ok = all(
+        item["status"] == "ok"
+        for item in dependencies
+        if item["name"] in {"clickhouse", "kafka"}
+    )
+    overall = "ok" if required_ok else "degraded"
+
+    return {
+        "status": overall,
+        "service": "serving_layer",
+        "timestamp": now.isoformat(),
+        "watermark": {
+            "layer": "batch_layer",
+            "watermark_time": watermark.isoformat(),
+            "freshness_lag_seconds": max((now - watermark).total_seconds(), 0.0),
+        },
+        "dependencies": dependencies,
+    }
+
+
+@app.get("/api/speed/latest", tags=["Market Data"])
+async def get_latest_speed_candle(
+    symbol: str = Query("BTCUSDT", description="Cặp coin cần đọc từ Redis hot cache"),
+):
+    """Read the latest provisional Speed candle from Redis hot cache."""
+    cfg = get_redis_config()
+    key = f"speed:candle:{symbol.upper()}:latest"
+    try:
+        import redis
+        client = redis.Redis(
+            host=cfg.host,
+            port=cfg.port,
+            password=cfg.password or None,
+            decode_responses=True,
+            socket_connect_timeout=0.3,
+            socket_timeout=0.3,
+        )
+        raw = client.get(key)
+        if raw is None:
+            return {
+                "symbol": symbol.upper(),
+                "cache_status": "miss",
+                "redis_key": key,
+                "candle": None,
+            }
+        return {
+            "symbol": symbol.upper(),
+            "cache_status": "hit",
+            "redis_key": key,
+            "candle": json.loads(raw),
+        }
+    except Exception as exc:
+        return {
+            "symbol": symbol.upper(),
+            "cache_status": "unavailable",
+            "redis_key": key,
+            "error": str(exc),
+            "candle": None,
+        }
 
 
 @app.get("/", tags=["System"])

@@ -3,7 +3,7 @@
 
 [![Course](https://img.shields.io/badge/Course-TLCN-blue)](https://github.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-Lambda-green)](https://github.com/)
-[![Status](https://img.shields.io/badge/Status-In--Progress-yellow)](https://github.com/)
+[![Status](https://img.shields.io/badge/Status-End--to--End%20Prototype-green)](https://github.com/)
 
 Thiết kế và triển khai hệ thống **Data Lakehouse** theo mô hình **Lambda Architecture** (Batch Layer + Speed Layer + Serving Layer) với cơ chế tự động đối soát dựa trên Batch Watermark cho thị trường tiền mã hóa (BTCUSDT Binance), sử dụng **Apache Iceberg** làm Open Table Format và **Docker Compose** để đóng gói toàn bộ hạ tầng.
 
@@ -274,28 +274,44 @@ docker compose ps
 
 ## Quick Start
 
-### 1. Seed Sample Data
+### 1. Run One-command Local Pipeline
+```bash
+python scripts/run_lambda_pipeline.py --top-n 5 --mock-days 1 --replay-limit 5000
+```
+
+Lệnh trên sẽ bật các Docker services cần thiết, lấy dữ liệu Binance REST mới nhất, sinh mock data, replay vào Kafka, chạy Batch Layer, để Speed Layer xử lý streaming và smoke check FastAPI.
+
+### 2. Full Smoke Test
+```bash
+python scripts/e2e_full_pipeline.py --top-n 2 --mock-days 1 --replay-limit 1000
+```
+
+### 3. Seed Sample Data Manually
 ```bash
 python scripts/seed_data.py --sample
 ```
 
-### 2. Run Batch Pipeline
+### 4. Run Batch Pipeline Manually
 ```bash
-# Trigger Dagster pipeline hoặc chạy Spark job trực tiếp
+# Khuyến nghị chạy qua Docker để ghi Iceberg thật
+docker compose run --rm batch-pipeline
+
+# Hoặc chạy trực tiếp trên host nếu chỉ cần ClickHouse sync
 python src/batch_layer/spark_batch_jobs.py --mode full
 ```
 
-### 3. Run Speed Layer
+### 5. Run Speed Layer
 ```bash
-python src/speed_layer/spark_streaming.py
+docker compose up -d speed-layer
+docker compose logs -f speed-layer
 ```
 
-### 4. Start Serving API
+### 6. Start Serving API Manually
 ```bash
 uvicorn src.serving_layer.api_routes:app --host 0.0.0.0 --port 8000
 ```
 
-### 5. Run Benchmarks
+### 7. Run Benchmarks
 ```bash
 # Chạy toàn bộ 3 kịch bản benchmark
 python scripts/benchmarks/run_all_benchmarks.py
@@ -328,4 +344,4 @@ python scripts/benchmarks/bench_compaction.py
 
 ---
 
-> **Trạng thái:** In Progress — Đang xây dựng hạ tầng
+> **Trạng thái:** End-to-End Prototype — đã có ingestion, batch, speed, serving, dashboard, compaction, orchestration và benchmark scripts. Cần chạy benchmark thật trên Docker để có số liệu thực nghiệm cuối cùng.

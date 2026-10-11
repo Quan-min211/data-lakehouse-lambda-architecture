@@ -15,6 +15,32 @@ from datetime import datetime, timezone
 from src.speed_layer.metrics_calculator import MetricsCalculator
 from src.speed_layer.spike_detector import SpikeDetector
 from src.speed_layer.trade_schema import TRADE_EVENT_FIELD_NAMES
+from src.speed_layer.redis_writer import RedisSpeedWriter
+
+
+class FakeRedisPipeline:
+    """Minimal Redis pipeline fake for unit tests."""
+
+    def __init__(self):
+        self.commands = []
+
+    def set(self, key, value, ex=None):
+        self.commands.append((key, value, ex))
+        return self
+
+    def execute(self):
+        return [True for _ in self.commands]
+
+
+class FakeRedisClient:
+    """Minimal Redis client fake for unit tests."""
+
+    def __init__(self):
+        self.last_pipeline = None
+
+    def pipeline(self):
+        self.last_pipeline = FakeRedisPipeline()
+        return self.last_pipeline
 
 
 class TestMetricsCalculator(unittest.TestCase):
@@ -109,6 +135,36 @@ class TestSchemaAndFormatting(unittest.TestCase):
         ]
         # Dung TRADE_EVENT_FIELD_NAMES tu trade_schema (khong can Spark JVM)
         self.assertEqual(TRADE_EVENT_FIELD_NAMES, expected)
+
+
+class TestRedisSpeedWriter(unittest.TestCase):
+    """Kiem thu Redis hot-cache writer khong can Redis server that."""
+
+    def test_write_records_uses_symbol_and_window_key(self):
+        fake_client = FakeRedisClient()
+        writer = RedisSpeedWriter(client=fake_client, ttl_seconds=60)
+        record = {
+            "symbol": "btcusdt",
+            "window_start": datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc),
+            "window_end": datetime(2026, 9, 4, 12, 1, 0, tzinfo=timezone.utc),
+            "open_price": 60000.0,
+            "high_price": 60100.0,
+            "low_price": 59900.0,
+            "close_price": 60050.0,
+            "volume": 5.0,
+            "trade_count": 20,
+            "vwap": 60020.0,
+            "is_spike": 0,
+        }
+
+        written = writer.write_records([record])
+
+        self.assertEqual(written, 1)
+        commands = fake_client.last_pipeline.commands
+        self.assertEqual(len(commands), 2)
+        self.assertEqual(commands[0][0], "speed:candle:BTCUSDT:1788523200000")
+        self.assertEqual(commands[1][0], "speed:candle:BTCUSDT:latest")
+        self.assertEqual(commands[0][2], 60)
 
 
 if __name__ == "__main__":

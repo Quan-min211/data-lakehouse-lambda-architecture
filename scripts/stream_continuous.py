@@ -26,6 +26,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None  # type: ignore[assignment]
+
 # ── path setup ──────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -44,7 +49,8 @@ DIM    = "\033[2m"
 KAFKA_BROKERS = ["localhost:9094", "localhost:9092"]
 KAFKA_TOPIC   = "crypto_trades_raw"
 
-BASE_PRICES: dict[str, float] = {
+# Giá dự phòng — chỉ dùng khi Binance API không trả lời
+_FALLBACK_PRICES: dict[str, float] = {
     "BTCUSDT":  95_000.0,
     "ETHUSDT":   3_500.0,
     "SOLUSDT":     180.0,
@@ -56,6 +62,50 @@ BASE_PRICES: dict[str, float] = {
     "LINKUSDT":     15.20,
     "AVAXUSDT":     35.00,
 }
+
+BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
+
+
+def _fetch_live_prices(symbols: list[str]) -> dict[str, float]:
+    """Goi Binance REST API de lay gia hien tai cua tung symbol.
+
+    Args:
+        symbols: Danh sach cac cap coin can lay gia.
+
+    Returns:
+        Dict mapping symbol -> gia hien tai (float).
+        Neu API loi, tra ve _FALLBACK_PRICES.
+    """
+    if _requests is None:
+        print(f"  {YELLOW}[WARN]{RESET} Thieu thu vien 'requests' — dung gia fallback.")
+        return {s: _FALLBACK_PRICES.get(s, 100.0) for s in symbols}
+
+    print(f"  {CYAN}[INIT]{RESET} Dang lay gia hien tai tu Binance REST API...", end="", flush=True)
+    try:
+        resp = _requests.get(BINANCE_PRICE_URL, timeout=8)
+        resp.raise_for_status()
+        price_list: list[dict] = resp.json()
+        price_map = {item["symbol"]: float(item["price"]) for item in price_list}
+
+        result: dict[str, float] = {}
+        for sym in symbols:
+            if sym in price_map:
+                result[sym] = price_map[sym]
+            else:
+                result[sym] = _FALLBACK_PRICES.get(sym, 100.0)
+
+        fetched = [s for s in symbols if s in price_map]
+        missed  = [s for s in symbols if s not in price_map]
+        print(f"\r  {GREEN}[OK]{RESET}  Lay duoc gia thật tu Binance cho {len(fetched)} symbols.")
+        if missed:
+            print(f"  {YELLOW}[WARN]{RESET} Khong tim thay: {missed} — dung gia fallback.")
+        for sym, px in result.items():
+            print(f"         {DIM}{sym:10s}: {RESET}{BOLD}${px:,.4f}{RESET}")
+        return result
+
+    except Exception as exc:
+        print(f"\r  {YELLOW}[WARN]{RESET} Khong lay duoc gia Binance ({exc}) — dung gia fallback.")
+        return {s: _FALLBACK_PRICES.get(s, 100.0) for s in symbols}
 
 # ── Global state ─────────────────────────────────────────────────────────────
 _running = True
@@ -171,8 +221,8 @@ def stream_continuous(
     """Vòng lặp stream liên tục cho đến khi Ctrl+C."""
     global _running, _prices
 
-    # Khởi tạo giá ban đầu
-    _prices = {s: BASE_PRICES.get(s, 100.0) for s in symbols}
+    # Khoi tao gia ban dau: lay tu Binance REST API, fallback neu khong co mang
+    _prices = _fetch_live_prices(symbols)
 
     print(f"\n{BOLD}{'=' * 72}{RESET}")
     print(f"{BOLD}{'  ⚡ CONTINUOUS STREAM — DATA LAKEHOUSE LAMBDA ARCHITECTURE':^72}{RESET}")

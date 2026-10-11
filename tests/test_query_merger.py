@@ -125,6 +125,8 @@ class TestAutoCorrectingQueryMerger(unittest.TestCase):
         self.assertEqual(resp.overall_status, CandleStatus.RECONCILED)
         self.assertEqual(resp.reconciliation_delta, 0.0)
         self.assertEqual(resp.candles_count, 2)
+        self.assertEqual(resp.source_breakdown["batch"], 2)
+        self.assertEqual(resp.source_breakdown["speed"], 0)
         for candle in resp.candles:
             self.assertEqual(candle.status, CandleStatus.RECONCILED)
 
@@ -139,6 +141,8 @@ class TestAutoCorrectingQueryMerger(unittest.TestCase):
         self.assertEqual(resp.overall_status, CandleStatus.PROVISIONAL)
         self.assertIsNone(resp.reconciliation_delta)
         self.assertEqual(resp.candles_count, 2)
+        self.assertEqual(resp.source_breakdown["batch"], 0)
+        self.assertEqual(resp.source_breakdown["speed"], 2)
         for candle in resp.candles:
             self.assertEqual(candle.status, CandleStatus.PROVISIONAL)
 
@@ -170,6 +174,33 @@ class TestAutoCorrectingQueryMerger(unittest.TestCase):
 
         # Kiểm tra sai số đối soát tại biên
         self.assertEqual(resp.reconciliation_delta, 15.0)
+        self.assertEqual(resp.source_breakdown["batch"], 2)
+        self.assertEqual(resp.source_breakdown["speed"], 2)
+        self.assertEqual(resp.source_breakdown["deduplicated"], 0)
+        self.assertEqual(resp.freshness_lag_seconds, 120.0)
+
+    def test_dedupe_prefers_reconciled_batch_at_same_window(self):
+        """Nếu Batch và Speed trùng window_start, Merger ưu tiên Batch để tránh double count."""
+        duplicate_speed = dict(self.speed_candles[1])
+        duplicate_speed["window_start"] = self.batch_candles[1]["window_start"]
+        duplicate_speed["window_end"] = self.batch_candles[1]["window_end"]
+        duplicate_speed["vwap"] = 99999.0
+        duplicate_speed["volume"] = 99.0
+
+        candles = self.merger._as_candles(
+            [self.batch_candles[1]],
+            CandleStatus.RECONCILED,
+        ) + self.merger._as_candles(
+            [duplicate_speed],
+            CandleStatus.PROVISIONAL,
+        )
+
+        deduped, duplicate_count = self.merger._dedupe_prefer_batch(candles)
+
+        self.assertEqual(duplicate_count, 1)
+        self.assertEqual(len(deduped), 1)
+        self.assertEqual(deduped[0].status, CandleStatus.RECONCILED)
+        self.assertEqual(deduped[0].vwap, 60200.0)
 
     def test_reconciliation_report(self):
         """Kiểm tra bảng báo cáo đối soát Benchmark 2."""
@@ -226,6 +257,23 @@ class TestFastAPIRoutes(unittest.TestCase):
         self.assertEqual(data["symbol"], "BTCUSDT")
         self.assertIn("query_case", data)
         self.assertIn("candles", data)
+        self.assertIn("source_breakdown", data)
+
+    def test_system_status_endpoint(self):
+        resp = self.client.get("/api/system/status")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn(data["status"], ["ok", "degraded"])
+        self.assertIn("dependencies", data)
+        self.assertIn("watermark", data)
+
+    def test_latest_speed_candle_endpoint(self):
+        resp = self.client.get("/api/speed/latest?symbol=BTCUSDT")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["symbol"], "BTCUSDT")
+        self.assertIn(data["cache_status"], ["hit", "miss", "unavailable"])
+        self.assertIn("redis_key", data)
 
 
 if __name__ == "__main__":

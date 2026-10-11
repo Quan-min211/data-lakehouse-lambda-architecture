@@ -338,9 +338,14 @@ def run_batch_pipeline(
     )
 
     clickhouse_rows = 0
+    quarantine_rows = 0
     watermark_synced = False
     if sync_clickhouse:
         sync = ClickHouseBatchSync()
+        quarantine_rows = sync.insert_quarantine_records(
+            rejected_records,
+            batch_run_id=batch_run_id,
+        )
         clickhouse_rows = sync.insert_batch_aggregates(candles, batch_run_id=batch_run_id)
         if watermark is not None:
             watermark_synced = sync.update_watermark(watermark)
@@ -362,6 +367,7 @@ def run_batch_pipeline(
         "dq_pass_rate": quality.pass_rate,
         "candles_count": len(candles),
         "clickhouse_rows": clickhouse_rows,
+        "quarantine_rows": quarantine_rows,
         "watermark": watermark.isoformat() if watermark else None,
         "watermark_synced": watermark_synced,
         "iceberg_result": iceberg_result,

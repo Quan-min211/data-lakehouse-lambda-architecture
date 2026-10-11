@@ -43,6 +43,38 @@ class AutoCorrectingQueryMerger:
         self.watermark_reader = watermark_reader or WatermarkReader()
         self.ch_client = ch_client or ClickHouseQueryClient()
 
+    @staticmethod
+    def _as_candles(
+        records: List[Dict[str, Any]],
+        status: CandleStatus,
+    ) -> List[CandleData]:
+        """Convert raw ClickHouse rows to typed CandleData records."""
+        return [CandleData(**record, status=status) for record in records]
+
+    @staticmethod
+    def _dedupe_prefer_batch(candles: List[CandleData]) -> tuple[List[CandleData], int]:
+        """
+        Deduplicate candles by (symbol, window_start), preferring reconciled Batch data.
+
+        Returns:
+            tuple of (deduplicated_candles, duplicate_count).
+        """
+        by_key: Dict[tuple[str, datetime], CandleData] = {}
+        duplicate_count = 0
+
+        for candle in candles:
+            key = (candle.symbol.upper(), candle.window_start)
+            existing = by_key.get(key)
+            if existing is None:
+                by_key[key] = candle
+                continue
+
+            duplicate_count += 1
+            if existing.status != CandleStatus.RECONCILED and candle.status == CandleStatus.RECONCILED:
+                by_key[key] = candle
+
+        return sorted(by_key.values(), key=lambda c: c.window_start), duplicate_count
+
     def merge_query(
         self,
         symbol: str,
@@ -71,6 +103,7 @@ class AutoCorrectingQueryMerger:
 
         candles: List[CandleData] = []
         reconciliation_delta: Optional[float] = None
+        source_breakdown = {"batch": 0, "speed": 0, "deduplicated": 0}
 
         # ---------------------------------------------------------------------
         # CASE 1: TOÀN BỘ LÀ DỮ LIỆU LỊCH SỬ (T_end <= Watermark)
@@ -89,9 +122,8 @@ class AutoCorrectingQueryMerger:
                 start_time=start_time,
                 end_time=end_time,
             )
-            for r in raw_batch:
-                c = CandleData(**r, status=CandleStatus.RECONCILED)
-                candles.append(c)
+            candles.extend(self._as_candles(raw_batch, CandleStatus.RECONCILED))
+            source_breakdown["batch"] = len(raw_batch)
 
         # ---------------------------------------------------------------------
         # CASE 2: TOÀN BỘ LÀ DỮ LIỆU THỜI GIAN THỰC (T_start > Watermark)
@@ -110,9 +142,8 @@ class AutoCorrectingQueryMerger:
                 start_time=start_time,
                 end_time=end_time,
             )
-            for r in raw_speed:
-                c = CandleData(**r, status=CandleStatus.PROVISIONAL)
-                candles.append(c)
+            candles.extend(self._as_candles(raw_speed, CandleStatus.PROVISIONAL))
+            source_breakdown["speed"] = len(raw_speed)
 
         # ---------------------------------------------------------------------
         # CASE 3: GIAO THOA LAI (T_start <= Watermark < T_end)
@@ -121,32 +152,30 @@ class AutoCorrectingQueryMerger:
             query_case = QueryCase.CASE_3_HYBRID
             case_desc = (
                 "Case 3 (Hybrid): Tự động phân tách tại Watermark. "
-                "Cửa sổ [T_start, Watermark] lấy từ Batch (Reconciled) + (Watermark, T_end] lấy từ Speed (Provisional). "
+                "Cửa sổ [T_start, Watermark) lấy từ Batch (Reconciled) + [Watermark, T_end) lấy từ Speed (Provisional). "
                 "Cam kết ZERO DOUBLE-COUNTING!"
             )
             overall_status = CandleStatus.PARTIALLY_RECONCILED
 
-            # 3.1: Truy vấn phần lịch sử từ Batch Layer: [start_time, watermark]
+            # 3.1: Truy vấn phần lịch sử từ Batch Layer: [start_time, watermark)
             raw_batch = self.ch_client.query_candles(
                 table="batch_agg",
                 symbol=symbol,
                 start_time=start_time,
                 end_time=watermark,
             )
-            for r in raw_batch:
-                c = CandleData(**r, status=CandleStatus.RECONCILED)
-                candles.append(c)
+            candles.extend(self._as_candles(raw_batch, CandleStatus.RECONCILED))
+            source_breakdown["batch"] = len(raw_batch)
 
-            # 3.2: Truy vấn phần tức thời từ Speed Layer: (watermark, end_time]
+            # 3.2: Truy vấn phần tức thời từ Speed Layer: [watermark, end_time)
             raw_speed = self.ch_client.query_candles(
                 table="speed_agg",
                 symbol=symbol,
                 start_time=watermark,
                 end_time=end_time,
             )
-            for r in raw_speed:
-                c = CandleData(**r, status=CandleStatus.PROVISIONAL)
-                candles.append(c)
+            candles.extend(self._as_candles(raw_speed, CandleStatus.PROVISIONAL))
+            source_breakdown["speed"] = len(raw_speed)
 
             # 3.3: Tính sai số đối soát (Reconciliation Delta) tại vùng biên Watermark
             # Lấy nến tại hoặc sát mốc Watermark để so sánh sai lệch giữa Speed và Batch
@@ -169,8 +198,9 @@ class AutoCorrectingQueryMerger:
                 vwap_s = float(last_s.get("vwap", 0.0))
                 reconciliation_delta = round(abs(vwap_s - vwap_b), 4)
 
-        # Sắp xếp các nến theo window_start tăng dần
-        candles.sort(key=lambda c: c.window_start)
+        candles, duplicate_count = self._dedupe_prefer_batch(candles)
+        source_breakdown["deduplicated"] = duplicate_count
+        freshness_lag_seconds = max((end_time - watermark).total_seconds(), 0.0)
 
         return MarketDataResponse(
             symbol=symbol,
@@ -182,6 +212,8 @@ class AutoCorrectingQueryMerger:
             reconciliation_delta=reconciliation_delta,
             candles_count=len(candles),
             candles=candles,
+            source_breakdown=source_breakdown,
+            freshness_lag_seconds=freshness_lag_seconds,
         )
 
     def get_reconciliation_report(

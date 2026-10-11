@@ -252,6 +252,11 @@ services:
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-lakehouse}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      # Redis hot cache for provisional Speed Views
+      - SPEED_WRITE_REDIS=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_TTL_SECONDS=${REDIS_TTL_SECONDS:-3600}
       # Checkpoint luu vao volume de giu trang thai khi container restart
       - CHECKPOINT_DIR=/app/checkpoints/speed_layer
       # Trigger moi 5 giay (SLA < 5s end-to-end)
@@ -264,6 +269,8 @@ services:
       kafka:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - lakehouse-net
@@ -466,7 +473,8 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - ICEBERG_REST_URI=http://iceberg-rest:8181
       - SPARK_MASTER_URL=spark://spark-master:7077
-      - BATCH_WRITE_ICEBERG=false
+      - BATCH_WRITE_ICEBERG=true
+      - BATCH_ICEBERG_STRICT=true
     volumes:
       - ./src:/app/src
       - ./dagster_project:/app/dagster_project

@@ -63,7 +63,11 @@ def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
     records = load_default_records()
 
     write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "false").lower() == "true"
-    iceberg_result = maybe_write_bronze_to_iceberg(records, batch_run_id) if write_iceberg else None
+    iceberg_strict = os.getenv("BATCH_ICEBERG_STRICT", "false").lower() == "true"
+    iceberg_result = (
+        maybe_write_bronze_to_iceberg(records, batch_run_id, strict=iceberg_strict)
+        if write_iceberg else None
+    )
 
     context.log.info("Loaded %s raw TradeEvent records for %s", len(records), batch_run_id)
     return Output(
@@ -76,6 +80,7 @@ def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
             "batch_run_id": MetadataValue.text(batch_run_id),
             "records_loaded": MetadataValue.int(len(records)),
             "iceberg_write_enabled": MetadataValue.bool(write_iceberg),
+            "iceberg_strict": MetadataValue.bool(iceberg_strict),
             "iceberg_snapshot": MetadataValue.text(str(iceberg_result.get("snapshot_id")) if iceberg_result else "skipped"),
         },
     )
@@ -143,6 +148,36 @@ def gold_market_aggregates(context, silver: Dict[str, Any]) -> Output[Dict[str, 
         metadata={
             "total_candles": MetadataValue.int(len(candles)),
             "watermark": MetadataValue.text(watermark.isoformat() if watermark else "none"),
+        },
+    )
+
+
+@asset(
+    ins={"silver": AssetIn("silver_cleaned_trades")},
+    group_name="lakehouse_batch",
+    description="Persist rejected Silver records into ClickHouse quarantine table for audit.",
+    metadata={
+        "target_db": "ClickHouse",
+        "target_table": "lakehouse.dq_quarantine",
+    },
+)
+def clickhouse_quarantine_sync(context, silver: Dict[str, Any]) -> Output[Dict[str, Any]]:
+    """Publish DQ rejected records to ClickHouse quarantine."""
+    sync = ClickHouseBatchSync()
+    rows_inserted = sync.insert_quarantine_records(
+        silver["rejected_records"],
+        batch_run_id=silver["batch_run_id"],
+    )
+    context.log.info("ClickHouse quarantine sync inserted %s rows", rows_inserted)
+
+    return Output(
+        value={
+            "batch_run_id": silver["batch_run_id"],
+            "rows_inserted": rows_inserted,
+        },
+        metadata={
+            "rows_inserted": MetadataValue.int(rows_inserted),
+            "clickhouse_table": MetadataValue.text("lakehouse.dq_quarantine"),
         },
     )
 
@@ -247,6 +282,7 @@ batch_lakehouse_pipeline_job = define_asset_job(
     selection=[
         "bronze_crypto_trades",
         "silver_cleaned_trades",
+        "clickhouse_quarantine_sync",
         "gold_market_aggregates",
         "clickhouse_batch_sync",
         "system_watermark_sync",
@@ -277,6 +313,7 @@ compaction_schedule = ScheduleDefinition(
 all_assets = [
     bronze_crypto_trades,
     silver_cleaned_trades,
+    clickhouse_quarantine_sync,
     gold_market_aggregates,
     clickhouse_batch_sync,
     system_watermark_sync,

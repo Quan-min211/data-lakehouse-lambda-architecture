@@ -113,19 +113,19 @@ def get_badge_html(status: str) -> str:
         border_color = "#00E676"
         text_color = "#00E676"
         dot_class = "pulse-green"
-        label = "RECONCILED (Ground Truth)"
+        label = "Reconciled (Ground Truth)"
     elif "Provisional" in clean_status:
-        bg_color = "rgba(213, 0, 249, 0.15)"
-        border_color = "#D500F9"
-        text_color = "#EA80FC"
+        bg_color = "rgba(179, 136, 255, 0.15)"
+        border_color = "#B388FF"
+        text_color = "#B388FF"
         dot_class = "pulse-purple"
-        label = "PROVISIONAL (Speed Layer)"
+        label = "Provisional (Speed Layer)"
     else:  # Partially Reconciled / Hybrid
         bg_color = "rgba(255, 145, 0, 0.15)"
         border_color = "#FF9100"
         text_color = "#FFB74D"
         dot_class = "pulse-orange"
-        label = "PARTIALLY RECONCILED (Hybrid)"
+        label = "Partially Reconciled (Hybrid)"
 
     return (
         f'{BADGE_CSS}'

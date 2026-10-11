@@ -64,6 +64,14 @@ class MarketDataResponse(BaseModel):
     )
     candles_count: int
     candles: List[CandleData]
+    source_breakdown: Dict[str, int] = Field(
+        default_factory=dict,
+        description="So luong candle lay tu tung source, vi du batch/speed/deduplicated."
+    )
+    freshness_lag_seconds: Optional[float] = Field(
+        default=None,
+        description="Do tre cua Batch Watermark so voi thoi diem query end_time, tinh bang giay."
+    )
 
 
 class WatermarkResponse(BaseModel):

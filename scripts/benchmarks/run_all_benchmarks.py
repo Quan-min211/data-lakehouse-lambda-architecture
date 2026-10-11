@@ -88,8 +88,10 @@ def main() -> None:
     try:
         from scripts.benchmarks.bench_latency import (
             OUTPUT_CSV as LAT_CSV,
+            SUMMARY_CSV as LAT_SUMMARY_CSV,
             run_benchmark as lat_run,
             write_csv as lat_write,
+            write_summary_csv as lat_write_summary,
             print_summary as lat_print,
         )
         rows_lat = lat_run(
@@ -99,6 +101,7 @@ def main() -> None:
         )
         if rows_lat:
             lat_write(rows_lat, LAT_CSV)
+            lat_write_summary(rows_lat, LAT_SUMMARY_CSV)
             lat_print(rows_lat)
         results["benchmark_1"] = {"status": "ok", "rows": len(rows_lat)}
     except SystemExit:

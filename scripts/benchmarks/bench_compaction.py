@@ -7,7 +7,7 @@ Muc tieu:
   Do luong hieu qua cua Iceberg Compaction (Bin-Packing) bang cach:
     1. Chay mot loat query doc du lieu tu Bronze Iceberg table TRUOC compaction
     2. Kich hoat IcebergCompactionJob (Bin-Packing)
-    3. Chay lai cung loat query do NACH compaction
+    3. Chay lai cung loat query do sau compaction
     4. So sanh: thoi gian doc, so file Parquet, kich thuoc manifest
 
 Chi so do:
@@ -29,7 +29,7 @@ Dau ra:
 
 Su dung:
   python scripts/benchmarks/bench_compaction.py
-  python scripts/benchmarks/bench_compaction.py --rows 10000 --runs 20
+  python scripts/benchmarks/bench_compaction.py --runs 20
   python scripts/benchmarks/bench_compaction.py --simulate   (buoc ep simulation)
 
 Luu y:
@@ -167,7 +167,7 @@ def run_real_benchmark(
     from src.batch_layer.iceberg_utils import BRONZE_FULL_NAME
 
     logger.info("Khoi dong Spark Session...")
-    spark, manager = _try_import_spark()
+    spark, _manager = _try_import_spark()
 
     all_rows: List[Dict[str, Any]] = []
     ts = _now_utc().isoformat()
@@ -198,7 +198,7 @@ def run_real_benchmark(
     logger.info("Bat dau Iceberg Bin-Packing Compaction...")
     job = CompactionJob(spark)
     t_compact_start = time.perf_counter()
-    compaction_result = job.run_binpack_compaction()
+    compaction_result = job.run_bin_packing_compaction()
     compaction_duration_s = time.perf_counter() - t_compact_start
     logger.info(
         "Compaction hoan tat trong %.1fs: %s",

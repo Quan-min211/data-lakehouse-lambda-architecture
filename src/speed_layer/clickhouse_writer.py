@@ -23,6 +23,7 @@ except ImportError:
 
 from src.utils.logger import setup_logger
 from src.utils.config import get_clickhouse_config
+from src.speed_layer.redis_writer import RedisSpeedWriter
 
 logger = setup_logger("clickhouse_writer")
 
@@ -60,6 +61,8 @@ class ClickHouseSpeedWriter:
         user: Optional[str] = None,
         password: Optional[str] = None,
         database: Optional[str] = None,
+        redis_writer: Optional[RedisSpeedWriter] = None,
+        enable_redis_cache: Optional[bool] = None,
     ):
         ch_config = get_clickhouse_config()
         self.host = host or ch_config.host
@@ -68,6 +71,11 @@ class ClickHouseSpeedWriter:
         self.password = password or ch_config.password
         self.database = database or ch_config.database
         self._client = None
+        if enable_redis_cache is None:
+            enable_redis_cache = os.getenv("SPEED_WRITE_REDIS", "true").lower() == "true"
+        self.redis_writer = redis_writer if redis_writer is not None else (
+            RedisSpeedWriter() if enable_redis_cache else None
+        )
 
     def get_client(self):
         """Khởi tạo hoặc trả về client ClickHouse."""
@@ -147,6 +155,11 @@ class ClickHouseSpeedWriter:
 
         client.insert("lakehouse.speed_agg", data, column_names=columns)
         logger.info(f"Đã ghi thành công {len(data)} nến vào 'lakehouse.speed_agg'")
+
+        if self.redis_writer is not None:
+            cached = self.redis_writer.write_records(records)
+            logger.info(f"Đã cache {cached}/{len(data)} nến Speed View vào Redis")
+
         return len(data)
 
     def write_batch_from_spark(self, batch_df, batch_id: int):

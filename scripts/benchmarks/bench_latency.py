@@ -52,6 +52,7 @@ logger = setup_logger("bench_latency")
 # ── constants ────────────────────────────────────────────────────────────────
 RESULT_DIR = ROOT_DIR / "results" / "logs"
 OUTPUT_CSV = RESULT_DIR / "bench_latency.csv"
+SUMMARY_CSV = RESULT_DIR / "bench_latency_summary.csv"
 FIELDNAMES = [
     "run_id",
     "query_type",
@@ -59,6 +60,18 @@ FIELDNAMES = [
     "symbol",
     "latency_ms",
     "rows_returned",
+    "watermark",
+    "ts",
+]
+SUMMARY_FIELDNAMES = [
+    "query_type",
+    "strategy",
+    "symbol",
+    "runs",
+    "p50_ms",
+    "p95_ms",
+    "p99_ms",
+    "avg_rows_returned",
     "watermark",
     "ts",
 ]
@@ -324,6 +337,45 @@ def write_csv(rows: List[Dict[str, Any]], path: Path) -> None:
     logger.info("Da ghi %d dong vao %s", len(rows), path)
 
 
+def build_summary_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Build P50/P95/P99 summary rows without changing the raw CSV format."""
+    grouped: Dict[tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(row["query_type"], row["strategy"], row["symbol"])].append(row)
+
+    summary_rows: List[Dict[str, Any]] = []
+    for (query_type, strategy, symbol), items in sorted(grouped.items()):
+        latencies = [float(item["latency_ms"]) for item in items]
+        row_counts = [int(item.get("rows_returned", 0)) for item in items]
+        avg_rows = round(sum(row_counts) / len(row_counts), 2) if row_counts else 0.0
+        summary_rows.append({
+            "query_type": query_type,
+            "strategy": strategy,
+            "symbol": symbol,
+            "runs": len(items),
+            "p50_ms": _percentile(latencies, 50),
+            "p95_ms": _percentile(latencies, 95),
+            "p99_ms": _percentile(latencies, 99),
+            "avg_rows_returned": avg_rows,
+            "watermark": items[-1].get("watermark", ""),
+            "ts": _now_utc().isoformat(),
+        })
+    return summary_rows
+
+
+def write_summary_csv(rows: List[Dict[str, Any]], path: Path) -> None:
+    """Append P50/P95/P99 summary rows to a separate CSV file."""
+    RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    summary_rows = build_summary_rows(rows)
+    is_new = not path.exists()
+    with path.open("a", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=SUMMARY_FIELDNAMES)
+        if is_new:
+            writer.writeheader()
+        writer.writerows(summary_rows)
+    logger.info("Da ghi %d dong summary vao %s", len(summary_rows), path)
+
+
 def print_summary(rows: List[Dict[str, Any]]) -> None:
     """Print a human-readable P50/P95/P99 table to stdout."""
     groups: Dict[str, List[float]] = defaultdict(list)
@@ -373,6 +425,10 @@ def main() -> None:
         "--output", default=str(OUTPUT_CSV),
         help=f"Duong dan file CSV dau ra. Mac dinh: {OUTPUT_CSV}",
     )
+    parser.add_argument(
+        "--summary-output", default=str(SUMMARY_CSV),
+        help=f"Duong dan file summary CSV P50/P95/P99. Mac dinh: {SUMMARY_CSV}",
+    )
     args = parser.parse_args()
 
     # Parse optional --reference-time override
@@ -397,6 +453,7 @@ def main() -> None:
     if rows:
         output_path = Path(args.output)
         write_csv(rows, output_path)
+        write_summary_csv(rows, Path(args.summary_output))
         print_summary(rows)
     else:
         logger.warning("Khong co ket qua nao duoc ghi.")

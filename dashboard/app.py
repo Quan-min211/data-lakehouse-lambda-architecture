@@ -33,6 +33,7 @@ from dashboard.components.benchmark_charts import (
 )
 from dashboard.components.dq_panel import render_dq_quarantine_panel
 from dashboard.components.watermark_status import render_watermark_status_bar
+from dashboard.components.system_status import render_system_status_panel
 
 
 # =============================================================================
@@ -114,6 +115,30 @@ def fetch_watermark(api_url: str) -> Optional[Dict[str, Any]]:
     endpoint = f"{api_url.rstrip('/')}/api/watermark"
     try:
         resp = requests.get(endpoint, timeout=3)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def fetch_system_status(api_url: str) -> Optional[Dict[str, Any]]:
+    """Gọi Serving Layer FastAPI GET /api/system/status."""
+    endpoint = f"{api_url.rstrip('/')}/api/system/status"
+    try:
+        resp = requests.get(endpoint, timeout=3)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def fetch_latest_speed_candle(api_url: str, symbol: str) -> Optional[Dict[str, Any]]:
+    """Gọi Serving Layer FastAPI GET /api/speed/latest."""
+    endpoint = f"{api_url.rstrip('/')}/api/speed/latest"
+    try:
+        resp = requests.get(endpoint, params={"symbol": symbol}, timeout=3)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
@@ -272,6 +297,8 @@ def main():
     # Lấy dữ liệu
     market_data = fetch_api_data(api_base_url, selected_symbol, start_time, end_time)
     watermark_info = fetch_watermark(api_base_url)
+    system_status = fetch_system_status(api_base_url)
+    latest_speed = fetch_latest_speed_candle(api_base_url, selected_symbol)
 
     # 1. Vẽ hàng thẻ chỉ số KPI & Phân luồng Query Merger
     render_metrics_cards(market_data, watermark_info)
@@ -286,11 +313,12 @@ def main():
     fig = render_candlestick_chart(candles, symbol=selected_symbol)
     st.plotly_chart(fig, use_container_width=True)
 
-    # 3. Tabs: Market + Benchmark + Data Quality + Architecture
-    tab_market, tab_bench, tab_dq, tab_spike, tab_arch = st.tabs([
+    # 3. Tabs: Market + Benchmark + Data Quality + System + Architecture
+    tab_market, tab_bench, tab_dq, tab_system, tab_spike, tab_arch = st.tabs([
         "📊 Đối Soát Hai Tầng",
         "🏆 Benchmark & Đánh Giá",
         "🛡️ Data Quality & Quarantine",
+        "🧭 System Readiness",
         "⚠️ Cảnh Báo Sốc Giá",
         "🏛️ Kiến Trúc Lambda",
     ])
@@ -340,6 +368,14 @@ def main():
         ch_host = os.getenv("CLICKHOUSE_HOST", "localhost")
         ch_port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
         render_dq_quarantine_panel(clickhouse_host=ch_host, clickhouse_port=ch_port)
+
+    with tab_system:
+        st.subheader("System Readiness & Freshness")
+        render_system_status_panel(system_status, latest_speed=latest_speed)
+        source_breakdown = market_data.get("source_breakdown", {})
+        if source_breakdown:
+            st.markdown("##### Query Source Breakdown")
+            st.json(source_breakdown)
 
     with tab_spike:
         st.subheader("Nhat Ky Phat Hien Bien Dong Bat Thuong (Spike Detection)")
