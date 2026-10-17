@@ -187,6 +187,9 @@ def create_spark_session(app_name: str = "CryptoLakehouse-SpeedLayer"):
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.default.parallelism", "4")
         .config("spark.sql.streaming.forceDeleteTempCheckpointLocation", "true")
+        # StateStore maintenance & memory bounds for 24/7 streaming
+        .config("spark.sql.streaming.stateStore.maintenanceInterval", "60s")
+        .config("spark.sql.streaming.stateStore.minDeltasForSnapshot", "10")
         # Kafka SQL connector -- tai ve tu Maven khi khoi dong
         .config(
             "spark.jars.packages",
@@ -220,12 +223,18 @@ class SpeedLayerStreamingJob:
         checkpoint_dir: Optional[str] = None,
         watermark: str = "1 minute",
         window_duration: str = "1 minute",
+        max_offsets_per_trigger: Optional[int] = None,
     ):
         self.spark = spark
         kafka_cfg = get_kafka_config()
         self.kafka_bootstrap = kafka_bootstrap or kafka_cfg.bootstrap_servers
         self.topic = topic or kafka_cfg.topic_raw
         self.checkpoint_dir = checkpoint_dir or CHECKPOINT_DIR
+        self.max_offsets_per_trigger = (
+            max_offsets_per_trigger
+            if max_offsets_per_trigger is not None
+            else int(os.getenv("KAFKA_MAX_OFFSETS_PER_TRIGGER", "50000"))
+        )
         self.aggregator = WindowAggregator(
             watermark_duration=watermark,
             window_duration=window_duration,
@@ -277,15 +286,20 @@ class SpeedLayerStreamingJob:
             self.topic, self.kafka_bootstrap,
         )
 
-        # 1. Doc luong du lieu tu Kafka
-        raw_stream = (
+        # 1. Doc luong du lieu tu Kafka (ap dung backpressure guardrail neu co)
+        raw_stream_reader = (
             self.spark.readStream.format("kafka")
             .option("kafka.bootstrap.servers", self.kafka_bootstrap)
             .option("subscribe", self.topic)
             .option("startingOffsets", "latest")
             .option("failOnDataLoss", "false")
-            .load()
         )
+        if self.max_offsets_per_trigger and self.max_offsets_per_trigger > 0:
+            logger.info("Kafka rate limit: maxOffsetsPerTrigger=%d", self.max_offsets_per_trigger)
+            raw_stream_reader = raw_stream_reader.option(
+                "maxOffsetsPerTrigger", str(self.max_offsets_per_trigger)
+            )
+        raw_stream = raw_stream_reader.load()
 
         # 2. Parse cau truc du lieu theo Data Contract
         parsed_events = self.aggregator.parse_kafka_stream(raw_stream)
@@ -336,6 +350,10 @@ def main() -> None:
     parser.add_argument("--window", default="1 minute", help="Window duration")
     parser.add_argument("--trigger", default=None, help="Micro-batch trigger interval")
     parser.add_argument(
+        "--max-offsets-per-trigger", type=int, default=None,
+        help="Rate limit: So message toi da moi micro-batch (chong OOM khi flash crash). Default: 50000",
+    )
+    parser.add_argument(
         "--once", action="store_true",
         help="Chay mot micro-batch duy nhat roi dung (test mode)",
     )
@@ -361,6 +379,7 @@ def main() -> None:
         topic=args.topic,
         watermark=args.watermark,
         window_duration=args.window,
+        max_offsets_per_trigger=args.max_offsets_per_trigger,
     )
 
     query = job.run(trigger_interval=args.trigger, once=args.once)

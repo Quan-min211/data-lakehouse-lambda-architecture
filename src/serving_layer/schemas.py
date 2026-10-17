@@ -92,4 +92,12 @@ class ReconciliationDetail(BaseModel):
     batch_volume: Optional[float]
     speed_volume: Optional[float]
     volume_delta: Optional[float]
+    volume_drift_pct: Optional[float] = Field(
+        default=None,
+        description="Relative Volume Drift Delta V% = |Speed_Vol - Batch_Vol| / Batch_Vol * 100",
+    )
+    reconciliation_status: Optional[str] = Field(
+        default=None,
+        description="'MATCHED' | 'RECONCILED_AND_HEALED' | 'PROVISIONAL_ONLY' | 'BATCH_ONLY'",
+    )
     is_reconciled: bool

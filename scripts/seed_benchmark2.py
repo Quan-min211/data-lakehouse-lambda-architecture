@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.batch_agg
     trade_count     UInt64,
     vwap            Float64,
     is_spike        UInt8 DEFAULT 0,
-    status          LowCardinality(String) DEFAULT 'Reconciled',
+    batch_run_id    String DEFAULT 'bm2_seed',
     created_at      DateTime64(3, 'UTC') DEFAULT now64(3)
 )
 ENGINE = ReplacingMergeTree(created_at)
@@ -460,7 +460,7 @@ def insert_batch_candles(client, candles: List[Dict[str, Any]]) -> int:
     columns = [
         "symbol", "window_start", "window_end",
         "open_price", "high_price", "low_price", "close_price",
-        "volume", "trade_count", "vwap", "is_spike", "status", "created_at",
+        "volume", "trade_count", "vwap", "is_spike", "batch_run_id", "created_at",
     ]
     now_utc = _now_utc()
     rows = [
@@ -468,7 +468,7 @@ def insert_batch_candles(client, candles: List[Dict[str, Any]]) -> int:
             c["symbol"], c["window_start"], c["window_end"],
             c["open_price"], c["high_price"], c["low_price"], c["close_price"],
             c["volume"], c["trade_count"], c["vwap"], c["is_spike"],
-            c.get("status", "Reconciled"), now_utc,
+            c.get("batch_run_id", "bm2_seed"), now_utc,
         ]
         for c in candles
     ]
