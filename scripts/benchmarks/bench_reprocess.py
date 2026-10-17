@@ -47,6 +47,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
 from src.utils.logger import setup_logger
 
 logger = setup_logger("bench_reprocess")
@@ -171,30 +172,48 @@ def compute_accuracy_metrics(
         speed_index[ws] = sc
 
     per_candle_rows: List[Dict[str, Any]] = []
+    audit_rows: List[Dict[str, Any]] = []
     abs_errors: List[float] = []
     pct_errors: List[float] = []
     sq_errors: List[float] = []
+    vol_drifts: List[float] = []
     matched = 0
 
     for bc in batch_candles:
         ws = bc["window_start"]
+        we = bc.get("window_end") or ws
         if isinstance(ws, str):
             ws = datetime.fromisoformat(ws)
         if ws.tzinfo is None:
             ws = ws.replace(tzinfo=timezone.utc)
+        if isinstance(we, str):
+            we = datetime.fromisoformat(we)
+        if we.tzinfo is None:
+            we = we.replace(tzinfo=timezone.utc)
 
         vwap_batch = float(bc.get("vwap", 0.0))
+        vol_batch = float(bc.get("volume", 0.0))
+        count_batch = int(bc.get("trade_count", 0))
 
         if ws in speed_index:
             matched += 1
-            vwap_speed = float(speed_index[ws].get("vwap", 0.0))
+            sc = speed_index[ws]
+            vwap_speed = float(sc.get("vwap", 0.0))
+            vol_speed = float(sc.get("volume", 0.0))
+            count_speed = int(sc.get("trade_count", 0))
+
             delta = vwap_speed - vwap_batch
             abs_err = abs(delta)
             pct_err = _safe_pct(delta, vwap_batch)
+            vol_drift = (abs(vol_speed - vol_batch) / vol_batch * 100.0) if vol_batch > 0 else 0.0
 
             abs_errors.append(abs_err)
             pct_errors.append(pct_err)
             sq_errors.append(abs_err ** 2)
+            vol_drifts.append(vol_drift)
+
+            is_matched = (abs_err < 1e-4 and abs(vol_speed - vol_batch) < 1e-6)
+            recon_status = "MATCHED" if is_matched else "RECONCILED_AND_HEALED"
 
             per_candle_rows.append({
                 "symbol": symbol,
@@ -204,6 +223,20 @@ def compute_accuracy_metrics(
                 "abs_error": round(abs_err, 6),
                 "pct_error": round(pct_err, 4),
                 "ts": ts_str,
+            })
+            audit_rows.append({
+                "symbol": symbol,
+                "window_start": ws,
+                "window_end": we,
+                "speed_count": count_speed,
+                "batch_count": count_batch,
+                "speed_volume": vol_speed,
+                "batch_volume": vol_batch,
+                "speed_vwap": vwap_speed,
+                "batch_vwap": vwap_batch,
+                "volume_drift_pct": round(vol_drift, 4),
+                "vwap_error": round(abs_err, 6),
+                "reconciliation_status": recon_status,
             })
         else:
             # Speed does not have this candle — no contribution to error metrics
@@ -215,6 +248,20 @@ def compute_accuracy_metrics(
                 "abs_error": None,
                 "pct_error": None,
                 "ts": ts_str,
+            })
+            audit_rows.append({
+                "symbol": symbol,
+                "window_start": ws,
+                "window_end": we,
+                "speed_count": 0,
+                "batch_count": count_batch,
+                "speed_volume": 0.0,
+                "batch_volume": vol_batch,
+                "speed_vwap": 0.0,
+                "batch_vwap": vwap_batch,
+                "volume_drift_pct": 100.0,
+                "vwap_error": 0.0,
+                "reconciliation_status": "BATCH_ONLY",
             })
 
     total_batch = len(batch_candles)
@@ -231,9 +278,10 @@ def compute_accuracy_metrics(
         "mae": round(mae, 6),
         "mape_pct": round(mape, 4),
         "rmse": round(rmse, 6),
+        "avg_volume_drift_pct": round(sum(vol_drifts) / len(vol_drifts), 4) if vol_drifts else 0.0,
     }
 
-    return per_candle_rows, summary
+    return per_candle_rows, summary, audit_rows
 
 
 # ── benchmark entry ───────────────────────────────────────────────────────────
@@ -280,6 +328,7 @@ def run_benchmark(
     )
 
     all_candle_rows: List[Dict[str, Any]] = []
+    all_audit_rows: List[Dict[str, Any]] = []
     all_summary_rows: List[Dict[str, Any]] = []
     ts_str = _now_utc().isoformat()
 
@@ -334,7 +383,7 @@ def run_benchmark(
                 symbol, t_start.isoformat(), t_end.isoformat(),
             )
 
-        candle_rows, summary = compute_accuracy_metrics(batch_candles, speed_candles, symbol)
+        candle_rows, summary, audit_rows = compute_accuracy_metrics(batch_candles, speed_candles, symbol)
 
         logger.info(
             "  [%s] Matched=%d/%d | Coverage=%.1f%% | MAE=%.6f | MAPE=%.4f%% | RMSE=%.6f",
@@ -348,6 +397,7 @@ def run_benchmark(
         )
 
         all_candle_rows.extend(candle_rows)
+        all_audit_rows.extend(audit_rows)
         all_summary_rows.append({
             "symbol": symbol,
             "query_start": t_start.isoformat(),
@@ -359,6 +409,17 @@ def run_benchmark(
             "rmse": summary["rmse"],
             "ts": ts_str,
         })
+
+    # Đồng bộ metrics đối soát chi tiết vào ClickHouse
+    if all_audit_rows:
+        try:
+            sync = ClickHouseBatchSync()
+            run_id = f"bm2_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            for ar in all_audit_rows:
+                ar["run_id"] = run_id
+            sync.insert_reconciliation_audit_metrics(all_audit_rows, run_id=run_id)
+        except Exception as exc:
+            logger.warning("Khong the dong bo vao ClickHouse reconciliation_audit_metrics: %s", exc)
 
     return all_candle_rows, all_summary_rows
 

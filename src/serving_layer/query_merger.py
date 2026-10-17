@@ -252,6 +252,24 @@ class AutoCorrectingQueryMerger:
 
             w_end = (b or s)["window_end"]
 
+            vol_drift_pct: Optional[float] = None
+            if b_vol is not None and s_vol is not None:
+                if b_vol > 0:
+                    vol_drift_pct = round(abs(s_vol - b_vol) / b_vol * 100.0, 4)
+                elif s_vol == 0:
+                    vol_drift_pct = 0.0
+
+            if b is not None and s is not None:
+                is_matched = (
+                    (vwap_delta is not None and vwap_delta < 1e-4) and
+                    (vol_delta is not None and vol_delta < 1e-6)
+                )
+                recon_status = "MATCHED" if is_matched else "RECONCILED_AND_HEALED"
+            elif b is not None:
+                recon_status = "BATCH_ONLY"
+            else:
+                recon_status = "PROVISIONAL_ONLY"
+
             report.append(
                 ReconciliationDetail(
                     window_start=w,
@@ -262,6 +280,8 @@ class AutoCorrectingQueryMerger:
                     batch_volume=b_vol,
                     speed_volume=s_vol,
                     volume_delta=vol_delta,
+                    volume_drift_pct=vol_drift_pct,
+                    reconciliation_status=recon_status,
                     is_reconciled=(b is not None),
                 )
             )

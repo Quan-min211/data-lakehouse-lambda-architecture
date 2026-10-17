@@ -36,6 +36,8 @@ class BinanceWebSocketProducer:
         self.symbols: List[str] = []
         self.total_messages_received = 0
         self.total_events_published = 0
+        self._last_trade_ids: dict[str, int] = {}
+        self.sequence_gaps_detected: int = 0
 
     def fetch_top_symbols(self) -> List[str]:
         """Gọi Binance REST API /api/v3/ticker/24hr để lấy Top N cặp coin có quoteVolume lớn nhất."""
@@ -95,6 +97,19 @@ class BinanceWebSocketProducer:
 
             # Chuẩn hóa sang TradeEvent
             trade_event = TradeEvent.from_binance_raw(data)
+
+            # Sequence gap detection
+            sym = trade_event.symbol
+            tid = trade_event.trade_id
+            if sym in self._last_trade_ids:
+                expected_tid = self._last_trade_ids[sym] + 1
+                if tid > expected_tid:
+                    gap_len = tid - expected_tid
+                    self.sequence_gaps_detected += 1
+                    logger.warning(
+                        f"[SEQUENCE GAP DETECTED] {sym}: expected trade_id={expected_tid}, got {tid} (missing {gap_len} trades). Flagged for Batch/REST backfill."
+                    )
+            self._last_trade_ids[sym] = max(self._last_trade_ids.get(sym, 0), tid)
 
             # Chạy qua module Fault Injector (nếu có cấu hình)
             events_to_send = self.fault_injector.process_event(trade_event)

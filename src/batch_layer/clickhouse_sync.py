@@ -79,6 +79,34 @@ class ClickHouseBatchSync:
     ORDER BY (batch_run_id, quarantined_at);
     """
 
+    DDL_INIT_RECONCILIATION_METRICS = """
+    CREATE TABLE IF NOT EXISTS lakehouse.reconciliation_audit_metrics
+    (
+        run_id                      String,
+        symbol                      LowCardinality(String),
+        window_start                DateTime64(3, 'UTC'),
+        window_end                  DateTime64(3, 'UTC'),
+        speed_count                 UInt64,
+        batch_count                 UInt64,
+        speed_volume                Float64,
+        batch_volume                Float64,
+        speed_vwap                  Float64,
+        batch_vwap                  Float64,
+        volume_drift_pct            Float64,
+        vwap_error                  Float64,
+        sequence_gap_count          UInt64 DEFAULT 0,
+        sequence_gap_rate           Float64 DEFAULT 0.0,
+        duplicate_count             UInt64 DEFAULT 0,
+        duplication_ratio           Float64 DEFAULT 0.0,
+        convergence_latency_seconds Float64 DEFAULT 0.0,
+        reconciliation_status       LowCardinality(String) DEFAULT 'RECONCILED_AND_HEALED',
+        created_at                  DateTime64(3, 'UTC') DEFAULT now64(3)
+    )
+    ENGINE = ReplacingMergeTree(created_at)
+    PARTITION BY toYYYYMMDD(window_start)
+    ORDER BY (symbol, window_start);
+    """
+
     def __init__(
         self,
         host: Optional[str] = None,
@@ -122,6 +150,7 @@ class ClickHouseBatchSync:
         client.command(self.DDL_INIT_BATCH_AGG)
         client.command(self.DDL_INIT_WATERMARK)
         client.command(self.DDL_INIT_QUARANTINE)
+        client.command(self.DDL_INIT_RECONCILIATION_METRICS)
         return True
 
     def insert_batch_aggregates(self, candles: Iterable[Dict[str, Any]], batch_run_id: str) -> int:
@@ -267,3 +296,70 @@ class ClickHouseBatchSync:
         )
         logger.info("Updated %s watermark to %s", layer, watermark_time.isoformat())
         return True
+
+    def insert_reconciliation_audit_metrics(
+        self, records: Iterable[Dict[str, Any]], run_id: str = "recon_audit"
+    ) -> int:
+        """Insert structured reconciliation audit metric records into ClickHouse."""
+        rows = list(records)
+        if not rows:
+            return 0
+
+        client = self.get_client()
+        if client is None:
+            return 0
+
+        self.initialize_tables()
+        columns = [
+            "run_id", "symbol", "window_start", "window_end",
+            "speed_count", "batch_count", "speed_volume", "batch_volume",
+            "speed_vwap", "batch_vwap", "volume_drift_pct", "vwap_error",
+            "sequence_gap_count", "sequence_gap_rate",
+            "duplicate_count", "duplication_ratio",
+            "convergence_latency_seconds", "reconciliation_status", "created_at",
+        ]
+        now_utc = datetime.now(timezone.utc)
+        data = []
+        for r in rows:
+            ws = r["window_start"]
+            if isinstance(ws, str):
+                ws = datetime.fromisoformat(ws)
+            if ws.tzinfo is None:
+                ws = ws.replace(tzinfo=timezone.utc)
+
+            we = r.get("window_end")
+            if we is None:
+                we = ws
+            elif isinstance(we, str):
+                we = datetime.fromisoformat(we)
+            if we.tzinfo is None:
+                we = we.replace(tzinfo=timezone.utc)
+
+            data.append([
+                str(r.get("run_id", run_id)),
+                str(r["symbol"]).upper(),
+                ws,
+                we,
+                int(r.get("speed_count", 0)),
+                int(r.get("batch_count", 0)),
+                float(r.get("speed_volume") or 0.0),
+                float(r.get("batch_volume") or 0.0),
+                float(r.get("speed_vwap") or 0.0),
+                float(r.get("batch_vwap") or 0.0),
+                float(r.get("volume_drift_pct") or 0.0),
+                float(r.get("vwap_error") or 0.0),
+                int(r.get("sequence_gap_count", 0)),
+                float(r.get("sequence_gap_rate", 0.0)),
+                int(r.get("duplicate_count", 0)),
+                float(r.get("duplication_ratio", 0.0)),
+                float(r.get("convergence_latency_seconds", 0.0)),
+                str(r.get("reconciliation_status", "RECONCILED_AND_HEALED")),
+                now_utc,
+            ])
+
+        client.insert("lakehouse.reconciliation_audit_metrics", data, column_names=columns)
+        logger.info(
+            "Inserted %d metric rows into lakehouse.reconciliation_audit_metrics (run=%s)",
+            len(data), run_id
+        )
+        return len(data)
