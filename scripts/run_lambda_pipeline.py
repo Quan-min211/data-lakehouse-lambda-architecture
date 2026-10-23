@@ -266,6 +266,9 @@ def main() -> None:
     """Run the one-command local pipeline."""
     args = parse_args()
     run_id = now_utc().strftime("pipeline_%Y%m%d_%H%M%S")
+    run_dir = ROOT_DIR / "datasets" / "runs" / run_id
+    raw_dir = run_dir / "raw"
+    mock_dir = run_dir / "mock"
     started_at = now_utc().isoformat()
     batch_exit_code: int | str = ""
     replayed_events = 0
@@ -288,6 +291,8 @@ def main() -> None:
                     str(args.klines_limit),
                     "--aggtrades-limit",
                     str(args.aggtrades_limit),
+                    "--output-dir",
+                    str(raw_dir),
                 ],
                 "fetch fresh Binance REST data",
             )
@@ -303,13 +308,17 @@ def main() -> None:
                     str(args.ticks_per_min),
                     "--fault-mode",
                     args.fault_mode,
+                    "--klines-dir",
+                    str(raw_dir / "klines"),
+                    "--output-dir",
+                    str(mock_dir),
                 ],
                 "generate mock data from latest Binance sample",
             )
 
         if not args.skip_replay:
             replayed_events = replay_mock_to_kafka(
-                source_dir=ROOT_DIR / "datasets" / "mock" / "aggtrades",
+                source_dir=mock_dir / "aggtrades",
                 bootstrap_servers=args.bootstrap,
                 limit=args.replay_limit,
                 linger_ms=args.replay_linger_ms,
@@ -317,7 +326,13 @@ def main() -> None:
 
         if not args.skip_batch:
             batch_exit_code = run_command(
-                ["docker", "compose", "run", "--rm", "batch-pipeline"],
+                [
+                    "docker", "compose", "run", "--rm", "batch-pipeline",
+                    "python3", "-u", "src/batch_layer/spark_batch_jobs.py",
+                    "--write-iceberg", "--iceberg-strict",
+                    "--input", f"/app/datasets/runs/{run_id}/mock/aggtrades",
+                    "--batch-run-id", run_id,
+                ],
                 "run Batch Layer container",
                 check=True,
             )

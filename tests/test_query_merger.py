@@ -21,6 +21,41 @@ from src.serving_layer.query_merger import AutoCorrectingQueryMerger
 from src.serving_layer.api_routes import app, query_merger
 
 
+class _RecordedQueryResult:
+    """Minimal ClickHouse result used to inspect generated SQL in a unit test."""
+
+    result_rows = []
+
+
+class _RecordedClickHouseClient:
+    """Capture queries without opening a real ClickHouse connection."""
+
+    def __init__(self):
+        self.queries = []
+
+    def query(self, statement):
+        self.queries.append(statement)
+        return _RecordedQueryResult()
+
+
+class TestClickHouseQueryClient(unittest.TestCase):
+    """Verify serving reads the newest ReplacingMergeTree revision."""
+
+    def test_query_candles_uses_final_by_default(self):
+        client = ClickHouseQueryClient()
+        recorded_client = _RecordedClickHouseClient()
+        client._client = recorded_client
+
+        client.query_candles(
+            table="batch_agg",
+            symbol="BTCUSDT",
+            start_time=datetime(2026, 9, 4, 10, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 9, 4, 11, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertIn("FROM lakehouse.batch_agg FINAL", recorded_client.queries[0])
+
+
 class TestAutoCorrectingQueryMerger(unittest.TestCase):
     """Kiểm thử thuật toán Query Merger với 3 Case kinh điển."""
 

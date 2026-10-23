@@ -73,8 +73,10 @@ def plot_benchmark1_latency() -> Path | None:
     if not rows:
         return None
 
-    # Lay 540 rows moi nhat (chay gan nhat)
-    recent_rows = rows[-540:] if len(rows) >= 540 else rows
+    # A benchmark execution shares one timestamp across all of its rows. Do
+    # not mix samples from older executions when rendering the final figure.
+    latest_ts = max(row["ts"] for row in rows if row["ts"])
+    recent_rows = [row for row in rows if row["ts"] == latest_ts]
 
     # Group theo (query_type, strategy)
     grouped: Dict[Tuple[str, str], List[float]] = {}
@@ -283,6 +285,8 @@ def plot_benchmark3_compaction() -> Path | None:
     with open(csv_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for r in reader:
+            if r.get("mode") != "real" or r.get("simulated") == "True":
+                continue
             phase = r["phase"]
             lat = float(r["read_latency_ms"])
             if phase == "before":
@@ -378,7 +382,30 @@ def plot_benchmark3_compaction() -> Path | None:
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Master Summary Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
-def plot_master_summary() -> Path:
+def _latest_rows(path: Path, timestamp_field: str) -> List[Dict[str, str]]:
+    """Return rows belonging to the most recent benchmark execution in a CSV."""
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    timestamps = [row.get(timestamp_field, "") for row in rows if row.get(timestamp_field)]
+    if not timestamps:
+        return []
+    latest = max(timestamps)
+    return [row for row in rows if row.get(timestamp_field) == latest]
+
+
+def plot_master_summary() -> Path | None:
+    latency_rows = _latest_rows(LOGS_DIR / "bench_latency_summary.csv", "ts")
+    reprocess_rows = _latest_rows(LOGS_DIR / "bench_reprocess_summary.csv", "ts")
+    compaction_rows = [
+        row for row in _latest_rows(LOGS_DIR / "bench_compaction.csv", "ts")
+        if row.get("mode") == "real" and row.get("simulated") != "True"
+    ]
+    if not latency_rows or not reprocess_rows or not compaction_rows:
+        print("[WARN] Thieu du lieu real moi nhat de tao benchmark_summary_dashboard.png")
+        return None
+
     fig = plt.figure(figsize=(16, 10), dpi=300)
     fig.patch.set_facecolor("#F8F9FA")
 
@@ -395,9 +422,11 @@ def plot_master_summary() -> Path:
 
     # 1. RQ1 Latency Summary
     queries = ["Q1: Lich su", "Q2: Realtime", "Q3: Hybrid"]
-    batch_p50 = [84.5, 55.6, 60.2]
-    lambda_p50 = [102.0, 51.3, 53.7]
-    speed_p50 = [53.4, 55.1, 56.0]
+    query_keys = ["Q1_historical", "Q2_realtime", "Q3_hybrid"]
+    lookup = {(row["query_type"], row["strategy"]): float(row["p50_ms"]) for row in latency_rows}
+    batch_p50 = [lookup.get((query, "batch_only"), 0.0) for query in query_keys]
+    speed_p50 = [lookup.get((query, "speed_only"), 0.0) for query in query_keys]
+    lambda_p50 = [lookup.get((query, "lambda"), 0.0) for query in query_keys]
 
     x = np.arange(3)
     w = 0.25
@@ -411,11 +440,10 @@ def plot_master_summary() -> Path:
     ax1.legend(loc="upper left", fontsize=8.5)
 
     # 2. RQ2 Reprocess Accuracy Summary
-    coins = ["BTCUSDT", "ETHUSDT"]
-    mapes = [0.0821, 0.0948]
-    maes = [65.30, 2.31]
-    x2 = np.arange(2)
-    bars = ax2.bar(x2, mapes, 0.45, color=["#E67E22", "#9B59B6"], alpha=0.85, edgecolor="#333")
+    coins = [row["symbol"] for row in reprocess_rows]
+    mapes = [float(row["mape_pct"]) for row in reprocess_rows]
+    x2 = np.arange(len(coins))
+    bars = ax2.bar(x2, mapes, 0.45, color="#E67E22", alpha=0.85, edgecolor="#333")
     for b in bars:
         h = b.get_height()
         ax2.annotate(f"{h:.4f}%\n(Sai so cuc thap)", xy=(b.get_x() + b.get_width() / 2, h), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontweight="bold")
@@ -423,19 +451,27 @@ def plot_master_summary() -> Path:
     ax2.set_xticks(x2)
     ax2.set_xticklabels(coins, fontsize=10.5)
     ax2.set_ylabel("MAPE (%)")
-    ax2.set_ylim(0, 0.13)
+    ax2.set_ylim(0, max(mapes) * 1.3 if mapes else 1.0)
 
     # 3. RQ3 Compaction Speedup Summary
-    phases = ["Truoc Compaction\n(93 files)", "Sau Compaction\n(8 files)"]
-    lats = [850.0, 217.9]
+    before_rows = [row for row in compaction_rows if row["phase"] == "before"]
+    after_rows = [row for row in compaction_rows if row["phase"] == "after"]
+    before_latency = float(np.mean([float(row["read_latency_ms"]) for row in before_rows]))
+    after_latency = float(np.mean([float(row["read_latency_ms"]) for row in after_rows]))
+    file_before = int(before_rows[0]["file_count"])
+    file_after = int(after_rows[0]["file_count"])
+    speedup = before_latency / after_latency if after_latency else 0.0
+    phases = [f"Truoc Compaction\n({file_before} files)", f"Sau Compaction\n({file_after} files)"]
+    lats = [before_latency, after_latency]
     b3 = ax3.bar(phases, lats, 0.45, color=["#E74C3C", "#2ECC71"], alpha=0.85, edgecolor="#333")
     for b in b3:
         h = b.get_height()
         ax3.annotate(f"{h:.1f} ms", xy=(b.get_x() + b.get_width() / 2, h), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontweight="bold")
-    ax3.annotate("Tang toc 3.90x\n(Giam 91% file nho)", xy=(1, 217.9), xytext=(1.05, 500), arrowprops=dict(facecolor="#27AE60", shrink=0.08, width=1.5), fontsize=10, fontweight="bold", color="#27AE60")
+    reduction = (1 - file_after / file_before) * 100 if file_before else 0.0
+    ax3.annotate(f"Tang toc {speedup:.2f}x\n(Giam {reduction:.1f}% file)", xy=(1, after_latency), xytext=(1.05, before_latency * 0.6), arrowprops=dict(facecolor="#27AE60", shrink=0.08, width=1.5), fontsize=10, fontweight="bold", color="#27AE60")
     ax3.set_title("RQ3: Thoi gian doc Iceberg truoc/sau Compaction", fontsize=11.5, fontweight="bold")
     ax3.set_ylabel("Read Latency (ms)")
-    ax3.set_ylim(0, 1000)
+    ax3.set_ylim(0, max(lats) * 1.3)
 
     # 4. Tong ket 3 RQ Text Box
     ax4.axis("off")
@@ -443,20 +479,15 @@ def plot_master_summary() -> Path:
         "TONG KET KHOA HOC 3 CAU HOI NGHIEN CUU (RQ1, RQ2, RQ3)\n"
         "========================================================\n\n"
         "1. RQ1 (Query Latency Trade-off):\n"
-        "   - Lambda Merge dat toc do cao nhat o Q2 (Realtime, 51.3ms)\n"
-        "     va Q3 (Hybrid, 53.7ms), nhanh hon Batch-only (60.2ms).\n"
-        "   - O Q1 (Historical), Lambda chiu overhead ghep luong (102ms)\n"
-        "     nhung dam bao zero double-counting qua System Watermark.\n\n"
+        f"   - Q2 realtime: Lambda P50={lambda_p50[1]:.1f}ms; Batch P50={batch_p50[1]:.1f}ms.\n"
+        f"   - Q3 hybrid: Lambda P50={lambda_p50[2]:.1f}ms; Speed P50={speed_p50[2]:.1f}ms.\n"
+        "   - Query merger deduplicate theo watermark, uu tien Batch View.\n\n"
         "2. RQ2 (Reprocess Correctness):\n"
-        "   - Do phu Coverage dat tuyet doi 100.0% (120/120 nen doi soat).\n"
-        "   - Sai so tuong doi MAPE rat nho (< 0.10% tren ca BTC va ETH),\n"
-        "     chung minh Speed View hoan toan du tin cay de ra quyet dinh\n"
-        "     truoc khi Batch View cap nhat chuan xac tuyet doi.\n\n"
+        f"   - Coverage={float(reprocess_rows[0]['coverage_pct']):.1f}% tren {reprocess_rows[0]['matched_candles']} nen.\n"
+        f"   - MAPE={mapes[0]:.4f}%, MAE={float(reprocess_rows[0]['mae']):.6f}.\n\n"
         "3. RQ3 (Iceberg Compaction Efficiency):\n"
-        "   - Bin-packing compaction giup giam 91.4% so luong file Parquet\n"
-        "     (tu 93 xuong 8 files), giam tai manifest overhead.\n"
-        "   - Thoi gian quet doc du lieu giam tu 850.0ms xuong 217.9ms,\n"
-        "     dat he so tang toc vuot troi 3.90x."
+        f"   - Bin-packing giam file Parquet {file_before} -> {file_after} ({reduction:.1f}%).\n"
+        f"   - Read latency {before_latency:.1f}ms -> {after_latency:.1f}ms ({speedup:.2f}x)."
     )
     ax4.text(
         0.05, 0.95, summary_text,

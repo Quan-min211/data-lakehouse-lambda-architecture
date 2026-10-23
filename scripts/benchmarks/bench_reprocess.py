@@ -290,7 +290,8 @@ def run_benchmark(
     hours_back: int,
     window_hours: int,
     reference_time: Optional[datetime] = None,
-    auto_seed: bool = False,
+    auto_seed: bool = True,
+    force_seed: bool = True,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Fetch batch and speed candles for each symbol, compute accuracy metrics.
@@ -305,6 +306,9 @@ def run_benchmark(
             on real data.
         auto_seed: If True, automatically populate provisional speed_agg candles
             when speed_agg is empty for the window.
+        force_seed: If True, regenerate the provisional Speed View for every
+            benchmark window. This makes each run comparable and prevents
+            stale demo revisions from affecting the metrics.
 
     Returns:
         Tuple of (all_candle_rows, all_summary_rows).
@@ -340,12 +344,7 @@ def run_benchmark(
             symbol=symbol,
             start_time=t_start,
             end_time=t_end,
-        )
-        speed_candles = ch_client.query_candles(
-            table="speed_agg",
-            symbol=symbol,
-            start_time=t_start,
-            end_time=t_end,
+            final=True,
         )
 
         if not batch_candles:
@@ -356,8 +355,20 @@ def run_benchmark(
             )
             continue
 
-        if not speed_candles and auto_seed:
-            logger.info("  [%s] speed_agg trong. Dang tu dong seed data provisional...", symbol)
+        speed_candles: List[Dict[str, Any]] = []
+        if not force_seed:
+            speed_candles = ch_client.query_candles(
+                table="speed_agg",
+                symbol=symbol,
+                start_time=t_start,
+                end_time=t_end,
+                final=True,
+            )
+
+        should_seed = force_seed or (auto_seed and not speed_candles)
+        if should_seed:
+            seed_reason = "force seed" if force_seed else "speed_agg trong"
+            logger.info("  [%s] %s. Dang tao lai data provisional...", symbol, seed_reason)
             try:
                 from scripts.benchmarks.seed_speed_view import seed_speed_view_candles
                 seed_speed_view_candles(
@@ -371,9 +382,19 @@ def run_benchmark(
                     symbol=symbol,
                     start_time=t_start,
                     end_time=t_end,
+                    final=True,
                 )
             except Exception as e:
                 logger.warning("  [%s] Loi khi tu dong seed speed_agg: %s", symbol, e)
+
+        if not speed_candles:
+            speed_candles = ch_client.query_candles(
+                table="speed_agg",
+                symbol=symbol,
+                start_time=t_start,
+                end_time=t_end,
+                final=True,
+            )
 
         if not speed_candles:
             logger.warning(
@@ -497,8 +518,12 @@ def main() -> None:
         help=f"Duong dan file CSV dau ra. Mac dinh: {OUTPUT_CSV}",
     )
     parser.add_argument(
-        "--auto-seed", action="store_true", default=True,
-        help="Tu dong seed Speed View provisional candles neu speed_agg trong. Mac dinh: True",
+        "--no-auto-seed", dest="auto_seed", action="store_false", default=True,
+        help="Khong seed tu dong neu Speed View trong (chi co tac dung voi --no-force-seed).",
+    )
+    parser.add_argument(
+        "--no-force-seed", dest="force_seed", action="store_false", default=True,
+        help="Dung lai Speed View hien co thay vi tao lai du lieu provisional cho moi lan benchmark.",
     )
     args = parser.parse_args()
 
@@ -520,6 +545,7 @@ def main() -> None:
         window_hours=args.window_hours,
         reference_time=ref_time,
         auto_seed=args.auto_seed,
+        force_seed=args.force_seed,
     )
 
     output_path = Path(args.output)

@@ -47,7 +47,9 @@ if ROOT_DIR not in sys.path:
 # Khi chạy bên trong container, các biến môi trường đã được set sẵn.
 os.environ.setdefault("CLICKHOUSE_HOST", "localhost")
 os.environ.setdefault("CLICKHOUSE_PORT", "8123")
-os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+# Docker exposes 9094 as the host-facing Kafka listener; 9092 is advertised
+# only for containers on the compose network.
+os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
 os.environ.setdefault("REDIS_HOST", "localhost")
 os.environ.setdefault("REDIS_PORT", "6379")
 

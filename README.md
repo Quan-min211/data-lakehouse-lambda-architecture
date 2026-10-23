@@ -70,8 +70,8 @@ Trong thời đại Big Data, các doanh nghiệp phải đối mặt đồng th
  │  MinIO (Master Dataset) │    │  Kafka → Spark Streaming  │
  │  + Apache Iceberg       │    │  → Redis (Speed Views)    │
  │                         │    │                           │
- │  Spark Batch → dbt      │    │  Near-realtime, approx.   │
- │  → ClickHouse           │    │  delta from last batch    │
+ │  Spark/Python Batch     │    │  → ClickHouse speed_agg   │
+ │  → ClickHouse batch_agg │    │  + Redis latest hot cache │
  │    (Batch Views)        │    │                           │
  └──────────────┬──────────┘    └───────────┬───────────────┘
                 │                           │
@@ -84,22 +84,23 @@ Trong thời đại Big Data, các doanh nghiệp phải đối mặt đồng th
  └───────────────────────────────────────────────────────────┘
 ```
 
-- **Batch Layer:** MinIO + Apache Iceberg (Master Dataset) → Spark Batch + dbt (Bronze→Silver→Gold) → ClickHouse (Batch Views)
-- **Speed Layer:** Kafka → Spark Structured Streaming → Redis (Speed Views)
-- **Serving Layer:** FastAPI Query Merger (ClickHouse + Redis) → Metabase / Streamlit Dashboard
+- **Batch Layer:** MinIO + Apache Iceberg Bronze (immutable master dataset) → Spark/Python DQ + dedup + OHLCV → ClickHouse `batch_agg` (reconciled Batch View).
+- **Speed Layer:** Kafka → Spark Structured Streaming → ClickHouse `speed_agg` (provisional range view) + Redis (latest-candle hot cache).
+- **Serving Layer:** FastAPI Query Merger routes by watermark, reads the newest ClickHouse revision, and uses Redis only for the latest-candle endpoint.
+- **dbt:** SQL models are retained as experimental/reference artefacts; the Docker runtime path is `spark_batch_jobs.py`.
 
 ---
 
 ## Benchmark Scope
 
 ### Benchmark 1 — Query Latency Comparison
-So sánh độ trễ truy vấn giữa Batch-only (ClickHouse), Speed-only (Redis), và Lambda Merge (FastAPI).
+So sánh độ trễ truy vấn Batch-only, Speed-only và Lambda Merge trên ClickHouse views/FastAPI. Redis được đo riêng như hot cache nếu mở rộng benchmark.
 
 ### Benchmark 2 — Batch Reprocessing Correctness
 Thay đổi logic nghiệp vụ, chạy lại Batch Layer, đo sai số (%) giữa Speed View và Batch View.
 
 ### Benchmark 3 — Small File Compaction Efficiency
-Giả lập streaming 2 giờ, tạo hàng nghìn tệp nhỏ, chạy Iceberg OPTIMIZE, đo cải thiện hiệu năng đọc.
+Tạo append nhỏ có kiểm soát vào Iceberg Bronze, chạy bin-packing compaction và đo cải thiện hiệu năng đọc. Chỉ row `mode=real` được dùng cho kết luận.
 
 ---
 
@@ -226,16 +227,17 @@ lakehouse-lambda-benchmark/
 
 | Phân hệ | Công nghệ | Ghi chú |
 |:---|:---|:---|
-| Ingestion (Stream) | Apache Kafka + Debezium CDC | Real-time event bus |
-| Ingestion (Batch) | Airbyte / Custom Spark Reader | Lịch sử + file dumps |
+| Ingestion (Stream) | Apache Kafka + Binance replay | Real-time event bus |
+| Ingestion (Batch) | Binance REST + mock generator | Lịch sử mẫu và controlled faults |
 | Batch Processing | Apache Spark (PySpark) | Core compute engine |
 | Stream Processing | Spark Structured Streaming | Speed Layer jobs |
-| Transformation | dbt (Spark adapter) | Silver/Gold models |
+| Transformation | Spark/Python | DQ, deduplication và OHLCV Gold runtime |
+| dbt | dbt-spark models | Artefact tham khảo, không nằm trên đường demo runtime |
 | Storage | MinIO (S3-compatible) | Object store |
 | Table Format | Apache Iceberg | ACID, Time Travel |
 | Catalog | Iceberg REST Catalog | Schema registry |
 | Batch Views | ClickHouse | OLAP engine |
-| Speed Views | Redis | Hot cache, low-latency |
+| Speed Views | ClickHouse `speed_agg` + Redis | Range query provisional + latest hot cache |
 | Serving API | FastAPI | Query Merger + REST |
 | Orchestration | Dagster | Asset lineage, schedules |
 | Dashboard | Streamlit / Metabase | BI visualization |
@@ -344,4 +346,4 @@ python scripts/benchmarks/bench_compaction.py
 
 ---
 
-> **Trạng thái:** End-to-End Prototype — đã có ingestion, batch, speed, serving, dashboard, compaction, orchestration và benchmark scripts. Cần chạy benchmark thật trên Docker để có số liệu thực nghiệm cuối cùng.
+> **Trạng thái:** End-to-end local implementation đã được kiểm chứng. Benchmark real và biểu đồ mới nhất nằm trong `results/logs/` và `results/plots/`; giới hạn thực nghiệm cùng checklist còn lại nằm ở `docs/md/s/ke_hoach_hoan_thanh_100_phan_tram.md`.

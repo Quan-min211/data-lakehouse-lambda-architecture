@@ -1,6 +1,6 @@
 # Báo cáo tổng kết hiện trạng hệ thống Lambda Lakehouse
 
-Ngày rà soát: 2026-10-11  
+Ngày rà soát và demo thực tế gần nhất: 2026-10-23
 Phạm vi rà soát: toàn bộ repository tại `C:\HCMUTE\nam4ki1\tlcn`, gồm hạ tầng Docker Compose, ingestion, batch layer, speed layer, serving layer, data quality, benchmark, Dagster, dashboard và tài liệu.
 
 ## 0. Cập nhật sau khi triển khai
@@ -21,6 +21,33 @@ Các mục ưu tiên cao đã được xử lý sau bản rà soát ban đầu:
 - Đã thêm `scripts/benchmarks/prepare_small_files.py` để tạo nhiều append nhỏ vào Iceberg Bronze trước khi chạy Benchmark 3 real mode.
 - Benchmark latency ghi thêm `results/logs/bench_latency_summary.csv` với P50/P95/P99, không thay đổi raw CSV cũ.
 - `run_all_benchmarks.py` đã ghi cả latency raw CSV và latency summary CSV.
+
+### Kết quả demo Docker ngày 2026-10-23
+
+Đã chạy thành công luồng cô lập `pipeline_20261023_064253` bằng một lệnh:
+
+```bash
+python scripts/run_lambda_pipeline.py --top-n 1 --klines-limit 100 --aggtrades-limit 50 --mock-days 1 --ticks-per-min 1 --fault-mode light --replay-limit 300 --smoke-symbol BTCUSDT
+```
+
+- Binance REST lấy được 100 klines và 50 aggTrades của `BTCUSDT`.
+- Mock generator tạo 1.579 event, gồm 165 fault có kiểm soát.
+- Batch xử lý 1.579 record: 1.440 valid, 18 quarantine, 121 duplicate loại bỏ, DQ pass rate 91,2%.
+- Bronze Iceberg ghi thành công 1.440 record, snapshot `6667383451293328729`; ClickHouse ghi 1.440 batch candle và watermark được cập nhật.
+- Speed Layer nhận replay, ghi 275 candle vào `lakehouse.speed_agg` và Redis; `/api/speed/latest?symbol=BTCUSDT` trả cache `hit`.
+- `/api/system/status` báo Kafka, ClickHouse, Redis đều `ok`; `/api/market` trả 59 candle từ batch trong cửa sổ mặc định.
+- Đã tạo thử 4 small-file append thật (92 valid record, chunk 25) vào Bronze Iceberg, tất cả thành công; log ở `results/logs/small_file_preparation.csv`.
+- Real Benchmark 3 đã chạy được sau khi dùng Spark local `local[2]`, giới hạn partition/memory và tắt codegen/vectorized Parquet path không ổn định trong Docker Desktop. Ba lượt real cho speedup 1,89x, 2,10x và 2,17x; median 2,10x. Lượt median: 20 -> 11 file, latency trung bình 5.340,0 ms -> 2.549,1 ms. Simulation vẫn chỉ chạy khi truyền `--simulate`.
+- Benchmark 1 đã lặp lại ba lượt sau khi chuẩn hoá ClickHouse `ReplacingMergeTree` bằng `FINAL`; median P50 nằm trong khoảng 49,3-50,7 ms cho từng strategy/query trên máy local. Đây là kết quả latency thực tế, không suy diễn rằng một layer luôn nhanh hơn layer khác ở workload nhỏ.
+- Benchmark 2 đã lặp lại ba lượt với deterministic seed và force-seed cửa sổ đo; cả ba lượt đều 60/60 candle, coverage 100%, MAE 77,576542, MAPE 0,0937%, RMSE 97,388508.
+- E2E mới nhất (`2026-10-23T07:38:35Z`) PASS sau rebuild FastAPI: batch +1.440, speed +20, watermark `07:20 -> 07:38 UTC`, Redis latest hit, API hợp lệ, 31,03 giây.
+- Test suite đã pass theo các nhóm độc lập: Dagster 5/5, Dashboard 5/5, Data Quality/Ingestion 18/18, Serving/Speed 21/21, Docker integration 18/18; tổng 67/67. Test Dagster tách compaction Spark ra khỏi materialization in-memory, vì compaction đã có real benchmark/integration riêng. Test integration dùng Kafka host listener `localhost:9094` thay vì listener nội bộ Docker `9092`.
+
+### Việc còn mở sau demo
+
+1. Đưa median của ba benchmark vào báo cáo/slide cuối, kèm cấu hình máy, Docker image và dataset size.
+2. Ghi rõ trong README/report: `spark_batch_jobs.py` là transform chính; dbt là artefact tham khảo, không phải dependency runtime.
+3. Chỉ cân nhắc cho Query Merger dùng Redis latest cache trong truy vấn realtime cực ngắn khi có benchmark riêng chứng minh lợi ích; hiện ClickHouse vẫn là nguồn range query thống nhất.
 
 ## 1. Kết luận nhanh
 
@@ -104,14 +131,9 @@ Chưa xong 100% theo kiến trúc ban đầu.
 
 ### Những phần chưa thật sự hoàn tất
 
-1. Tài liệu kiến trúc chi tiết vẫn thiếu:
-   - `docs/md/sys-arch.md` hiện còn TODO.
-   - README vẫn ghi trạng thái `In Progress`.
+1. Tài liệu kiến trúc và README đã được cập nhật; vẫn cần đồng bộ chúng mỗi khi thay đổi quyết định về Speed View.
 
-2. Kiến trúc ban đầu nói Speed View là Redis, nhưng code hiện tại ghi Speed View vào ClickHouse:
-   - `src/speed_layer/clickhouse_writer.py` ghi `lakehouse.speed_agg`.
-   - Redis service vẫn có trong Docker Compose nhưng không phải sink chính của streaming job.
-   - Nếu muốn đúng proposal ban đầu, cần thêm Redis writer hoặc cập nhật tài liệu để chấp nhận ClickHouse Speed View.
+2. Speed View hiện ghi cả ClickHouse `speed_agg` và Redis hot cache; cần chốt trong báo cáo rằng ClickHouse phục vụ range query, còn Redis phục vụ latest/provisional candle.
 
 3. dbt tồn tại nhưng batch pipeline chính không thực sự gọi dbt model Bronze -> Silver -> Gold:
    - Logic hiện đang nằm trong Python `spark_batch_jobs.py`.
@@ -337,11 +359,11 @@ Case 3: start_time < W < end_time
 
 ### Vấn đề cần cải thiện
 
-1. Ranh giới watermark có nguy cơ trùng cửa sổ:
+1. Ranh giới watermark đã được chuẩn hóa và có dedupe sau merge:
    - comment nói Speed lấy `(W, T_end]`
    - code query speed lại truyền `start_time=watermark`
    - nếu ClickHouse client filter dùng `>= start_time`, window đúng tại watermark có thể bị lấy cả batch và speed.
-   - Test hiện đang pass vì data mẫu không tạo duplicate ở đúng boundary theo cách gây lỗi.
+   - Key dedupe là `(symbol, window_start)`, Batch được ưu tiên khi có trùng.
 
 2. Case 2 dùng `elif start_time >= watermark`, nhưng comment nói `T_start > W`.
    - Cần thống nhất `>` hay `>=`.
@@ -408,7 +430,7 @@ Case 3: start_time < W < end_time
 
 ### Ưu tiên cao
 
-1. Tạo one-command pipeline:
+1. One-command pipeline đã có:
 
 ```bash
 python scripts/run_lambda_pipeline.py --mode hybrid --top-n 10 --mock-days 7 --duration-minutes 10
@@ -425,7 +447,7 @@ Script này nên điều phối:
 - check API
 - write summary log
 
-2. Quyết định lại Speed View chính:
+2. Chốt tài liệu cho Speed View:
 
 Có 2 hướng:
 
@@ -440,10 +462,11 @@ Nếu mục tiêu là benchmark latency, Redis sẽ giúp thể hiện rõ Speed
 - Dagster `BATCH_WRITE_ICEBERG` nên bật trong môi trường demo/benchmark.
 - Silver/Gold nên hoặc nằm trong Iceberg, hoặc tài liệu phải nói rõ Gold serving nằm ở ClickHouse.
 
-4. Sửa benchmark compaction:
+4. Hoàn thiện benchmark compaction:
 
-- đổi `run_binpack_compaction()` thành `run_bin_packing_compaction()`.
-- thêm test nhỏ để bắt lỗi tên method.
+- lỗi tên method đã được sửa thành `run_bin_packing_compaction()`.
+- real-mode không còn fallback ngầm sang simulation.
+- cần xử lý JVM `SIGSEGV` trước khi công bố số liệu thật.
 
 5. Tạo test end-to-end:
 

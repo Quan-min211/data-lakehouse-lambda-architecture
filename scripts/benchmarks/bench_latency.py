@@ -221,6 +221,7 @@ def run_benchmark(
 
     live_watermark = watermark_reader.get_watermark()
     time_ranges = build_time_ranges(reference_time)
+    execution_ts = _now_utc().isoformat()
 
     logger.info(
         "Bat dau Benchmark 1 -- Latency | symbols=%s | runs=%d "
@@ -239,7 +240,7 @@ def run_benchmark(
             }
 
             for run_id in range(1, runs + 1):
-                ts_str = _now_utc().isoformat()
+                ts_str = execution_ts
 
                 # ── Batch-only ──────────────────────────────────────────────
                 # Bug-B fix: capture the query result to count actual rows

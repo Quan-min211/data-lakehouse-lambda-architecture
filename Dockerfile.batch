@@ -24,7 +24,11 @@ COPY datasets/ ./datasets/
 ENV PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
 ENV PYSPARK_PYTHON=/usr/bin/python3
 ENV PYSPARK_DRIVER_PYTHON=/usr/bin/python3
-ENV SPARK_MASTER_URL=local[*]
+ENV SPARK_MASTER_URL=local[2]
+ENV SPARK_SHUFFLE_PARTITIONS=2
+ENV SPARK_DEFAULT_PARALLELISM=2
+ENV SPARK_DRIVER_MEMORY=768m
+ENV SPARK_EXECUTOR_MEMORY=768m
 
 # Ket noi MinIO (ghi Bronze Iceberg)
 ENV MINIO_ENDPOINT=http://minio:9000

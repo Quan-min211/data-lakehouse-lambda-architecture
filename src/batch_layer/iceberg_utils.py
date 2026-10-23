@@ -127,8 +127,8 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
     spark = (
         SparkSession.builder
         .appName(app_name)
-        # Master: mac dinh local[*], co the override bang env SPARK_MASTER_URL
-        .master(os.getenv("SPARK_MASTER_URL", "local[*]"))
+        # Keep local Docker jobs bounded; all values remain overridable by env.
+        .master(os.getenv("SPARK_MASTER_URL", "local[2]"))
 
         # ── Maven JARs tu dong tai khi khoi dong ──────────────────────────────
         # Iceberg Spark Runtime (Spark 3.5 / Scala 2.12) + Iceberg AWS Bundle (S3FileIO) + Hadoop AWS S3A
@@ -172,10 +172,30 @@ def get_spark_session(app_name: str = "LambdaLakehouse-Batch") -> SparkSession:
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
 
         # ── Tai nguyen Spark ──────────────────────────────────────────────────
-        .config("spark.sql.shuffle.partitions", "4")
-        .config("spark.default.parallelism",    "4")
-        .config("spark.driver.memory",          "1g")
-        .config("spark.executor.memory",        "2g")
+        .config(
+            "spark.sql.shuffle.partitions",
+            os.getenv("SPARK_SHUFFLE_PARTITIONS", "2"),
+        )
+        .config(
+            "spark.default.parallelism",
+            os.getenv("SPARK_DEFAULT_PARALLELISM", "2"),
+        )
+        .config("spark.driver.memory", os.getenv("SPARK_DRIVER_MEMORY", "768m"))
+        .config("spark.executor.memory", os.getenv("SPARK_EXECUTOR_MEMORY", "768m"))
+        # Docker Desktop + this JDK image can crash in generated Iceberg scans.
+        # The benchmark prioritizes deterministic before/after comparisons over
+        # code-generation throughput, so use the conservative SQL execution path.
+        .config("spark.sql.codegen.wholeStage", "false")
+        .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+        .config("spark.sql.parquet.enableVectorizedReader", "false")
+        .config(
+            "spark.driver.extraJavaOptions",
+            "-XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1",
+        )
+        .config(
+            "spark.executor.extraJavaOptions",
+            "-XX:ActiveProcessorCount=2 -XX:TieredStopAtLevel=1",
+        )
 
         .getOrCreate()
     )

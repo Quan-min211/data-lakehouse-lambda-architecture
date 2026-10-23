@@ -305,7 +305,12 @@ services:
       - path: .env
         required: false
     environment:
-      - SPARK_MASTER_URL=local[*]
+      # Keep one-off batch and compaction jobs within Docker Desktop resources.
+      - SPARK_MASTER_URL=local[2]
+      - SPARK_SHUFFLE_PARTITIONS=2
+      - SPARK_DEFAULT_PARALLELISM=2
+      - SPARK_DRIVER_MEMORY=768m
+      - SPARK_EXECUTOR_MEMORY=768m
       # MinIO — luu tru Bronze Iceberg Parquet files
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}

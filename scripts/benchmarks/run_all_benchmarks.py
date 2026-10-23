@@ -18,7 +18,8 @@ Su dung:
 
 Luu y:
   - Benchmark 1 va 2 yeu cau ClickHouse dang chay.
-  - Benchmark 3 tu dong chuyen sang Simulation Mode neu Spark khong san sang.
+  - Benchmark 3 can Spark/Iceberg san sang; chi dung Simulation Mode khi truyen
+    --simulate-compaction ro rang.
 """
 
 from __future__ import annotations

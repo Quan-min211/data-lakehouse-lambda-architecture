@@ -190,19 +190,22 @@ def main():
     parser.add_argument("--klines-limit", type=int, default=1000, help="Số nến klines mỗi symbol (default: 1000)")
     parser.add_argument("--aggtrades-limit", type=int, default=500, help="Số aggTrades mỗi symbol (default: 500)")
     parser.add_argument("--skip-aggtrades", action="store_true",  help="Bỏ qua bước fetch aggTrades")
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR),
+                        help="Thư mục gốc lưu raw data cho lần chạy này")
     args = parser.parse_args()
 
     run_id    = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    klines_dir    = OUTPUT_DIR / "klines"
-    aggtrades_dir = OUTPUT_DIR / "aggtrades"
-    tickers_dir   = OUTPUT_DIR / "tickers"
+    output_dir = Path(args.output_dir).resolve()
+    klines_dir    = output_dir / "klines"
+    aggtrades_dir = output_dir / "aggtrades"
+    tickers_dir   = output_dir / "tickers"
 
     log.info("=" * 60)
     log.info("Lambda Lakehouse — Binance Data Fetcher")
     log.info(f"Run ID      : {run_id}")
     log.info(f"Top-N       : {args.top_n}")
     log.info(f"Klines limit: {args.klines_limit} nến/symbol (~{args.klines_limit} phút lịch sử)")
-    log.info(f"Output dir  : {OUTPUT_DIR.resolve()}")
+    log.info(f"Output dir  : {output_dir}")
     log.info("=" * 60)
 
     session = get_session()
@@ -260,7 +263,8 @@ def main():
             total_weight = 0
 
     # ── Bước 3: Lưu summary ───────────────────────────────────────────────────
-    summary_path = OUTPUT_DIR / f"summary_{run_id}.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = output_dir / f"summary_{run_id}.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
 

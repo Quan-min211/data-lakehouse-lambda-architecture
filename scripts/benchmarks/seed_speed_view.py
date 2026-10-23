@@ -138,6 +138,7 @@ def seed_speed_view_candles(
             symbol=symbol,
             start_time=t_start,
             end_time=t_end,
+            final=True,
         )
 
         if not batch_candles:
@@ -145,7 +146,9 @@ def seed_speed_view_candles(
             continue
 
         speed_rows = []
-        random.seed(42 + hash(symbol) % 1000)  # Deterministic seed cho reproducible benchmark
+        # Python hash() is salted per process; this keeps repeated benchmark
+        # executions identical across separate Python processes.
+        random.seed(42 + sum(ord(char) for char in symbol))
 
         for bc in batch_candles:
             b_vwap = float(bc.get("vwap", 0.0))

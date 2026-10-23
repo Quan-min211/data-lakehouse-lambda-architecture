@@ -52,6 +52,17 @@ MAX_CONCURRENT_WRITES  = 2
 SNAPSHOT_RETENTION_MS  = 7 * 24 * 3600 * 1000   # 7 ngay
 
 
+def _result_count(result, *field_names: str) -> int:
+    """Read an Iceberg procedure count across supported result schemas."""
+    values = result.asDict(recursive=True)
+    for field_name in field_names:
+        if field_name in values and values[field_name] is not None:
+            return int(values[field_name])
+    raise KeyError(
+        f"None of {field_names} exists in Iceberg procedure result: {list(values)}"
+    )
+
+
 def get_spark_session(app_name: str = "LambdaLakehouse-Compaction") -> SparkSession:
     """
     Lazy wrapper: khoi tao SparkSession voi cau hinh Iceberg + MinIO.
@@ -197,8 +208,18 @@ class CompactionJob:
             elapsed = time.time() - t_start
             stats_after = self.get_file_stats("AFTER")
 
-            rewritten = int(result["rewritten_files_count"])
-            added     = int(result["added_files_count"])
+            # Iceberg 1.5 uses *_data_files_count, while older releases use
+            # the shorter names. Accept both so the benchmark remains portable.
+            rewritten = _result_count(
+                result,
+                "rewritten_data_files_count",
+                "rewritten_files_count",
+            )
+            added = _result_count(
+                result,
+                "added_data_files_count",
+                "added_files_count",
+            )
 
             logger.info(
                 f"✓ Bin-Packing hoàn tất: "

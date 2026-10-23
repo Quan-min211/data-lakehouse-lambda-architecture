@@ -104,8 +104,9 @@ class TestDashboardComponents(unittest.TestCase):
         first_record = fallback_records[0]
         self.assertTrue(required_keys.issubset(first_record.keys()))
 
-        # fetch_quarantine_data_from_clickhouse fallback khi không có host
-        records, is_live = fetch_quarantine_data_from_clickhouse(host="invalid_host_12345", port=9999)
+        # Use a closed local port so connection failure is immediate and does
+        # not depend on DNS retry behaviour of the host operating system.
+        records, is_live = fetch_quarantine_data_from_clickhouse(host="127.0.0.1", port=1)
         self.assertFalse(is_live)
         self.assertGreater(len(records), 0)
 

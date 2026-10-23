@@ -4,7 +4,7 @@ test_dagster_pipeline.py
 Unit tests cho Tầng Điều phối Lô (Batch Layer Orchestration) với Dagster:
 - Kiểm tra tính hợp lệ của Repository, Assets, Jobs, Schedules
 - Kiểm tra quan hệ phụ thuộc Data Lineage DAG
-- Kiểm tra in-memory Materialization toàn bộ 6 Software-Defined Assets
+- Kiểm tra in-memory Materialization toàn bộ 7 Software-Defined Assets
 """
 
 import unittest
@@ -23,12 +23,13 @@ class TestDagsterRepositoryDefinitions(unittest.TestCase):
     """Kiểm thử định nghĩa Dagster Repository."""
 
     def test_repository_asset_count(self):
-        """Repository phải có đủ 6 Software-Defined Assets."""
-        self.assertEqual(len(all_assets), 6)
+        """Repository phải có đủ 7 Software-Defined Assets."""
+        self.assertEqual(len(all_assets), 7)
         keys = [a.key.to_user_string() for a in all_assets]
         expected_keys = [
             "bronze_crypto_trades",
             "silver_cleaned_trades",
+            "clickhouse_quarantine_sync",
             "gold_market_aggregates",
             "clickhouse_batch_sync",
             "system_watermark_sync",
@@ -59,21 +60,31 @@ class TestDagsterRepositoryDefinitions(unittest.TestCase):
             node = g.get(asset_def.key)
             return [p.key.to_user_string() for p in g.get_parents(node)]
 
+        assets_by_key = {asset_def.key.to_user_string(): asset_def for asset_def in all_assets}
+
         # silver phụ thuộc bronze
-        self.assertIn("bronze_crypto_trades", get_parent_keys(all_assets[1]))
+        self.assertIn("bronze_crypto_trades", get_parent_keys(assets_by_key["silver_cleaned_trades"]))
+
+        # quarantine phụ thuộc silver
+        self.assertIn("silver_cleaned_trades", get_parent_keys(assets_by_key["clickhouse_quarantine_sync"]))
 
         # gold phụ thuộc silver
-        self.assertIn("silver_cleaned_trades", get_parent_keys(all_assets[2]))
+        self.assertIn("silver_cleaned_trades", get_parent_keys(assets_by_key["gold_market_aggregates"]))
 
         # clickhouse sync phụ thuộc gold
-        self.assertIn("gold_market_aggregates", get_parent_keys(all_assets[3]))
+        self.assertIn("gold_market_aggregates", get_parent_keys(assets_by_key["clickhouse_batch_sync"]))
 
         # watermark sync phụ thuộc clickhouse sync
-        self.assertIn("clickhouse_batch_sync", get_parent_keys(all_assets[4]))
+        self.assertIn("clickhouse_batch_sync", get_parent_keys(assets_by_key["system_watermark_sync"]))
 
     def test_in_memory_materialization(self):
-        """Thực thi materialization trong bộ nhớ toàn bộ 6 assets phải thành công 100%."""
-        result = materialize(all_assets)
+        """Materialize 6 pipeline assets; compaction Spark duoc kiem thu tich hop rieng."""
+        pipeline_assets = [
+            asset_def
+            for asset_def in all_assets
+            if asset_def.key.to_user_string() != "iceberg_small_files_compaction"
+        ]
+        result = materialize(pipeline_assets)
         self.assertTrue(result.success)
         step_successes = [e.step_key for e in result.all_events if e.is_step_success]
         self.assertEqual(len(step_successes), 6)

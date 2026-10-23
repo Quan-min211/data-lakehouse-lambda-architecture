@@ -17,7 +17,7 @@ Chi so do:
   - compaction_duration_s : thoi gian thuc thi compaction
 
 Kich ban:
-  - Neu Spark/Iceberg chua san sang (khong co Docker), script chay Simulation Mode:
+  - Simulation Mode chi duoc chay khi truyen ro `--simulate`:
     * Sinh du lieu gia lap truoc/sau (based on real compaction math)
     * Ghi ket qua simulation ra CSV voi co `simulated=True`
     * Log ro rang rang day la simulation, khong phai ket qua thuc
@@ -35,6 +35,7 @@ Su dung:
 Luu y:
   - Mode thuc yeu cau: docker compose up -d spark iceberg-rest minio
   - Mode simulation khong yeu cau bat ky Docker service nao.
+  - Real mode fail se tra loi ro rang va exit non-zero; khong tu dong thay bang so lieu mo phong.
 """
 
 from __future__ import annotations
@@ -344,8 +345,10 @@ def run_benchmark(
         logger.info("Thu khoi dong Spark Session de chay Real Benchmark...")
         return run_real_benchmark(symbol, runs)
     except Exception as exc:
-        logger.warning("Khong the khoi dong Spark (%s). Chuyen sang Simulation.", exc)
-        return run_simulation_benchmark(symbol, runs)
+        raise RuntimeError(
+            "Real compaction benchmark failed. No simulated rows were written; "
+            "fix the Spark/Iceberg runtime or rerun explicitly with --simulate."
+        ) from exc
 
 
 # ── CSV + summary ─────────────────────────────────────────────────────────────

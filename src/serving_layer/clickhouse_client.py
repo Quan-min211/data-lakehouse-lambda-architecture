@@ -79,9 +79,18 @@ class ClickHouseQueryClient:
         symbol: str,
         start_time: datetime,
         end_time: datetime,
+        final: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Truy vấn nến từ table (batch_agg hoặc speed_agg) trong khoảng [start_time, end_time].
+
+        Args:
+            table: Bang aggregate ClickHouse can doc.
+            symbol: Ma giao dich can truy van.
+            start_time: Moc bat dau cua so UTC.
+            end_time: Moc ket thuc cua so UTC.
+            final: Doc phien ban moi nhat cua moi khoa ReplacingMergeTree. Nen
+                bat cho Serving va benchmark de tranh tra ve cac revision cu.
         """
         # Nếu có mock data cho table này (trong unit test)
         if table in self._mock_data:
@@ -117,6 +126,7 @@ class ClickHouseQueryClient:
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
+        final_clause = " FINAL" if final else ""
         query = f"""
         SELECT
             symbol,
@@ -130,7 +140,7 @@ class ClickHouseQueryClient:
             trade_count,
             vwap,
             is_spike
-        FROM {self.database}.{table}
+        FROM {self.database}.{table}{final_clause}
         WHERE symbol = '{symbol.upper()}'
           AND window_start >= toDateTime64('{start_str}', 3, 'UTC')
           AND window_start < toDateTime64('{end_str}', 3, 'UTC')

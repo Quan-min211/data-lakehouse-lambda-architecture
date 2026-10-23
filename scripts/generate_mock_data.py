@@ -425,6 +425,10 @@ def main():
     parser.add_argument("--fault-mode",    type=str,   default="full",choices=["full", "light", "none"],
                         help="Chế độ fault injection: full/light/none (default: full)")
     parser.add_argument("--start-date",    type=str,   default=None,  help="Ngày bắt đầu ISO 8601 (default: hôm nay - days)")
+    parser.add_argument("--klines-dir", default=str(KLINES_DIR),
+                        help="Thư mục chứa raw klines cho lần chạy này")
+    parser.add_argument("--output-dir", default=str(MOCK_DIR),
+                        help="Thư mục gốc ghi mock data cho lần chạy này")
     args = parser.parse_args()
 
     # Fault rates theo mode
@@ -437,6 +441,8 @@ def main():
 
     n_minutes   = args.days * 24 * 60   # Số nến 1m cần sinh
     run_id      = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    klines_dir = Path(args.klines_dir).resolve()
+    mock_dir = Path(args.output_dir).resolve()
 
     # Thời điểm bắt đầu
     if args.start_date:
@@ -452,12 +458,12 @@ def main():
     log.info(f"Ticks/minute  : {args.ticks_per_min}")
     log.info(f"Fault mode    : {args.fault_mode} {fault_rates}")
     log.info(f"Start time    : {start_dt.isoformat()}")
-    log.info(f"Klines source : {KLINES_DIR}")
+    log.info(f"Klines source : {klines_dir}")
     log.info("=" * 60)
 
-    klines_files = sorted(KLINES_DIR.glob("*_klines_1m.csv"))
+    klines_files = sorted(klines_dir.glob("*_klines_1m.csv"))
     if not klines_files:
-        log.error(f"Không tìm thấy file klines trong {KLINES_DIR}")
+        log.error(f"Không tìm thấy file klines trong {klines_dir}")
         log.error("Hãy chạy trước: python scripts/fetch_binance_data.py --top-n 10 --klines-limit 1000")
         return
 
@@ -479,9 +485,9 @@ def main():
         "fault_breakdown":        {},
     }
 
-    klines_out    = MOCK_DIR / "klines"
-    aggtrades_out = MOCK_DIR / "aggtrades"
-    stats_out     = MOCK_DIR / "stats"
+    klines_out    = mock_dir / "klines"
+    aggtrades_out = mock_dir / "aggtrades"
+    stats_out     = mock_dir / "stats"
 
     for idx, klines_file in enumerate(klines_files, 1):
         symbol = klines_file.stem.replace("_klines_1m", "").upper()
@@ -524,8 +530,8 @@ def main():
             continue
 
     # Lưu summary
-    summary_path = MOCK_DIR / f"summary_{run_id}.json"
-    MOCK_DIR.mkdir(parents=True, exist_ok=True)
+    summary_path = mock_dir / f"summary_{run_id}.json"
+    mock_dir.mkdir(parents=True, exist_ok=True)
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
 
@@ -536,7 +542,7 @@ def main():
     log.info(f"  AggTrades   : {summary['total_aggtrade_records']:,} records")
     log.info(f"  Faults      : {summary['total_fault_records']:,} injected records")
     log.info(f"  Breakdown   : {summary['fault_breakdown']}")
-    log.info(f"  Output dir  : {MOCK_DIR.resolve()}")
+    log.info(f"  Output dir  : {mock_dir}")
     log.info(f"  Summary     : {summary_path}")
     log.info("=" * 60)
 
