@@ -32,6 +32,7 @@ Ngày lập: 2026-10-23
 - [x] Sinh biểu đồ benchmark từ CSV mới nhất; compaction plot chỉ dùng row `mode=real`.
 - [x] Xử lý revision cũ của `ReplacingMergeTree`: Serving/benchmark đọc `FINAL`; seed Benchmark 2 có deterministic seed thay vì Python `hash()` ngẫu nhiên theo process.
 - [x] Rebuild FastAPI và chạy E2E sau thay đổi serving.
+- [x] Bổ sung Kafka offset/checkpoint integrity gate cho stream liên tục: mặc định `failOnDataLoss=true`, recovery offset phải được operator chọn rõ ràng, có runbook và unit test.
 
 ## P0 - Bắt buộc trước khi kết luận đồ án hoàn thành
 
@@ -131,6 +132,8 @@ Việc cần làm:
 - Thêm script dọn dữ liệu demo theo `datasets/runs/<run_id>` thay vì xóa dữ liệu chung.
 - Đặt version cố định cho image/JAR quan trọng khi đã xác nhận benchmark ổn định.
 - Thêm hướng dẫn recovery khi Kafka checkpoint, Iceberg catalog hoặc Docker volume lỗi.
+
+Đã xử lý Kafka checkpoint/retention tại `docs/md/s/bao_cao_stream_lien_tuc_kafka_offset_checkpoint.md`. Cần thực hiện thêm burn-in 24 giờ trước khi tuyên bố độ bền production-local.
 
 Điều kiện đạt:
 

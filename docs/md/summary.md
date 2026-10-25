@@ -42,6 +42,7 @@ python scripts/run_lambda_pipeline.py --top-n 1 --klines-limit 100 --aggtrades-l
 - Benchmark 2 đã lặp lại ba lượt với deterministic seed và force-seed cửa sổ đo; cả ba lượt đều 60/60 candle, coverage 100%, MAE 77,576542, MAPE 0,0937%, RMSE 97,388508.
 - E2E mới nhất (`2026-10-23T07:38:35Z`) PASS sau rebuild FastAPI: batch +1.440, speed +20, watermark `07:20 -> 07:38 UTC`, Redis latest hit, API hợp lệ, 31,03 giây.
 - Test suite đã pass theo các nhóm độc lập: Dagster 5/5, Dashboard 5/5, Data Quality/Ingestion 18/18, Serving/Speed 21/21, Docker integration 18/18; tổng 67/67. Test Dagster tách compaction Spark ra khỏi materialization in-memory, vì compaction đã có real benchmark/integration riêng. Test integration dùng Kafka host listener `localhost:9094` thay vì listener nội bộ Docker `9092`.
+- Đã xử lý thêm failure mode stream liên tục Kafka retention/checkpoint loss: Speed Layer mặc định `failOnDataLoss=true` để fail-closed, thay vì silent skip offset. Operator chỉ có thể dùng checkpoint mới với `KAFKA_STARTING_OFFSETS=earliest` hoặc `--allow-data-loss` khi recovery được ghi nhận. Unit Speed 12/12 và Docker integration 18/18 pass sau thay đổi; runbook/report tại `docs/md/s/bao_cao_stream_lien_tuc_kafka_offset_checkpoint.md`.
 
 ### Việc còn mở sau demo
 

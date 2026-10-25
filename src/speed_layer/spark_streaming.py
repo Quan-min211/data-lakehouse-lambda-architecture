@@ -130,6 +130,46 @@ CHECKPOINT_DIR = os.getenv("CHECKPOINT_DIR", _DEFAULT_CHECKPOINT)
 SPEED_TRIGGER_INTERVAL = os.getenv("SPEED_TRIGGER_INTERVAL", "5 seconds")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """Read a strict boolean environment variable with a safe fallback."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    logger.warning("%s=%r is invalid; using %s", name, value, default)
+    return default
+
+
+def kafka_source_options(
+    kafka_bootstrap: str,
+    topic: str,
+    max_offsets_per_trigger: Optional[int],
+    starting_offsets: str,
+    fail_on_data_loss: bool,
+) -> dict[str, str]:
+    """Build Kafka reader options without silently accepting lost offsets.
+
+    ``startingOffsets`` only applies when a checkpoint is created. Existing
+    checkpoints always remain the authoritative resume position.
+    """
+    if not starting_offsets.strip():
+        raise ValueError("KAFKA_STARTING_OFFSETS must not be empty")
+
+    options = {
+        "kafka.bootstrap.servers": kafka_bootstrap,
+        "subscribe": topic,
+        "startingOffsets": starting_offsets,
+        "failOnDataLoss": str(fail_on_data_loss).lower(),
+    }
+    if max_offsets_per_trigger and max_offsets_per_trigger > 0:
+        options["maxOffsetsPerTrigger"] = str(max_offsets_per_trigger)
+    return options
+
+
 # ── environment validation ────────────────────────────────────────────────────
 def validate_environment() -> bool:
     """
@@ -224,6 +264,8 @@ class SpeedLayerStreamingJob:
         watermark: str = "1 minute",
         window_duration: str = "1 minute",
         max_offsets_per_trigger: Optional[int] = None,
+        starting_offsets: Optional[str] = None,
+        fail_on_data_loss: Optional[bool] = None,
     ):
         self.spark = spark
         kafka_cfg = get_kafka_config()
@@ -234,6 +276,14 @@ class SpeedLayerStreamingJob:
             max_offsets_per_trigger
             if max_offsets_per_trigger is not None
             else int(os.getenv("KAFKA_MAX_OFFSETS_PER_TRIGGER", "50000"))
+        )
+        self.starting_offsets = starting_offsets or os.getenv(
+            "KAFKA_STARTING_OFFSETS", "latest"
+        )
+        self.fail_on_data_loss = (
+            fail_on_data_loss
+            if fail_on_data_loss is not None
+            else _env_bool("KAFKA_FAIL_ON_DATA_LOSS", True)
         )
         self.aggregator = WindowAggregator(
             watermark_duration=watermark,
@@ -287,18 +337,24 @@ class SpeedLayerStreamingJob:
         )
 
         # 1. Doc luong du lieu tu Kafka (ap dung backpressure guardrail neu co)
-        raw_stream_reader = (
-            self.spark.readStream.format("kafka")
-            .option("kafka.bootstrap.servers", self.kafka_bootstrap)
-            .option("subscribe", self.topic)
-            .option("startingOffsets", "latest")
-            .option("failOnDataLoss", "false")
+        source_options = kafka_source_options(
+            kafka_bootstrap=self.kafka_bootstrap,
+            topic=self.topic,
+            max_offsets_per_trigger=self.max_offsets_per_trigger,
+            starting_offsets=self.starting_offsets,
+            fail_on_data_loss=self.fail_on_data_loss,
         )
         if self.max_offsets_per_trigger and self.max_offsets_per_trigger > 0:
             logger.info("Kafka rate limit: maxOffsetsPerTrigger=%d", self.max_offsets_per_trigger)
-            raw_stream_reader = raw_stream_reader.option(
-                "maxOffsetsPerTrigger", str(self.max_offsets_per_trigger)
+        if not self.fail_on_data_loss:
+            logger.warning(
+                "KAFKA_FAIL_ON_DATA_LOSS=false: missing Kafka offsets can be skipped. "
+                "Use only for an explicit non-production recovery."
             )
+
+        raw_stream_reader = self.spark.readStream.format("kafka")
+        for option, value in source_options.items():
+            raw_stream_reader = raw_stream_reader.option(option, value)
         raw_stream = raw_stream_reader.load()
 
         # 2. Parse cau truc du lieu theo Data Contract
@@ -354,6 +410,14 @@ def main() -> None:
         help="Rate limit: So message toi da moi micro-batch (chong OOM khi flash crash). Default: 50000",
     )
     parser.add_argument(
+        "--starting-offsets", default=None,
+        help="Kafka offsets for a new checkpoint: latest (default), earliest, or Spark JSON offsets.",
+    )
+    parser.add_argument(
+        "--allow-data-loss", action="store_true",
+        help="Cho phep Spark bo qua Kafka offset bi retention xoa. Chi dung cho recovery co chu dich.",
+    )
+    parser.add_argument(
         "--once", action="store_true",
         help="Chay mot micro-batch duy nhat roi dung (test mode)",
     )
@@ -380,6 +444,8 @@ def main() -> None:
         watermark=args.watermark,
         window_duration=args.window,
         max_offsets_per_trigger=args.max_offsets_per_trigger,
+        starting_offsets=args.starting_offsets,
+        fail_on_data_loss=False if args.allow_data_loss else None,
     )
 
     query = job.run(trigger_interval=args.trigger, once=args.once)

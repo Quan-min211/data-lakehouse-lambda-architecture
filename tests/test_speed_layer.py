@@ -16,6 +16,7 @@ from src.speed_layer.metrics_calculator import MetricsCalculator
 from src.speed_layer.spike_detector import SpikeDetector
 from src.speed_layer.trade_schema import TRADE_EVENT_FIELD_NAMES
 from src.speed_layer.redis_writer import RedisSpeedWriter
+from src.speed_layer.spark_streaming import kafka_source_options
 
 
 class FakeRedisPipeline:
@@ -165,6 +166,33 @@ class TestRedisSpeedWriter(unittest.TestCase):
         self.assertEqual(commands[0][0], "speed:candle:BTCUSDT:1788523200000")
         self.assertEqual(commands[1][0], "speed:candle:BTCUSDT:latest")
         self.assertEqual(commands[0][2], 60)
+
+
+class TestKafkaSourceGuardrails(unittest.TestCase):
+    """Kafka source must fail closed so retention loss is never silent."""
+
+    def test_kafka_source_defaults_to_integrity_preserving_options(self):
+        options = kafka_source_options(
+            kafka_bootstrap="kafka:9092",
+            topic="crypto_trades_raw",
+            max_offsets_per_trigger=50000,
+            starting_offsets="latest",
+            fail_on_data_loss=True,
+        )
+
+        self.assertEqual(options["failOnDataLoss"], "true")
+        self.assertEqual(options["startingOffsets"], "latest")
+        self.assertEqual(options["maxOffsetsPerTrigger"], "50000")
+
+    def test_kafka_source_rejects_empty_recovery_offset(self):
+        with self.assertRaises(ValueError):
+            kafka_source_options(
+                kafka_bootstrap="kafka:9092",
+                topic="crypto_trades_raw",
+                max_offsets_per_trigger=None,
+                starting_offsets=" ",
+                fail_on_data_loss=True,
+            )
 
 
 if __name__ == "__main__":

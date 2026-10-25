@@ -62,6 +62,36 @@ python src/speed_layer/spark_streaming.py
 python src/speed_layer/spark_streaming.py --trigger "3 seconds" --watermark "2 minutes"
 ```
 
+## Khôi phục khi Kafka retention hoặc checkpoint lỗi
+
+Speed Layer chạy `KAFKA_FAIL_ON_DATA_LOSS=true` mặc định. Nếu checkpoint tham
+chiếu offset đã bị Kafka retention xóa, query phải dừng thay vì âm thầm tạo
+candle thiếu dữ liệu. Giữ checkpoint cũ để điều tra; không xóa volume ngay.
+
+1. Dừng service và lưu log/checkpoint hiện tại.
+
+```bash
+docker compose stop speed-layer
+docker compose logs --no-log-prefix speed-layer > results/logs/speed_layer_recovery.log
+```
+
+2. Chạy Batch để tạo Ground Truth cho khoảng bị ảnh hưởng. Batch/Iceberg là
+nguồn chính xác cuối cùng cho Serving Layer.
+
+3. Nếu cần dựng lại provisional Speed View từ Kafka còn retention, đổi sang
+checkpoint mới và đọc `earliest`. Chỉ thực hiện sau khi lưu checkpoint cũ.
+
+```bash
+docker compose run --rm \
+  -e CHECKPOINT_DIR=/app/checkpoints/speed_layer_rebuild_YYYYMMDD \
+  -e KAFKA_STARTING_OFFSETS=earliest \
+  speed-layer python3 -u src/speed_layer/spark_streaming.py --once
+```
+
+4. Kiểm tra `/api/watermark`, `/api/market` và `/api/speed/latest`. Không đặt
+`KAFKA_FAIL_ON_DATA_LOSS=false` trong vận hành bình thường; cờ đó chỉ dành cho
+recovery đã được ghi nhận, khi chấp nhận một khoảng provisional bị thiếu.
+
 ---
 
 ## 🧪 Chạy Kiểm Thử (Unit Tests)
