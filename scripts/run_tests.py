@@ -27,6 +27,12 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # ── Color output ──────────────────────────────────────────────────────────────
 GREEN  = "\033[92m"
 RED    = "\033[91m"
@@ -45,9 +51,9 @@ SUITES = [
 
 
 def run_suite(label: str, module_path: str) -> dict:
-    print(f"\n{BOLD}{'─'*60}{RESET}")
+    print(f"\n{BOLD}{'-'*60}{RESET}")
     print(f"{BOLD}[TEST] {label}{RESET}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
 
     try:
         loader = unittest.TestLoader()
@@ -91,13 +97,13 @@ def main():
 
     print(f"\n{BOLD}{'='*60}{RESET}")
     print(f"{BOLD}  SUMMARY{RESET}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"  {'Suite':<45} {'Status':>8}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     for r in results:
         color = GREEN if r["status"] == "PASS" else RED
         print(f"  {r['label']:<45} {color}{r['status']:>8}{RESET}")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     overall_color = GREEN if total_failures == 0 and total_errors == 0 else RED
     print(f"  {overall_color}{BOLD}Suites: {passed_suites}/{len(results)} passed | Tests: {total_ran} ran | Failures: {total_failures} | Errors: {total_errors} | {elapsed:.1f}s{RESET}")
     print(f"{BOLD}{'='*60}{RESET}\n")

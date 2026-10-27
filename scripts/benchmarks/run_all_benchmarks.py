@@ -1,16 +1,19 @@
 """
 run_all_benchmarks.py
 =====================
-Chay toan bo 3 Benchmark theo thu tu:
+Chay toan bo 4 Benchmark theo thu tu:
   1. bench_latency    -- Query Latency (Batch / Speed / Lambda)
   2. bench_reprocess  -- Reprocessing Correctness (MAE / MAPE / RMSE)
   3. bench_compaction -- Iceberg Compaction Efficiency
+  4. bench_fault      -- Data Quality Gate & Fault Evaluation (Precision / Recall / F1)
 
 Ket qua CSV duoc ghi vao results/logs/:
   bench_latency.csv
   bench_reprocess.csv
   bench_reprocess_summary.csv
   bench_compaction.csv
+  bench_fault_results.csv
+  bench_fault_summary.csv
 
 Su dung:
   python scripts/benchmarks/run_all_benchmarks.py
@@ -20,6 +23,7 @@ Luu y:
   - Benchmark 1 va 2 yeu cau ClickHouse dang chay.
   - Benchmark 3 can Spark/Iceberg san sang; chi dung Simulation Mode khi truyen
     --simulate-compaction ro rang.
+  - Benchmark 4 danh gia Data Quality Gate va Fault Injection ma khong phu thuoc Docker.
 """
 
 from __future__ import annotations
@@ -176,6 +180,43 @@ def main() -> None:
         logger.error("Benchmark 3 loi: %s", exc)
         results["benchmark_3"] = {"status": "error", "msg": str(exc)}
     results["benchmark_3"]["duration_s"] = round(time.perf_counter() - t0, 2)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BENCHMARK 4: Data Quality & Fault Handling Evaluation
+    # ─────────────────────────────────────────────────────────────────────────
+    _separator("BENCHMARK 4: DATA QUALITY GATE & FAULT HANDLING")
+    t0 = time.perf_counter()
+    try:
+        from scripts.benchmarks.bench_fault import (
+            run_single_benchmark_iteration,
+            write_results_to_csv,
+            compute_and_write_summary,
+            print_markdown_report,
+            plot_fault_matrix,
+            RESULT_PLOT_DIR,
+        )
+        fault_run_id = f"bm_fault_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        fault_results = []
+        for i in range(min(args.runs, 5)):
+            res = run_single_benchmark_iteration(
+                run_id=fault_run_id,
+                iteration=i + 1,
+                count=3000,
+                symbol=args.symbols[0] if args.symbols else "BTCUSDT",
+                fault_rate=0.20,
+                seed=42 + i,
+            )
+            fault_results.append(res)
+        write_results_to_csv(fault_results)
+        fault_summary = compute_and_write_summary(fault_results, fault_run_id)
+        plot_path = RESULT_PLOT_DIR / "benchmark_fault_matrix.png"
+        plot_fault_matrix(fault_summary, plot_path)
+        print_markdown_report(fault_summary, fault_results)
+        results["benchmark_4"] = {"status": "ok", "rows": len(fault_results), "f1_score": fault_summary.get("mean_f1_score")}
+    except Exception as exc:
+        logger.error("Benchmark 4 loi: %s", exc)
+        results["benchmark_4"] = {"status": "error", "msg": str(exc)}
+    results["benchmark_4"]["duration_s"] = round(time.perf_counter() - t0, 2)
 
     # ─────────────────────────────────────────────────────────────────────────
     # FINAL REPORT

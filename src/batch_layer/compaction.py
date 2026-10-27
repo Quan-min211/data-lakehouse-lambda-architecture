@@ -401,6 +401,50 @@ class CompactionJob:
             logger.error(f"Lỗi Expire Snapshots: {e}")
             raise
 
+    def remove_orphan_files(
+        self,
+        older_than_days: int = 3,
+    ) -> dict:
+        """
+        Xóa các tệp mồ côi (orphan files) trên MinIO S3 không còn được metadata trỏ tới.
+
+        Args:
+            older_than_days: Chỉ xóa tệp mồ côi cũ hơn N ngày để tránh xóa nhầm tệp đang ghi.
+
+        Returns:
+            dict: orphan_files_deleted, older_than_days, elapsed_s
+        """
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+        cutoff_str = cutoff_dt.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"Remove Orphan Files cũ hơn {older_than_days} ngày ({cutoff_str})...")
+        t_start = time.time()
+
+        try:
+            result = self.spark.sql(f"""
+                CALL {CATALOG_NAME}.system.remove_orphan_files(
+                    table      => '{BRONZE_NAMESPACE}.{BRONZE_TABLE}',
+                    older_than => TIMESTAMP '{cutoff_str}'
+                )
+            """).collect()
+
+            elapsed = time.time() - t_start
+            orphan_count = len(result)
+
+            logger.info(
+                f"✓ Remove Orphan Files hoàn tất: "
+                f"deleted={orphan_count} orphan files | {elapsed:.1f}s"
+            )
+
+            return {
+                "orphan_files_deleted": orphan_count,
+                "older_than_days":      older_than_days,
+                "elapsed_s":            round(elapsed, 2),
+                "completed_at":         datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception as e:
+            logger.error(f"Lỗi Remove Orphan Files: {e}")
+            raise
+
     # ── Full Compaction Pipeline ──────────────────────────────────────────────
 
     def run_full_compaction(
@@ -496,10 +540,10 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Iceberg Compaction Job — Lambda Lakehouse")
     parser.add_argument("--mode",    default="full",
-                        choices=["full", "binpack", "sort", "manifest", "expire"],
+                        choices=["full", "binpack", "sort", "manifest", "expire", "orphan"],
                         help="Chế độ compaction")
     parser.add_argument("--target-mb",   type=int, default=128, help="Target file size (MB)")
-    parser.add_argument("--expire-days", type=int, default=7,   help="Expire snapshots older than N days")
+    parser.add_argument("--expire-days", type=int, default=7,   help="Expire snapshots / orphan files older than N days")
     parser.add_argument("--with-sort",   action="store_true",   help="Include Sort Compaction in full mode")
     args = parser.parse_args()
 
@@ -522,6 +566,8 @@ def main():
         result = job.rewrite_manifests()
     elif args.mode == "expire":
         result = job.expire_old_snapshots(older_than_days=args.expire_days)
+    elif args.mode == "orphan":
+        result = job.remove_orphan_files(older_than_days=args.expire_days)
 
     import json
     print(json.dumps(result, indent=2, default=str))
