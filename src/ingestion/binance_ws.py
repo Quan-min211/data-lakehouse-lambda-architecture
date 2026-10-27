@@ -7,6 +7,7 @@ Tự động lấy Top N coin có thanh khoản cao nhất và thiết lập mul
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 import requests
 import websocket
 from typing import List, Optional
@@ -27,7 +28,8 @@ class BinanceWebSocketProducer:
         self,
         fault_injector: Optional[FaultInjector] = None,
         kafka_producer: Optional[ResilientKafkaProducer] = None,
-        top_n: int = 10
+        top_n: int = 10,
+        enable_auto_backfill: bool = True,
     ):
         self.top_n = top_n
         self.fault_injector = fault_injector or FaultInjector()
@@ -38,6 +40,8 @@ class BinanceWebSocketProducer:
         self.total_events_published = 0
         self._last_trade_ids: dict[str, int] = {}
         self.sequence_gaps_detected: int = 0
+        self.enable_auto_backfill = enable_auto_backfill
+        self._backfill_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gap-backfill")
 
     def fetch_top_symbols(self) -> List[str]:
         """Gọi Binance REST API /api/v3/ticker/24hr để lấy Top N cặp coin có quoteVolume lớn nhất."""
@@ -109,6 +113,10 @@ class BinanceWebSocketProducer:
                     logger.warning(
                         f"[SEQUENCE GAP DETECTED] {sym}: expected trade_id={expected_tid}, got {tid} (missing {gap_len} trades). Flagged for Batch/REST backfill."
                     )
+                    # Tự động bù đắp qua REST API nếu gap nằm trong giới hạn khả thi
+                    if self.enable_auto_backfill and self.producer and 0 < gap_len <= 500:
+                        self._backfill_executor.submit(self._async_backfill_gap, sym, expected_tid, min(gap_len, 500))
+
             self._last_trade_ids[sym] = max(self._last_trade_ids.get(sym, 0), tid)
 
             # Chạy qua module Fault Injector (nếu có cấu hình)
@@ -149,6 +157,35 @@ class BinanceWebSocketProducer:
     def on_open(self, ws):
         """Xử lý khi mở kết nối WebSocket thành công."""
         logger.info(f"Kết nối Binance WebSocket thành công cho {len(self.symbols)} pairs!")
+
+    def _async_backfill_gap(self, symbol: str, from_id: int, limit: int) -> None:
+        """Tự động gọi Binance REST API bù đắp các trade bị thiếu vào Kafka khi có sequence gap."""
+        url = f"{config.binance.rest_url}/api/v3/aggTrades"
+        params = {"symbol": symbol, "fromId": from_id, "limit": min(limit, 500)}
+        try:
+            resp = requests.get(url, params=params, timeout=5)
+            if resp.status_code == 200:
+                raw_trades = resp.json()
+                published = 0
+                for item in raw_trades:
+                    trade_dict = {
+                        "s": symbol,
+                        "p": item.get("p"),
+                        "q": item.get("q"),
+                        "T": item.get("T"),
+                        "m": item.get("m", False),
+                        "t": item.get("a", item.get("f", from_id)),
+                    }
+                    te = TradeEvent.from_binance_raw(trade_dict)
+                    if self.producer:
+                        self.producer.send_trade(te)
+                        published += 1
+                if published > 0:
+                    logger.info(
+                        f"✓ [AUTO-BACKFILL SUCCESS] Đã bù đắp {published} trades cho {symbol} (từ ID {from_id})."
+                    )
+        except Exception as e:
+            logger.warning(f"Auto-backfill thất bại cho {symbol} (từ ID {from_id}): {e}")
 
     def start_streaming(self):
         """Bắt đầu vòng lặp thu thập dữ liệu với cơ chế Auto-reconnect."""

@@ -266,6 +266,7 @@ services:
       - CHECKPOINT_DIR=/app/checkpoints/speed_layer
       # Trigger moi 5 giay (SLA < 5s end-to-end)
       - SPEED_TRIGGER_INTERVAL=5 seconds
+      - USE_ROCKSDB_STATESTORE=${USE_ROCKSDB_STATESTORE:-true}
       - PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
     volumes:
       - ./src:/app/src

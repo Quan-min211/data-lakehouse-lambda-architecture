@@ -251,27 +251,63 @@ def system_watermark_sync(context, ch_sync: Dict[str, Any]) -> Output[Dict[str, 
 
 @asset(
     group_name="lakehouse_maintenance",
-    description="Run Iceberg small-file compaction when Spark/Iceberg services are available.",
+    description="Run Iceberg full table maintenance (compaction, snapshot expiration, orphan removal) and ClickHouse OPTIMIZE FINAL.",
     metadata={
         "layer": "Maintenance",
-        "target": "iceberg_catalog.bronze.crypto_trades",
+        "target": "iceberg_catalog.bronze.crypto_trades & ClickHouse OLAP tables",
     },
 )
 def iceberg_small_files_compaction(context) -> Output[Dict[str, Any]]:
-    """Run the Iceberg compaction job with graceful fallback."""
+    """Run full table maintenance pipeline for Iceberg and ClickHouse."""
     try:
+        from src.batch_layer.maintenance import run_table_maintenance
         spark = get_spark_session("Dagster-IcebergCompaction")
-        result = CompactionJob(spark).run_full_compaction()
+        maint_result = run_table_maintenance(
+            spark=spark,
+            target_file_size_mb=128,
+            snapshot_expire_days=7,
+            orphan_older_than_days=3,
+            with_sort=False,
+        )
         skipped = False
     except Exception as exc:
-        result = {"skipped": True, "reason": str(exc)}
+        maint_result = {"skipped": True, "reason": str(exc)}
         skipped = True
-        context.log.warning("Compaction skipped: %s", exc)
+        context.log.warning("Iceberg Table Maintenance skipped: %s", exc)
+
+    # ClickHouse physical part consolidation (OPTIMIZE TABLE FINAL)
+    ch_optimized = False
+    try:
+        from src.utils.config import get_clickhouse_config
+        import clickhouse_connect
+        ch_cfg = get_clickhouse_config()
+        ch_user = getattr(ch_cfg, "user", getattr(ch_cfg, "username", "default"))
+        client = clickhouse_connect.get_client(
+            host=ch_cfg.host,
+            port=ch_cfg.port,
+            username=ch_user,
+            password=ch_cfg.password,
+            database=ch_cfg.database,
+            connect_timeout=5,
+        )
+        client.command("OPTIMIZE TABLE lakehouse.batch_agg FINAL")
+        client.command("OPTIMIZE TABLE lakehouse.speed_agg FINAL")
+        ch_optimized = True
+        context.log.info("ClickHouse batch_agg & speed_agg successfully optimized.")
+    except Exception as ch_exc:
+        context.log.warning("ClickHouse OPTIMIZE skipped: %s", ch_exc)
+
+    result = {
+        "iceberg_maintenance": maint_result,
+        "clickhouse_optimized": ch_optimized,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }
 
     return Output(
         value=result,
         metadata={
             "skipped": MetadataValue.bool(skipped),
+            "clickhouse_optimized": MetadataValue.bool(ch_optimized),
             "result": MetadataValue.json(result),
         },
     )

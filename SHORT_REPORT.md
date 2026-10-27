@@ -85,6 +85,25 @@ Sau khi pull mã nguồn về, hệ thống đã được rà soát toàn diện
 5. **Tích Hợp Toàn Bộ 4 Kịch Bản Benchmark ([scripts/benchmarks/run_all_benchmarks.py](file:///scripts/benchmarks/run_all_benchmarks.py)):**
    * Chuỗi thực thi tự động chạy trọn vẹn cả 4 kịch bản: Benchmark 1 (Latency), Benchmark 2 (Reprocessing Correctness), Benchmark 3 (Compaction Efficiency), Benchmark 4 (DQ Gate & Fault Evaluation).
 
+### 2.7. Tối Ưu Hóa Hệ Thống & Vận Hành Thực Tế (System Hardening & Production-Readiness)
+Nhằm bảo đảm tính sẵn sàng 24/7 và tối ưu hóa tài nguyên phần cứng, hệ thống đã được nâng cấp 4 tính năng vận hành cốt lõi:
+1. **Kích Hoạt RocksDB State Store Cho Spark Structured Streaming ([spark_streaming.py](file:///src/speed_layer/spark_streaming.py)):**
+   * Bổ sung tùy chọn `spark.sql.streaming.stateStore.providerClass = RocksDBStateStoreProvider` khi chạy trên môi trường Linux container (Docker).
+   * Giúp offload toàn bộ state nến tạm thời từ Java JVM Heap xuống disk volume `speed-checkpoints`, ngăn chặn triệt để nguy cơ phình bộ nhớ và rò rỉ RAM (OOM) khi stream liên tục nhiều ngày.
+2. **Nâng Cấp Quy Trình Bảo Trì Kép Trong Dagster ([repository.py](file:///dagster_project/repository.py)):**
+   * Asset `iceberg_small_files_compaction` được nâng cấp để kích hoạt đồng thời:
+     * Dọn dẹp tệp mồ côi (`remove_orphan_files`) và snapshot cũ trên Apache Iceberg qua `run_table_maintenance()`.
+     * Tự động chạy lệnh `OPTIMIZE TABLE lakehouse.batch_agg FINAL` và `speed_agg FINAL` trên ClickHouse, hợp nhất các file part vật lý giúp Serving API phản hồi nhanh hơn và tiết kiệm tải CPU.
+3. **Cơ Chế Tự Động Bù Đắp Chuỗi Giao Dịch Bằng REST API ([binance_ws.py](file:///src/ingestion/binance_ws.py)):**
+   * Khi phát hiện mất chuỗi (`trade_id` nhảy cóc do rớt gói mạng), module `BinanceWebSocketProducer` tự động kích hoạt một luồng nền (`ThreadPoolExecutor`) gọi Binance REST API `/api/v3/aggTrades` để lấy chính xác các trade bị thiếu và đẩy trực tiếp vào Kafka.
+   * Giúp hệ thống tự phục hồi chuỗi (Self-Healing) tức thì trong Speed Layer mà không bắt buộc phải chờ đến lượt quét của Batch Layer.
+4. **Cơ Chế Cảnh Báo Bất Thường Chủ Động (Proactive Anomaly Alerting Gate) ([alerting.py](file:///src/utils/alerting.py)):**
+   * Tự động phát hiện và ghi nhận cảnh báo khi:
+     * Sai lệch khối lượng đối soát ($\Delta V_{\%} > 5.0\%$) kéo dài quá 3 nến liên tiếp (`VOLUME_DRIFT`).
+     * Số lượng bản ghi bị cách ly tăng vọt (`QUARANTINE_SPIKE`).
+     * Độ trễ luồng xử lý vượt ngưỡng SLA 15 giây (`STREAMING_LAG`).
+   * Tích hợp endpoint REST `GET /api/system/alerts` trong Serving Layer API ([api_routes.py](file:///src/serving_layer/api_routes.py)) và hỗ trợ kết nối Webhook thông báo tự động.
+
 ---
 
 ## 3. Minh Chứng Thực Tế (Evidences & Verification)

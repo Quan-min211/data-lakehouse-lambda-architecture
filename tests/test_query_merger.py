@@ -310,6 +310,15 @@ class TestFastAPIRoutes(unittest.TestCase):
         self.assertIn(data["cache_status"], ["hit", "miss", "unavailable"])
         self.assertIn("redis_key", data)
 
+    def test_system_alerts_endpoint(self):
+        resp = self.client.get("/api/system/alerts")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("total_alerts", data)
+        self.assertIn("alerts", data)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -237,6 +237,15 @@ def create_spark_session(app_name: str = "CryptoLakehouse-SpeedLayer"):
         )
     )
 
+    # Su dung RocksDB StateStore Provider de giam tai heap memory cho streaming 24/7
+    use_rocksdb = os.getenv("USE_ROCKSDB_STATESTORE", "true").lower() in {"true", "1", "yes"}
+    if use_rocksdb and platform.system() != "Windows":
+        builder = builder.config(
+            "spark.sql.streaming.stateStore.providerClass",
+            "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+        )
+        logger.info("RocksDB StateStore duoc kich hoat cho Speed Layer Structured Streaming.")
+
     # Tren Windows: giam thieu cac tinh nang Hadoop native
     if platform.system() == "Windows":
         builder = builder.config(

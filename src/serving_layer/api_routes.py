@@ -272,3 +272,23 @@ async def get_reconciliation(
         end_time=end_dt,
     )
     return report
+
+
+@app.get("/api/system/alerts", tags=["System"])
+async def get_system_alerts(limit: int = Query(50, ge=1, le=200, description="Số lượng cảnh báo gần nhất")):
+    """
+    Truy vấn danh sách cảnh báo bất thường chủ động (Proactive Anomaly Alerts):
+    - Volume Drift Anomaly (> 5%)
+    - Quarantine Spike Anomaly
+    - Streaming Lag SLA Anomaly
+    """
+    from src.utils.alerting import get_alert_manager
+    manager = get_alert_manager()
+    alerts = manager.get_recent_alerts(limit=limit)
+    return {
+        "status": "ok",
+        "total_alerts": len(alerts),
+        "alerts": alerts,
+        "queried_at": datetime.now(timezone.utc).isoformat(),
+    }
+

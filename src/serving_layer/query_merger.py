@@ -27,6 +27,7 @@ from src.serving_layer.schemas import (
 )
 from src.serving_layer.watermark_reader import WatermarkReader
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+from src.utils.alerting import get_alert_manager
 from src.utils.logger import setup_logger
 
 logger = setup_logger("query_merger")
@@ -201,6 +202,7 @@ class AutoCorrectingQueryMerger:
         candles, duplicate_count = self._dedupe_prefer_batch(candles)
         source_breakdown["deduplicated"] = duplicate_count
         freshness_lag_seconds = max((end_time - watermark).total_seconds(), 0.0)
+        get_alert_manager().check_streaming_lag(symbol, freshness_lag_seconds)
 
         return MarketDataResponse(
             symbol=symbol,
@@ -258,6 +260,9 @@ class AutoCorrectingQueryMerger:
                     vol_drift_pct = round(abs(s_vol - b_vol) / b_vol * 100.0, 4)
                 elif s_vol == 0:
                     vol_drift_pct = 0.0
+
+            if vol_drift_pct is not None:
+                get_alert_manager().check_volume_drift(symbol, vol_drift_pct, str(w))
 
             if b is not None and s is not None:
                 is_matched = (
