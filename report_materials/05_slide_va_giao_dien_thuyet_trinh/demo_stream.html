@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Lakehouse Lambda — Architecture Pipeline</title>
+<style>
+/* ══════════════════════════════════════════════════════
+   RESET & TOKENS
+══════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0B0E14;
+  --surface:#131722;
+  --surface2:#1A1F2C;
+  --border:#2A2E39;
+  --text:#EAECEF;
+  --muted:#848E9C;
+  --dim:#5E6673;
+
+  /* Branch colours */
+  --speed:#7C3AED;
+  --speed-light:#A78BFA;
+  --speed-glow:rgba(124,58,237,.35);
+  --batch:#059669;
+  --batch-light:#34D399;
+  --batch-glow:rgba(5,150,105,.35);
+
+  /* Neutral accent */
+  --blue:#3B82F6;
+  --cyan:#06B6D4;
+  --orange:#F97316;
+  --red:#EF4444;
+  --yellow:#F59E0B;
+
+  --node-w:190px;
+  --node-h:100px;
+  --row-gap:110px;   /* vertical gap between Speed & Batch row */
+  --col-gap:80px;    /* horizontal gap between nodes */
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',sans-serif;overflow:hidden}
+
+/* ══════════════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════════════ */
+.header{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(11,14,20,.88);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:10px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:16px;flex-wrap:wrap;
+}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo-badge{
+  display:flex;align-items:center;gap:6px;
+  background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);
+  border-radius:20px;padding:4px 12px;
+  font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--blue);
+}
+.pulse-dot{width:7px;height:7px;border-radius:50%;background:#10B981;animation:pdot 2s infinite}
+@keyframes pdot{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.7)}50%{box-shadow:0 0 0 6px rgba(16,185,129,0)}}
+.header h1{font-size:15px;font-weight:700;white-space:nowrap}
+.header p{font-size:11px;color:var(--muted)}
+
+.legend{display:flex;align-items:center;gap:18px}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600}
+.leg-dot{width:10px;height:10px;border-radius:3px}
+.leg-dot.speed{background:var(--speed)}
+.leg-dot.batch{background:var(--batch)}
+.leg-dot.shared{background:var(--blue)}
+
+.hint{font-size:11px;color:var(--dim);white-space:nowrap}
+
+/* ══════════════════════════════════════════════════════
+   CANVAS WRAPPER  (pannable)
+══════════════════════════════════════════════════════ */
+.canvas-wrap{
+  position:fixed;top:58px;left:0;right:0;bottom:0;
+  overflow:hidden;cursor:grab;user-select:none;
+}
+.canvas-wrap.dragging{cursor:grabbing}
+.canvas{
+  position:absolute;
+  /* sized by JS */
+  will-change:transform;
+  transform-origin:0 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   SVG PATHS LAYER
+══════════════════════════════════════════════════════ */
+.svg-layer{
+  position:absolute;top:0;left:0;pointer-events:none;overflow:visible;
+}
+
+/* ══════════════════════════════════════════════════════
+   NODES
+══════════════════════════════════════════════════════ */
+.node{
+  position:absolute;
+  width:var(--node-w);
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:14px;
+  padding:14px 15px;
+  cursor:pointer;
+  transition:border-color .25s,box-shadow .25s,transform .2s;
+  z-index:10;
+}
+.node:hover{transform:translateY(-4px)}
+.node.speed-node{border-color:rgba(124,58,237,.4)}
+.node.speed-node:hover{border-color:var(--speed-light);box-shadow:0 0 28px var(--speed-glow)}
+.node.batch-node{border-color:rgba(5,150,105,.4)}
+.node.batch-node:hover{border-color:var(--batch-light);box-shadow:0 0 28px var(--batch-glow)}
+.node.shared-node{border-color:rgba(59,130,246,.4)}
+.node.shared-node:hover{border-color:var(--blue);box-shadow:0 0 28px rgba(59,130,246,.3)}
+.node.merge-node{border-color:rgba(249,115,22,.4)}
+.node.merge-node:hover{border-color:var(--orange);box-shadow:0 0 28px rgba(249,115,22,.3)}
+
+/* Top accent bar */
+.node::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
+.node.speed-node::before{background:linear-gradient(90deg,var(--speed),var(--speed-light))}
+.node.batch-node::before{background:linear-gradient(90deg,var(--batch),var(--batch-light))}
+.node.shared-node::before{background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.node.merge-node::before{background:linear-gradient(90deg,var(--orange),var(--yellow))}
+
+.node-icon{font-size:22px;margin-bottom:6px}
+.node-label{font-size:9px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;margin-bottom:4px}
+.node.speed-node .node-label{color:var(--speed-light)}
+.node.batch-node .node-label{color:var(--batch-light)}
+.node.shared-node .node-label{color:var(--blue)}
+.node.merge-node .node-label{color:var(--orange)}
+
+.node-title{font-size:12px;font-weight:700;line-height:1.35;color:var(--text);margin-bottom:5px}
+.node-tags{display:flex;flex-wrap:wrap;gap:3px}
+.tag{
+  font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;
+  padding:2px 6px;border-radius:4px;
+  background:rgba(255,255,255,.05);color:var(--muted);border:1px solid rgba(255,255,255,.07);
+}
+
+/* Tooltip panel (shows on click) */
+.node-detail{
+  display:none;
+  position:absolute;
+  top:calc(100% + 10px);left:50%;transform:translateX(-50%);
+  width:260px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px 16px;
+  z-index:200;
+  box-shadow:0 16px 48px rgba(0,0,0,.5);
+  pointer-events:auto;
+}
+.node.open .node-detail{display:block}
+.node-detail::before{
+  content:'';position:absolute;top:-7px;left:50%;transform:translateX(-50%);
+  border-left:7px solid transparent;border-right:7px solid transparent;
+  border-bottom:7px solid var(--border);
+}
+.detail-title{font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text)}
+.detail-row{display:flex;gap:7px;margin-bottom:5px;font-size:11px;color:var(--muted);line-height:1.5}
+.detail-row .di{flex-shrink:0}
+.detail-row code{
+  background:rgba(6,182,212,.1);color:var(--cyan);
+  padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px;
+}
+.close-x{
+  float:right;font-size:14px;cursor:pointer;color:var(--dim);line-height:1;
+  background:none;border:none;color:var(--muted);
+}
+.close-x:hover{color:var(--text)}
+
+/* ══════════════════════════════════════════════════════
+   BRANCH LABELS
+══════════════════════════════════════════════════════ */
+.branch-label{
+  position:absolute;
+  font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  padding:4px 12px;border-radius:20px;
+  pointer-events:none;
+}
+.branch-label.speed-label{
+  background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.3);color:var(--speed-light);
+}
+.branch-label.batch-label{
+  background:rgba(5,150,105,.15);border:1px solid rgba(5,150,105,.3);color:var(--batch-light);
+}
+
+/* ══════════════════════════════════════════════════════
+   ANIMATED FLOW PARTICLES  (on SVG paths)
+══════════════════════════════════════════════════════ */
+.flow-path{fill:none;stroke-width:2;stroke-dasharray:8 6}
+.flow-path.speed-path{stroke:var(--speed-light)}
+.flow-path.batch-path{stroke:var(--batch-light)}
+.flow-path.shared-path{stroke:var(--blue)}
+.flow-path.merge-path{stroke:var(--orange)}
+
+/* Animated dashes */
+.anim-path{fill:none;stroke-width:2.5;stroke-linecap:round;opacity:.7}
+.anim-path.speed-anim{stroke:var(--speed-light);animation:dashSpeed 1.8s linear infinite}
+.anim-path.batch-anim{stroke:var(--batch-light);animation:dashBatch 2.4s linear infinite}
+.anim-path.shared-anim{stroke:var(--blue);animation:dashShared 2s linear infinite}
+.anim-path.merge-anim{stroke:var(--orange);animation:dashMerge 1.6s linear infinite}
+
+@keyframes dashSpeed { to{stroke-dashoffset:-28} }
+@keyframes dashBatch { to{stroke-dashoffset:-28} }
+@keyframes dashShared{ to{stroke-dashoffset:-28} }
+@keyframes dashMerge { to{stroke-dashoffset:-28} }
+
+/* Arrowhead markers defined in SVG */
+
+/* ══════════════════════════════════════════════════════
+   ZOOM CONTROLS
+══════════════════════════════════════════════════════ */
+.zoom-ctrl{
+  position:fixed;bottom:24px;right:24px;z-index:200;
+  display:flex;flex-direction:column;gap:6px;
+}
+.zoom-btn{
+  width:38px;height:38px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background .2s;
+}
+.zoom-btn:hover{background:var(--surface2)}
+
+.mini-map{
+  position:fixed;bottom:24px;left:24px;z-index:200;
+  font-size:10px;color:var(--dim);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:6px 10px;line-height:1.7;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ HEADER ══════════ -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo-badge"><span class="pulse-dot"></span>Lambda Architecture</div>
+    <div>
+      <h1>Data Lakehouse — Pipeline Dòng Dữ Liệu</h1>
+      <p>Nguyễn Đặng Quốc Anh &amp; Phạm Minh Quân &nbsp;|&nbsp; HCMUTE 2026 &nbsp;|&nbsp; GVHD: ThS. Đoàn Minh Trí</p>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot shared"></div>Shared (Ingestion / Serving)</div>
+    <div class="leg-item"><div class="leg-dot speed"></div>Speed Layer (Realtime)</div>
+    <div class="leg-item"><div class="leg-dot batch"></div>Batch Layer (Chính xác)</div>
+  </div>
+  <div class="hint">🖱 Kéo để di chuyển &nbsp;|&nbsp; Scroll để zoom &nbsp;|&nbsp; Click node để xem chi tiết</div>
+</header>
+
+<!-- ══════════ CANVAS ══════════ -->
+<div class="canvas-wrap" id="wrap">
+  <div class="canvas" id="canvas">
+
+    <!-- SVG paths layer (injected by JS) -->
+    <svg class="svg-layer" id="svgLayer" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- ═══ NODES — filled by JS ═══ -->
+
+  </div>
+</div>
+
+<!-- ══════════ ZOOM CONTROLS ══════════ -->
+<div class="zoom-ctrl">
+  <button class="zoom-btn" onclick="zoom(1.15)" title="Zoom in">+</button>
+  <button class="zoom-btn" onclick="zoom(0.87)" title="Zoom out">−</button>
+  <button class="zoom-btn" onclick="resetView()" title="Reset" style="font-size:13px">⊙</button>
+</div>
+<div class="mini-map" id="minimap">
+  Scale: <span id="scaleLabel">100%</span><br>
+  Offset: <span id="offsetLabel">0, 0</span>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   LAYOUT CONSTANTS
+══════════════════════════════════════════════════════ */
+const NW  = 190;   // node width
+const NH  = 108;   // node height (approx)
+const GAP = 80;    // horizontal gap between nodes
+const PAD = 80;    // padding from canvas edge
+
+// Row Y positions (center of node)
+const Y_SPEED = PAD + 60;
+const Y_BATCH = PAD + 60 + NH + 140;   // below speed row
+const Y_SHARED_TOP  = PAD;             // source row (single node, centred vertically)
+const Y_SHARED_MID  = (Y_SPEED + Y_BATCH) / 2 + NH/2 - NH/2;  // Kafka, between rows
+
+// We'll use a timeline of "columns"
+// Col 0: Binance  (shared, centred between speed & batch)
+// Col 1: FaultInjector (shared)
+// Col 2: Kafka (shared, fork point)
+// Col 3: Speed branch begins / Batch branch begins
+// Col 4,5,6... each branch's internal nodes
+// Last-2: Query Merger (merge point)
+// Last-1: Redis
+// Last:   Dashboard
+
+const COL = (i) => PAD + i * (NW + GAP);
+
+// Vertical centre of a node at (x,y)
+const cx = (x) => x + NW/2;
+const cy = (y) => y + NH/2;
+
+/* ══════════════════════════════════════════════════════
+   NODE DEFINITIONS
+══════════════════════════════════════════════════════ */
+// type: 'shared' | 'speed' | 'batch' | 'merge'
+// x,y: top-left position on canvas
+
+const yMid = (Y_SPEED + Y_BATCH + NH) / 2 - NH/2;   // vertical midpoint
+
+const NODES = [
+  /* ── SHARED: Ingestion ── */
+  {
+    id:'binance', type:'shared',
+    x: COL(0), y: yMid,
+    icon:'📡', label:'Nguồn dữ liệu',
+    title:'Binance aggTrade WebSocket',
+    tags:['wss://stream.binance.com','~2000 evt/s','Top 10 USDT'],
+    detail:[
+      {i:'📁', t:'<code>src/ingestion/binance_ws.py</code>'},
+      {i:'📦', t:'Model: <code>TradeEvent</code> (9 fields)'},
+      {i:'🌐', t:'Symbols: BTC, ETH, SOL, BNB, XRP, DOGE, ADA, DOT, LINK, AVAX'},
+      {i:'⚡', t:'Event-time timestamp chính xác ms từ sàn'},
+    ]
+  },
+  {
+    id:'fault', type:'shared',
+    x: COL(1), y: yMid,
+    icon:'🧪', label:'Fault Injection',
+    title:'Fault Injector — Ground Truth',
+    tags:['10% Dup','10% Late','5% Invalid'],
+    detail:[
+      {i:'📁', t:'<code>src/ingestion/fault_injector.py</code>'},
+      {i:'🔁', t:'Duplicate: nhân đôi trade_id'},
+      {i:'⏰', t:'Late Data: lùi trade_time 1-5 phút'},
+      {i:'💥', t:'Schema Invalid: price âm, qty=0'},
+    ]
+  },
+  {
+    id:'kafka', type:'shared',
+    x: COL(2), y: yMid,
+    icon:'📨', label:'Message Broker',
+    title:'Apache Kafka (KRaft)',
+    tags:['Kafka 3.7','3 partitions','topic: crypto_trades_raw'],
+    detail:[
+      {i:'📁', t:'<code>src/ingestion/kafka_producer.py</code>'},
+      {i:'📨', t:'Topic: <code>crypto_trades_raw</code>'},
+      {i:'💾', t:'Retention: 24h / 1GB per partition'},
+      {i:'🐳', t:'Container: <code>lakehouse-kafka</code> (1GB RAM)'},
+    ]
+  },
+
+  /* ── SPEED LAYER ── */
+  {
+    id:'spark_stream', type:'speed',
+    x: COL(3), y: Y_SPEED,
+    icon:'⚡', label:'Speed Layer',
+    title:'Spark Structured Streaming',
+    tags:['Trigger 5s','Window 1m','OHLCV+VWAP'],
+    detail:[
+      {i:'📁', t:'<code>src/speed_layer/spark_streaming.py</code>'},
+      {i:'🧮', t:'Micro-batch mỗi 5 giây — SLA &lt; 5s end-to-end'},
+      {i:'🐳', t:'Container: <code>lakehouse-speed-layer</code> (2GB)'},
+      {i:'💾', t:'Checkpoint volume để giữ state khi restart'},
+    ]
+  },
+  {
+    id:'spike', type:'speed',
+    x: COL(4), y: Y_SPEED,
+    icon:'⚠️', label:'Spike Detection',
+    title:'OHLCV + Spike Detector',
+    tags:['is_spike','Biến động >0.5%','VWAP calc'],
+    detail:[
+      {i:'📁', t:'<code>src/speed_layer/window_aggregator.py</code>'},
+      {i:'📊', t:'VWAP = Σ(price×qty) / Σ(qty)'},
+      {i:'⚠️', t:'Spike: (high-low)/open > 0.5%'},
+      {i:'🔔', t:'Dashboard hiển thị cảnh báo ngay tức thì'},
+    ]
+  },
+  {
+    id:'speed_agg', type:'speed',
+    x: COL(5), y: Y_SPEED,
+    icon:'🟣', label:'Speed View (Provisional)',
+    title:'ClickHouse — speed_agg',
+    tags:['ReplacingMergeTree','Approximate','status=Provisional'],
+    detail:[
+      {i:'📊', t:'Bảng: <code>lakehouse.speed_agg</code>'},
+      {i:'⚡', t:'Ghi mỗi 5s — gần đúng (có late data bị bỏ)'},
+      {i:'🔧', t:'ENGINE = ReplacingMergeTree(created_at)'},
+      {i:'🐳', t:'Container: <code>lakehouse-clickhouse</code> (1.5GB)'},
+    ]
+  },
+
+  /* ── BATCH LAYER ── */
+  {
+    id:'spark_batch', type:'batch',
+    x: COL(3), y: Y_BATCH,
+    icon:'🏗️', label:'Batch Layer',
+    title:'Spark Batch Job (Bronze)',
+    tags:['Dagster schedule','Iceberg','MinIO s3://bronze/'],
+    detail:[
+      {i:'📁', t:'<code>src/batch_layer/spark_batch_jobs.py</code>'},
+      {i:'🔄', t:'Chạy theo lịch Dagster — mỗi giờ'},
+      {i:'💾', t:'Ghi Bronze Parquet → <code>s3://bronze/</code> (MinIO/Iceberg)'},
+      {i:'🐳', t:'Container: <code>lakehouse-batch-pipeline</code> (3GB)'},
+    ]
+  },
+  {
+    id:'dq', type:'batch',
+    x: COL(4), y: Y_BATCH,
+    icon:'🛡️', label:'DQ Gate',
+    title:'Data Quality Gate + Quarantine',
+    tags:['dq_checks.py','dq_quarantine','5% lỗi bị lọc'],
+    detail:[
+      {i:'📁', t:'Module: <code>src/data_quality/</code>'},
+      {i:'🔍', t:'Kiểm tra: price > 0, qty > 0, trade_id hợp lệ'},
+      {i:'💾', t:'Quarantine: <code>lakehouse.dq_quarantine</code>'},
+      {i:'📊', t:'Dashboard Tab DQ hiển thị Donut chart phân bố lỗi'},
+    ]
+  },
+  {
+    id:'silver_gold', type:'batch',
+    x: COL(5), y: Y_BATCH,
+    icon:'🔄', label:'dbt Transform',
+    title:'dbt: Silver → Gold (OHLCV)',
+    tags:['silver_cleaned_trades','gold_ohlcv_1m','Dedup + filter'],
+    detail:[
+      {i:'📁', t:'<code>dbt_project/models/silver/</code>, <code>gold/</code>'},
+      {i:'🧹', t:'Silver: lọc DQ + dedup → dữ liệu sạch'},
+      {i:'🏆', t:'Gold: OHLCV+VWAP aggregate window 1 phút'},
+      {i:'💾', t:'Ghi MinIO Iceberg + ClickHouse <code>batch_agg</code>'},
+    ]
+  },
+  {
+    id:'batch_agg', type:'batch',
+    x: COL(6), y: Y_BATCH,
+    icon:'🟢', label:'Batch View (Reconciled)',
+    title:'ClickHouse — batch_agg',
+    tags:['Ground Truth','status=Reconciled','Deduped + DQ'],
+    detail:[
+      {i:'📊', t:'Bảng: <code>lakehouse.batch_agg</code>'},
+      {i:'✅', t:'Dữ liệu chính xác sau dedup + DQ filter'},
+      {i:'🔧', t:'ENGINE = ReplacingMergeTree(created_at)'},
+      {i:'📅', t:'PARTITION BY toYYYYMMDD(window_start)'},
+    ]
+  },
+
+  /* ── MERGE / SERVING ── */
+  {
+    id:'merger', type:'merge',
+    x: COL(7), y: yMid,
+    icon:'🔀', label:'Auto-Correcting Query Merger',
+    title:'FastAPI — Serving Layer',
+    tags:['Case 1: Batch','Case 2: Speed','Case 3: Hybrid'],
+    detail:[
+      {i:'📁', t:'<code>src/serving_layer/query_merger.py</code>'},
+      {i:'🔑', t:'API: <code>/api/candles</code>, <code>/api/watermark</code>'},
+      {i:'🔀', t:'Case 3 Hybrid: ghép Batch+Speed tại mốc Watermark W'},
+      {i:'🐳', t:'Container: <code>lakehouse-fastapi</code> (512MB) — Port 8000'},
+    ]
+  },
+  {
+    id:'redis', type:'shared',
+    x: COL(8), y: yMid,
+    icon:'⚡', label:'Hot Cache',
+    title:'Redis — LRU Speed Cache',
+    tags:['allkeys-lru','256MB','Port 6379'],
+    detail:[
+      {i:'🐳', t:'Container: <code>lakehouse-redis</code> (384MB RAM)'},
+      {i:'💾', t:'Persistence disabled — chỉ là cache'},
+      {i:'⏱️', t:'LRU eviction khi đầy 256MB'},
+      {i:'🚀', t:'Giảm tải ClickHouse cho queries hot-path'},
+    ]
+  },
+  {
+    id:'dashboard', type:'shared',
+    x: COL(9), y: yMid,
+    icon:'📊', label:'Giao diện người dùng',
+    title:'Streamlit Dashboard',
+    tags:['http://localhost:8501','Plotly','Auto-refresh 5s'],
+    detail:[
+      {i:'📁', t:'<code>dashboard/app.py</code>'},
+      {i:'📊', t:'5 Tabs: Market, Benchmark, DQ, Spike, Architecture'},
+      {i:'🔄', t:'Gọi <code>/api/candles</code> mỗi 5 giây — realtime'},
+      {i:'🐳', t:'Container: <code>lakehouse-streamlit</code> — Port 8501'},
+    ]
+  },
+];
+
+/* ══════════════════════════════════════════════════════
+   EDGES
+══════════════════════════════════════════════════════ */
+// type: 'shared' | 'speed' | 'batch' | 'merge'
+const EDGES = [
+  // Shared ingestion chain
+  {from:'binance', to:'fault',   type:'shared'},
+  {from:'fault',   to:'kafka',   type:'shared'},
+  // Fork: Kafka → Speed
+  {from:'kafka',   to:'spark_stream', type:'speed'},
+  // Fork: Kafka → Batch
+  {from:'kafka',   to:'spark_batch',  type:'batch'},
+  // Speed chain
+  {from:'spark_stream', to:'spike',    type:'speed'},
+  {from:'spike',        to:'speed_agg',type:'speed'},
+  {from:'speed_agg',    to:'merger',   type:'speed'},
+  // Batch chain
+  {from:'spark_batch',  to:'dq',       type:'batch'},
+  {from:'dq',           to:'silver_gold',type:'batch'},
+  {from:'silver_gold',  to:'batch_agg', type:'batch'},
+  {from:'batch_agg',    to:'merger',    type:'batch'},
+  // Serving chain
+  {from:'merger', to:'redis',     type:'merge'},
+  {from:'redis',  to:'dashboard', type:'merge'},
+];
+
+/* ══════════════════════════════════════════════════════
+   BUILD DOM
+══════════════════════════════════════════════════════ */
+const canvas = document.getElementById('canvas');
+const svg    = document.getElementById('svgLayer');
+
+// Map id → node data
+const nodeMap = {};
+NODES.forEach(n => nodeMap[n.id] = n);
+
+// Determine canvas size
+const allX = NODES.map(n => n.x + NW);
+const allY = NODES.map(n => n.y + NH);
+const CANVAS_W = Math.max(...allX) + PAD;
+const CANVAS_H = Math.max(...allY) + PAD + 60;
+canvas.style.width  = CANVAS_W + 'px';
+canvas.style.height = CANVAS_H + 'px';
+svg.setAttribute('width',  CANVAS_W);
+svg.setAttribute('height', CANVAS_H);
+
+// ── Arrow marker defs ──
+svg.innerHTML = `
+<defs>
+  <marker id="arrowShared" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6" opacity=".7"/>
+  </marker>
+  <marker id="arrowSpeed" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#A78BFA" opacity=".8"/>
+  </marker>
+  <marker id="arrowBatch" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#34D399" opacity=".8"/>
+  </marker>
+  <marker id="arrowMerge" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#F97316" opacity=".8"/>
+  </marker>
+</defs>`;
+
+// ── Draw edges ──
+function makeEdgePath(from, to) {
+  const fn = nodeMap[from];
+  const tn = nodeMap[to];
+  // start from right-centre of source
+  const x1 = fn.x + NW;
+  const y1 = fn.y + NH / 2;
+  // end at left-centre of target
+  const x2 = tn.x;
+  const y2 = tn.y + NH / 2;
+  const mx = (x1 + x2) / 2;
+  // bezier curve
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+
+const typeToMarker = {shared:'arrowShared', speed:'arrowSpeed', batch:'arrowBatch', merge:'arrowMerge'};
+const typeToAnimCls = {shared:'shared-anim', speed:'speed-anim', batch:'batch-anim', merge:'merge-anim'};
+
+EDGES.forEach(e => {
+  const d   = makeEdgePath(e.from, e.to);
+  const mk  = typeToMarker[e.type];
+  const acl = typeToAnimCls[e.type];
+
+  // Static dashed background path
+  const bg = document.createElementNS('http://www.w3.org/2000/svg','path');
+  bg.setAttribute('d', d);
+  bg.setAttribute('class', `flow-path ${e.type}-path`);
+  bg.setAttribute('stroke-dasharray','8 6');
+  bg.setAttribute('opacity','0.35');
+  svg.appendChild(bg);
+
+  // Animated flow path
+  const ap = document.createElementNS('http://www.w3.org/2000/svg','path');
+  ap.setAttribute('d', d);
+  ap.setAttribute('class', `anim-path ${acl}`);
+  ap.setAttribute('stroke-dasharray','6 14');
+  ap.setAttribute('stroke-dashoffset','0');
+  ap.setAttribute('marker-end', `url(#${mk})`);
+  svg.appendChild(ap);
+});
+
+// ── Branch labels ──
+function makeBranchLabel(text, cls, x, y) {
+  const el = document.createElement('div');
+  el.className = `branch-label ${cls}`;
+  el.textContent = text;
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  canvas.appendChild(el);
+}
+makeBranchLabel('⚡ SPEED LAYER — Realtime Approximate',
+  'speed-label',
+  COL(3),
+  Y_SPEED - 34
+);
+makeBranchLabel('🏗️ BATCH LAYER — Chính Xác (Ground Truth)',
+  'batch-label',
+  COL(3),
+  Y_BATCH + NH + 10
+);
+
+// ── Render nodes ──
+NODES.forEach(n => {
+  const div = document.createElement('div');
+  div.className = `node ${n.type}-node`;
+  div.id = 'node-' + n.id;
+  div.style.left = n.x + 'px';
+  div.style.top  = n.y + 'px';
+
+  const detailRows = n.detail.map(r =>
+    `<div class="detail-row"><span class="di">${r.i}</span><span>${r.t}</span></div>`
+  ).join('');
+
+  div.innerHTML = `
+    <div class="node-icon">${n.icon}</div>
+    <div class="node-label">${n.label}</div>
+    <div class="node-title">${n.title}</div>
+    <div class="node-tags">${n.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+    <div class="node-detail">
+      <button class="close-x" onclick="closeNode(event,'node-${n.id}')">✕</button>
+      <div class="detail-title">${n.icon} ${n.title}</div>
+      ${detailRows}
+    </div>`;
+
+  div.addEventListener('click', (e) => {
+    if (e.target.classList.contains('close-x')) return;
+    const wasOpen = div.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.node.open').forEach(x => x.classList.remove('open'));
+    if (!wasOpen) div.classList.add('open');
+    e.stopPropagation();
+  });
+
+  canvas.appendChild(div);
+});
+
+function closeNode(e, id) {
+  e.stopPropagation();
+  document.getElementById(id).classList.remove('open');
+}
+
+// Close on canvas click
+document.getElementById('wrap').addEventListener('click', () => {
+  document.querySelectorAll('.node.open').forEach(x => x.classList.remove('open'));
+});
+
+/* ══════════════════════════════════════════════════════
+   PAN & ZOOM
+══════════════════════════════════════════════════════ */
+const wrap = document.getElementById('wrap');
+let scale = 1, tx = 40, ty = 40;
+let isDragging = false, startX, startY, startTx, startTy;
+
+function applyTransform() {
+  canvas.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  document.getElementById('scaleLabel').textContent = Math.round(scale*100)+'%';
+  document.getElementById('offsetLabel').textContent = `${Math.round(tx)}, ${Math.round(ty)}`;
+}
+
+function zoom(factor) {
+  const newScale = Math.min(2, Math.max(0.3, scale * factor));
+  // zoom towards center
+  const ww = wrap.clientWidth, wh = wrap.clientHeight;
+  tx = ww/2 - (ww/2 - tx) * (newScale / scale);
+  ty = wh/2 - (wh/2 - ty) * (newScale / scale);
+  scale = newScale;
+  applyTransform();
+}
+
+function resetView() {
+  // Fit canvas horizontally
+  const ww = wrap.clientWidth;
+  const wh = wrap.clientHeight;
+  scale = Math.min(1, (ww - 80) / CANVAS_W);
+  tx = 40;
+  ty = (wh - CANVAS_H * scale) / 2;
+  applyTransform();
+}
+
+// Mouse drag
+wrap.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  isDragging = true;
+  startX = e.clientX; startY = e.clientY;
+  startTx = tx; startTy = ty;
+  wrap.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  tx = startTx + (e.clientX - startX);
+  ty = startTy + (e.clientY - startY);
+  applyTransform();
+});
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  wrap.classList.remove('dragging');
+});
+
+// Touch drag
+let touchStart = null;
+wrap.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    touchStart = {x: e.touches[0].clientX, y: e.touches[0].clientY, tx, ty};
+  }
+});
+wrap.addEventListener('touchmove', e => {
+  if (!touchStart || e.touches.length !== 1) return;
+  tx = touchStart.tx + (e.touches[0].clientX - touchStart.x);
+  ty = touchStart.ty + (e.touches[0].clientY - touchStart.y);
+  applyTransform();
+  e.preventDefault();
+},{passive:false});
+wrap.addEventListener('touchend', () => touchStart = null);
+
+// Scroll to zoom
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const rect = wrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const newScale = Math.min(2, Math.max(0.3, scale * delta));
+  tx = mx - (mx - tx) * (newScale / scale);
+  ty = my - (my - ty) * (newScale / scale);
+  scale = newScale;
+  applyTransform();
+},{passive:false});
+
+// Initial fit
+resetView();
+</script>
+</body>
+</html>
