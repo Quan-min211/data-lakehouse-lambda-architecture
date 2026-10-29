@@ -42,13 +42,20 @@ DIM    = "\033[2m"
 # ── Globals ───────────────────────────────────────────────────────────────────
 _running = True
 _start_time: float = 0.0
+_ws_client_ref = None
 
 
 def _signal_handler(sig, frame):
     """Xu ly Ctrl+C: dung vong lap sach."""
-    global _running
+    global _running, _ws_client_ref
     print(f"\n\n{YELLOW}{BOLD}Nhan Ctrl+C — dang dung stream sach...{RESET}")
     _running = False
+    if _ws_client_ref and getattr(_ws_client_ref, "ws", None):
+        try:
+            _ws_client_ref.ws.close()
+        except Exception:
+            pass
+
 
 
 def _print_header(top_n: int, broker: str) -> None:
@@ -109,12 +116,21 @@ def stream_binance_live(top_n: int, bootstrap_servers: str) -> None:
     print(f"  {GREEN}[PASS]{RESET} Kafka Producer san sang!\n")
 
     # ── Khoi tao Binance WebSocket Client ────────────────────────────────────
+    global _ws_client_ref
     ws_client = BinanceWebSocketProducer(kafka_producer=producer, top_n=top_n)
+    _ws_client_ref = ws_client
 
     # In thong ke sau moi 50 ticks
     _original_on_message = ws_client.on_message
 
     def _patched_on_message(ws, message: str):
+        if not _running:
+            if ws:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            return
         _original_on_message(ws, message)
         if ws_client.total_messages_received % 50 == 0:
             _print_stats(ws_client)

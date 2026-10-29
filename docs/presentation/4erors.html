@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4 Kịch Bản Lỗi & Cơ Chế Tự Phục Hồi (Self-Healing) — Data Lakehouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ══════════════════════════════════════════════════════
+     RESET & LIGHT THEME DESIGN SYSTEM
+  ══════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-main: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --bg-subtle: #F1F5F9;
+    --bg-accent: #EFF6FF;
+
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+    --text-light: #94A3B8;
+
+    --border-soft: #E2E8F0;
+    --border-strong: #CBD5E1;
+
+    --brand-blue: #2563EB;
+    --brand-blue-soft: #DBEAFE;
+    --brand-emerald: #059669;
+    --brand-emerald-soft: #D1FAE5;
+    --brand-amber: #D97706;
+    --brand-amber-soft: #FEF3C7;
+    --brand-rose: #E11D48;
+    --brand-rose-soft: #FFE4E6;
+    --brand-purple: #7C3AED;
+    --brand-purple-soft: #EDE9FE;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-container {
+    width: 100%;
+    max-width: 1280px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ════════════════ HEADER & BRANDING ════════════════ */
+  .top-header {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xl);
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .header-info h1 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  .header-info p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .header-badges {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+    border-radius: 9999px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .badge-blue { background: var(--brand-blue-soft); color: var(--brand-blue); border: 1px solid #BFDBFE; }
+  .badge-emerald { background: var(--brand-emerald-soft); color: var(--brand-emerald); border: 1px solid #A7F3D0; }
+  .badge-rose { background: var(--brand-rose-soft); color: var(--brand-rose); border: 1px solid #FECDD3; }
+  .badge-amber { background: var(--brand-amber-soft); color: var(--brand-amber); border: 1px solid #FDE68A; }
+  .badge-purple { background: var(--brand-purple-soft); color: var(--brand-purple); border: 1px solid #DDD6FE; }
+
+  /* ════════════════ TAB NAVIGATION ════════════════ */
+  .nav-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    background: var(--bg-card);
+    padding: 8px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tab-btn:hover {
+    background: var(--bg-subtle);
+  }
+
+  .tab-btn.active {
+    background: var(--bg-accent);
+    border-color: #BFDBFE;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tab-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--brand-blue);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tab-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tab-metric {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .tab-btn.active .tab-title {
+    color: var(--brand-blue);
+  }
+
+  /* ════════════════ SLIDE CONTENT CONTAINER ════════════════ */
+  .slide-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xl);
+    padding: 28px;
+    box-shadow: var(--shadow-md);
+    min-height: 580px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .slide {
+    display: none;
+    flex-direction: column;
+    gap: 22px;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ════════════════ SLIDE HERO / TITLE ════════════════ */
+  .slide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 16px;
+  }
+
+  .slide-title-wrap h2 {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .slide-title-wrap p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .slide-counter {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  /* ════════════════ 3 CORE PILLARS GRID ════════════════ */
+  .pillars-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr 1fr;
+    gap: 18px;
+    align-items: stretch;
+  }
+
+  .pillar-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+  }
+
+  .pillar-card.pillar-cause {
+    border-top: 4px solid var(--brand-amber);
+    background: linear-gradient(180deg, rgba(254, 243, 199, 0.15) 0%, rgba(255, 255, 255, 1) 40%);
+  }
+
+  .pillar-card.pillar-solution {
+    border-top: 4px solid var(--brand-blue);
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.15) 0%, rgba(255, 255, 255, 1) 40%);
+  }
+
+  .pillar-card.pillar-result {
+    border-top: 4px solid var(--brand-emerald);
+    background: linear-gradient(180deg, rgba(209, 250, 229, 0.15) 0%, rgba(255, 255, 255, 1) 40%);
+  }
+
+  .pillar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pillar-label {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pillar-cause .pillar-label { color: var(--brand-amber); }
+  .pillar-solution .pillar-label { color: var(--brand-blue); }
+  .pillar-result .pillar-label { color: var(--brand-emerald); }
+
+  .pillar-question {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .pillar-desc {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* ════════════════ SPECIFIC COMPONENTS ════════════════ */
+  /* Cause Callout */
+  .chaos-box {
+    background: #FFFBEB;
+    border: 1px dashed #F59E0B;
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .chaos-box-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #92400E;
+    text-transform: uppercase;
+  }
+  .chaos-box-content {
+    font-size: 12.5px;
+    color: #78350F;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Solution Diagram Flow */
+  .flow-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .flow-step-item {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .flow-step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--brand-blue);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .flow-step-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .flow-step-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .flow-step-sub {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .flow-arrow-down {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-light);
+    line-height: 1;
+    margin: -3px 0;
+  }
+
+  .code-badge-ref {
+    background: #F1F5F9;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--brand-blue);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Results Metric Cards */
+  .result-compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .compare-box {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .compare-box.before {
+    background: #FFF1F2;
+    border-color: #FECDD3;
+  }
+
+  .compare-box.after {
+    background: #ECFDF5;
+    border-color: #A7F3D0;
+  }
+
+  .compare-title {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .compare-box.before .compare-title { color: var(--brand-rose); }
+  .compare-box.after .compare-title { color: var(--brand-emerald); }
+
+  .compare-value {
+    font-size: 18px;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .compare-box.before .compare-value { color: var(--brand-rose); }
+  .compare-box.after .compare-value { color: var(--brand-emerald); }
+
+  .compare-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .highlight-stat-box {
+    background: var(--bg-card);
+    border: 1px solid #A7F3D0;
+    border-radius: var(--radius-md);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  .stat-val {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--brand-emerald);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ════════════════ FOOTER & CONTROLS ════════════════ */
+  .slide-footer-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .footer-hint {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .kbd {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-strong);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .nav-controls {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-nav {
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    padding: 8px 18px;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .btn-nav:hover:not(:disabled) {
+    background: var(--bg-subtle);
+    border-color: var(--text-muted);
+  }
+
+  .btn-nav:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-nav.primary {
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: #FFFFFF;
+  }
+
+  .btn-nav.primary:hover:not(:disabled) {
+    background: #1D4ED8;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ════════════════ TOP HEADER ════════════════ -->
+  <header class="top-header">
+    <div class="header-info">
+      <h1>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand-rose)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        4 Kịch Bản Lỗi & Cơ Chế Tự Phục Hồi (Self-Healing)
+      </h1>
+      <p>Data Lakehouse Lambda Architecture • Kiểm Thử Hỗn Loạn (Chaos Smoke Tests) & Data Quality Gate</p>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-emerald">4/4 Test Cases PASS</span>
+      <span class="badge badge-blue">SLA &lt; 5s Guaranteed</span>
+      <span class="badge badge-purple">ClickHouse Audit Sync</span>
+    </div>
+  </header>
+
+  <!-- ════════════════ TAB NAVIGATION (4 TABS) ════════════════ -->
+  <nav class="nav-tabs" id="tabNav">
+    <button class="tab-btn active" onclick="switchSlide(0)">
+      <span class="tab-badge">KỊCH BẢN 1 (TC1)</span>
+      <span class="tab-title">Mất Chuỗi WebSocket</span>
+      <span class="tab-metric">R_gap: 25% → 0.0%</span>
+    </button>
+    <button class="tab-btn" onclick="switchSlide(1)">
+      <span class="tab-badge">KỊCH BẢN 2 (TC2)</span>
+      <span class="tab-title">Late Data &gt; 2x Watermark</span>
+      <span class="tab-metric">ΔV: 20% → 0.0%</span>
+    </button>
+    <button class="tab-btn" onclick="switchSlide(2)">
+      <span class="tab-badge">KỊCH BẢN 3 (TC3)</span>
+      <span class="tab-title">Trùng Lặp (Duplicate Flood)</span>
+      <span class="tab-metric">R_dup: 50% → 0.0%</span>
+    </button>
+    <button class="tab-btn" onclick="switchSlide(3)">
+      <span class="tab-badge">KỊCH BẢN 4 (BENCH 4)</span>
+      <span class="tab-title">Dữ Liệu Rác / Giá Âm</span>
+      <span class="tab-metric">F1: 1.0 (430k msg/s)</span>
+    </button>
+  </nav>
+
+  <!-- ════════════════ SLIDE 1: TC1 - WEBSOCKET GAP ════════════════ -->
+  <div class="slide-container">
+    
+    <div class="slide active" id="slide-0">
+      <div class="slide-header">
+        <div class="slide-title-wrap">
+          <h2>
+            <span style="color:var(--brand-amber)">⚡ Lỗi 1:</span>
+            Rớt Gói Mạng &amp; Mất Chuỗi Giao Dịch WebSocket (TC1)
+          </h2>
+          <p>Phát hiện lỗ hổng chuỗi Trade ID trong streaming và kích hoạt luồng tự vá không gián đoạn.</p>
+        </div>
+        <div class="slide-counter">Trang 1 / 4</div>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1: Root Cause -->
+        <div class="pillar-card pillar-cause">
+          <div class="pillar-header">
+            <span class="pillar-label">1. Nguyên Nhân Phát Sinh</span>
+            <span class="badge badge-amber">Network Jitter</span>
+          </div>
+          <div class="pillar-question">Tại sao xảy ra lỗi này?</div>
+          <p class="pillar-desc">
+            Trong môi trường Crypto biến động cao, kết nối WebSocket giữa Ingestion Node và sàn Binance có thể bị chập chờn, drop frame TCP hoặc reset socket đột ngột, làm thất thoát một dải <code>trade_id</code> liên tục trên Kafka topic.
+          </p>
+          <div class="chaos-box">
+            <div class="chaos-box-title">🔥 Mô Phỏng Chaos (Chaos Injection):</div>
+            <div class="chaos-box-content">
+              Cố tình cắt bỏ 50 Trade ID liên tiếp trong luồng Speed (từ ID 200,070 đến 200,120) &rarr; Tỷ lệ mất chuỗi <strong>R_gap = 25.0%</strong>.
+            </div>
+          </div>
+        </div>
+
+        <!-- Pillar 2: Solution Flow -->
+        <div class="pillar-card pillar-solution">
+          <div class="pillar-header">
+            <span class="pillar-label">2. Sơ Đồ Khắc Phục</span>
+            <span class="badge badge-blue">REST Backfill</span>
+          </div>
+          <div class="pillar-question">Cơ chế tự sửa lỗi hoạt động thế nào?</div>
+          
+          <div class="flow-steps">
+            <div class="flow-step-item">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Phát hiện mất chuỗi (Gap Detection)</span>
+                <span class="flow-step-sub">Tracking trade_id liên tục theo từng symbol</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Kích hoạt Async Thread gọi REST API</span>
+                <span class="flow-step-sub">Gọi /api/v3/aggTrades bù đắp [id_prev+1 .. id_curr-1]</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Batch Layer Reconcile &amp; Heal</span>
+                <span class="flow-step-sub">Bơm lại vào Kafka + quét lại dữ liệu trên MinIO</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="code-badge-ref">
+            📁 Mã nguồn: <code>src/ingestion/binance_ws.py</code> (L88–110)
+          </div>
+        </div>
+
+        <!-- Pillar 3: Results -->
+        <div class="pillar-card pillar-result">
+          <div class="pillar-header">
+            <span class="pillar-label">3. Kết Quả Sau Khắc Phục</span>
+            <span class="badge badge-emerald">PASS 100%</span>
+          </div>
+          <div class="pillar-question">Số liệu thực nghiệm chứng minh</div>
+          <p class="pillar-desc">
+            Toàn bộ 50 giao dịch bị mất được bù đắp hoàn chỉnh. Độ lệch khối lượng và tỷ lệ rớt chuỗi được triệt tiêu hoàn toàn.
+          </p>
+
+          <div class="result-compare-grid">
+            <div class="compare-box before">
+              <span class="compare-title">TRƯỚC TỰ SỬA</span>
+              <span class="compare-value">R_gap: 25%</span>
+              <span class="compare-sub">&Delta;V lệch: 24.3%</span>
+            </div>
+            <div class="compare-box after">
+              <span class="compare-title">SAU TỰ SỬA</span>
+              <span class="compare-value">R_gap: 0.0%</span>
+              <span class="compare-sub">&Delta;V lệch: 0.00%</span>
+            </div>
+          </div>
+
+          <div class="highlight-stat-box">
+            <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
+            <span class="stat-val">0.124 giây</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ SLIDE 2: TC2 - LATE DATA ════════════════ -->
+    <div class="slide" id="slide-1">
+      <div class="slide-header">
+        <div class="slide-title-wrap">
+          <h2>
+            <span style="color:var(--brand-amber)">⏱️ Lỗi 2:</span>
+            Dữ Liệu Đến Muộn Vượt Quá Watermark (TC2)
+          </h2>
+          <p>Bảo vệ bộ nhớ RAM Speed Layer và để Batch Layer đóng vai trò "chân lý tối hậu" vớt lại dữ liệu.</p>
+        </div>
+        <div class="slide-counter">Trang 2 / 4</div>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1: Root Cause -->
+        <div class="pillar-card pillar-cause">
+          <div class="pillar-header">
+            <span class="pillar-label">1. Nguyên Nhân Phát Sinh</span>
+            <span class="badge badge-amber">Event Skew</span>
+          </div>
+          <div class="pillar-question">Tại sao xảy ra lỗi này?</div>
+          <p class="pillar-desc">
+            Giao dịch phát sinh tại thời điểm $t$ nhưng do lag mạng trung gian, hàng đợi sàn hoặc client chậm trễ nên đến hệ thống muộn 2 phút (120s), vượt quá ngưỡng Spark Watermark cho phép (1 phút / 60s).
+          </p>
+          <div class="chaos-box">
+            <div class="chaos-box-title">🔥 Mô Phỏng Chaos (Chaos Injection):</div>
+            <div class="chaos-box-content">
+              Bơm 40 giao dịch trễ 120 giây (gấp 2 lần Watermark). Speed View tạm thời bỏ qua để giữ SLA nến &lt; 5s.
+            </div>
+          </div>
+        </div>
+
+        <!-- Pillar 2: Solution Flow -->
+        <div class="pillar-card pillar-solution">
+          <div class="pillar-header">
+            <span class="pillar-label">2. Sơ Đồ Khắc Phục</span>
+            <span class="badge badge-blue">Batch Rescues Late</span>
+          </div>
+          <div class="pillar-question">Cơ chế tự sửa lỗi hoạt động thế nào?</div>
+          
+          <div class="flow-steps">
+            <div class="flow-step-item">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Speed Layer Drop Late Events</span>
+                <span class="flow-step-sub">Tránh phình RocksDB StateStore RAM, giữ SLA &lt;5s</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Lưu trọn vẹn tại Master Dataset</span>
+                <span class="flow-step-sub">Kafka lưu vào MinIO Iceberg Bronze không bị drop</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Batch Layer tính theo event_time</span>
+                <span class="flow-step-sub">Quét toàn bộ Bronze, vớt lại 40 sự kiện trễ</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="code-badge-ref">
+            📁 Mã nguồn: <code>src/speed_layer/spark_streaming.py</code> &amp; <code>spark_batch_jobs.py</code>
+          </div>
+        </div>
+
+        <!-- Pillar 3: Results -->
+        <div class="pillar-card pillar-result">
+          <div class="pillar-header">
+            <span class="pillar-label">3. Kết Quả Sau Khắc Phục</span>
+            <span class="badge badge-emerald">PASS 100%</span>
+          </div>
+          <div class="pillar-question">Số liệu thực nghiệm chứng minh</div>
+          <p class="pillar-desc">
+            Đúng theo tôn chỉ Lambda: Speed Layer chịu sai số tức thời nhưng Batch Layer đảm bảo tính toàn vẹn tuyệt đối (Eventually Consistent).
+          </p>
+
+          <div class="result-compare-grid">
+            <div class="compare-box before">
+              <span class="compare-title">SPEED TẠM THỜI</span>
+              <span class="compare-value">&Delta;V: 18.7%</span>
+              <span class="compare-sub">Drop 40 giao dịch trễ</span>
+            </div>
+            <div class="compare-box after">
+              <span class="compare-title">BATCH HỒI PHỤC</span>
+              <span class="compare-value">&Delta;V: 0.00%</span>
+              <span class="compare-sub">Vớt đủ 100% Volume</span>
+            </div>
+          </div>
+
+          <div class="highlight-stat-box">
+            <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
+            <span class="stat-val">0.252 giây</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ SLIDE 3: TC3 - DUPLICATE FLOOD ════════════════ -->
+    <div class="slide" id="slide-2">
+      <div class="slide-header">
+        <div class="slide-title-wrap">
+          <h2>
+            <span style="color:var(--brand-amber)">🔁 Lỗi 3:</span>
+            Nhân Đôi Dữ Liệu Do Giáp Ranh Kết Nối (Duplicate Flood - TC3)
+          </h2>
+          <p>Loại bỏ trùng lặp tuyệt đối, chống đôn khống volume khi Producer retry do mạng chập chờn.</p>
+        </div>
+        <div class="slide-counter">Trang 3 / 4</div>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1: Root Cause -->
+        <div class="pillar-card pillar-cause">
+          <div class="pillar-header">
+            <span class="pillar-label">1. Nguyên Nhân Phát Sinh</span>
+            <span class="badge badge-amber">Retry / Rebalance</span>
+          </div>
+          <div class="pillar-question">Tại sao xảy ra lỗi này?</div>
+          <p class="pillar-desc">
+            Khi mạng chập chờn, Kafka Producer kích hoạt retry cơ chế At-least-once, hoặc khi chuyển đổi giữa WebSocket sang REST Backfill làm phát sinh trùng lặp một dải bản ghi lớn vào topic.
+          </p>
+          <div class="chaos-box">
+            <div class="chaos-box-title">🔥 Mô Phỏng Chaos (Chaos Injection):</div>
+            <div class="chaos-box-content">
+              Bơm lặp 1,000 sự kiện 2 lần liên tiếp (tổng 2,000 tin) &rarr; Tỷ lệ trùng lặp <strong>R_dup = 50.0%</strong>, nguy cơ đôn khống $2\times$ volume!
+            </div>
+          </div>
+        </div>
+
+        <!-- Pillar 2: Solution Flow -->
+        <div class="pillar-card pillar-solution">
+          <div class="pillar-header">
+            <span class="pillar-label">2. Sơ Đồ Khắc Phục</span>
+            <span class="badge badge-blue">2-Tier Deduplication</span>
+          </div>
+          <div class="pillar-question">Cơ chế tự sửa lỗi hoạt động thế nào?</div>
+          
+          <div class="flow-steps">
+            <div class="flow-step-item">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Tầng 1: Data Quality Gate (Silver Layer)</span>
+                <span class="flow-step-sub">Khử trùng lặp trên trade_id trong micro-batch</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Tầng 2: ClickHouse ReplacingMergeTree</span>
+                <span class="flow-step-sub">Deduplicate tự động tại Serving Store theo Primary Key</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Serving Query Lọc Chuẩn Xác</span>
+                <span class="flow-step-sub">SELECT distinct bản ghi mới nhất, bảo toàn Volume</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="code-badge-ref">
+            📁 Mã nguồn: <code>src/data_quality/dq_checks.py</code> &amp; DDL ClickHouse
+          </div>
+        </div>
+
+        <!-- Pillar 3: Results -->
+        <div class="pillar-card pillar-result">
+          <div class="pillar-header">
+            <span class="pillar-label">3. Kết Quả Sau Khắc Phục</span>
+            <span class="badge badge-emerald">PASS 100%</span>
+          </div>
+          <div class="pillar-question">Số liệu thực nghiệm chứng minh</div>
+          <p class="pillar-desc">
+            1,000 bản ghi bị lặp bị triệt tiêu 100%. Số lượng giao dịch và Volume khớp tuyệt đối với Ground Truth ban đầu.
+          </p>
+
+          <div class="result-compare-grid">
+            <div class="compare-box before">
+              <span class="compare-title">TRƯỚC DEDUP</span>
+              <span class="compare-value">R_dup: 50%</span>
+              <span class="compare-sub">Volume đôn gấp đôi (2x)</span>
+            </div>
+            <div class="compare-box after">
+              <span class="compare-title">SAU DEDUP</span>
+              <span class="compare-value">R_dup: 0.0%</span>
+              <span class="compare-sub">&Delta;V lệch: 0.00%</span>
+            </div>
+          </div>
+
+          <div class="highlight-stat-box">
+            <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
+            <span class="stat-val">0.183 giây</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ SLIDE 4: TC4 / BENCHMARK 4 - CORRUPT DATA ════════════════ -->
+    <div class="slide" id="slide-3">
+      <div class="slide-header">
+        <div class="slide-title-wrap">
+          <h2>
+            <span style="color:var(--brand-amber)">🛡️ Lỗi 4:</span>
+            Dữ Liệu Rác, Giá Âm &amp; Sai Schema (Benchmark 4 - DQ Gate)
+          </h2>
+          <p>Tự động cách ly vào bảng Quarantine, không để dữ liệu bẩn làm sập Spark hoặc sai lệch nến.</p>
+        </div>
+        <div class="slide-counter">Trang 4 / 4</div>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1: Root Cause -->
+        <div class="pillar-card pillar-cause">
+          <div class="pillar-header">
+            <span class="pillar-label">1. Nguyên Nhân Phát Sinh</span>
+            <span class="badge badge-amber">Upstream Bug / Poison Pill</span>
+          </div>
+          <div class="pillar-question">Tại sao xảy ra lỗi này?</div>
+          <p class="pillar-desc">
+            Do bug từ sàn giao dịch, parser lỗi, hoặc kẻ gian tiêm dữ liệu độc hại (Poison Pill): giá âm ($P < 0$), khối lượng bằng 0 ($Q \le 0$), thiếu trường bắt buộc hoặc sai kiểu dữ liệu.
+          </p>
+          <div class="chaos-box">
+            <div class="chaos-box-title">🔥 Mô Phỏng Chaos (Chaos Injection):</div>
+            <div class="chaos-box-content">
+              Bơm hàng loạt bản ghi giá âm, quantity = 0 và schema invalid (tỷ lệ lỗi 20% trên 5,000 records).
+            </div>
+          </div>
+        </div>
+
+        <!-- Pillar 2: Solution Flow -->
+        <div class="pillar-card pillar-solution">
+          <div class="pillar-header">
+            <span class="pillar-label">2. Sơ Đồ Khắc Phục</span>
+            <span class="badge badge-blue">Quarantine Isolation</span>
+          </div>
+          <div class="pillar-question">Cơ chế tự sửa lỗi hoạt động thế nào?</div>
+          
+          <div class="flow-steps">
+            <div class="flow-step-item">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Data Quality Gate Validator</span>
+                <span class="flow-step-sub">Kiểm tra điều kiện: price &gt; 0, qty &gt; 0, valid timestamp</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Tách Luồng Dữ Liệu Tức Thì</span>
+                <span class="flow-step-sub">Dữ liệu sạch &rarr; Gold / ClickHouse; Dữ liệu lỗi &rarr; Cách ly</span>
+              </div>
+            </div>
+            <div class="flow-arrow-down">&darr;</div>
+            <div class="flow-step-item">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-info">
+                <span class="flow-step-title">Bảng Cách Ly &amp; Cảnh Báo Chủ Động</span>
+                <span class="flow-step-sub">Lưu vào lakehouse.dq_quarantine &amp; AlertManager</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="code-badge-ref">
+            📁 Mã nguồn: <code>src/data_quality/dq_checks.py</code> &amp; <code>alerting.py</code>
+          </div>
+        </div>
+
+        <!-- Pillar 3: Results -->
+        <div class="pillar-card pillar-result">
+          <div class="pillar-header">
+            <span class="pillar-label">3. Kết Quả Sau Khắc Phục</span>
+            <span class="badge badge-emerald">F1 = 1.0000</span>
+          </div>
+          <div class="pillar-question">Số liệu thực nghiệm chứng minh</div>
+          <p class="pillar-desc">
+            Phân loại hoàn hảo 100%: không chặn nhầm bản ghi sạch (FP = 0), không để lọt bản ghi rác nào (FN = 0).
+          </p>
+
+          <div class="result-compare-grid">
+            <div class="compare-box after" style="background:#F0FDF4; border-color:#86EFAC;">
+              <span class="compare-title">PRECISION &amp; RECALL</span>
+              <span class="compare-value" style="color:var(--brand-emerald);">1.0000</span>
+              <span class="compare-sub">Phát hiện lỗi chuẩn 100%</span>
+            </div>
+            <div class="compare-box after" style="background:#EFF6FF; border-color:#93C5FD;">
+              <span class="compare-title">THÔNG LƯỢNG XỬ LÝ</span>
+              <span class="compare-value" style="color:var(--brand-blue); font-size:16px;">430,704</span>
+              <span class="compare-sub">bản ghi / giây (Overhead 7.1ms)</span>
+            </div>
+          </div>
+
+          <div class="highlight-stat-box">
+            <span class="stat-label">Trạng thái bảng phân tích chính:</span>
+            <span class="stat-val" style="color:var(--brand-emerald);">100% Sạch Tinh Khiết</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ SLIDE FOOTER CONTROLS ════════════════ -->
+    <div class="slide-footer-nav">
+      <div class="footer-hint">
+        <span>💡 Dùng phím</span>
+        <span class="kbd">&larr;</span>
+        <span class="kbd">&rarr;</span>
+        <span>hoặc các nút điều hướng để chuyển trang báo cáo</span>
+      </div>
+      <div class="nav-controls">
+        <button class="btn-nav" id="btnPrev" onclick="prevSlide()" disabled>&larr; Lỗi Trước</button>
+        <button class="btn-nav primary" id="btnNext" onclick="nextSlide()">Lỗi Tiếp Theo &rarr;</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ════════════════ JAVASCRIPT CONTROLLER ════════════════ -->
+<script>
+  let currentSlide = 0;
+  const totalSlides = 4;
+  const slides = [
+    document.getElementById('slide-0'),
+    document.getElementById('slide-1'),
+    document.getElementById('slide-2'),
+    document.getElementById('slide-3')
+  ];
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+
+  function switchSlide(index) {
+    if (index < 0 || index >= totalSlides) return;
+    
+    // Deactivate current
+    slides[currentSlide].classList.remove('active');
+    tabButtons[currentSlide].classList.remove('active');
+
+    // Activate target
+    currentSlide = index;
+    slides[currentSlide].classList.add('active');
+    tabButtons[currentSlide].classList.add('active');
+
+    // Update navigation button states
+    btnPrev.disabled = (currentSlide === 0);
+    btnNext.disabled = (currentSlide === totalSlides - 1);
+    if (currentSlide === totalSlides - 1) {
+      btnNext.innerHTML = 'Đã Hết Lỗi &check;';
+    } else {
+      btnNext.innerHTML = 'Lỗi Tiếp Theo &rarr;';
+    }
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides - 1) {
+      switchSlide(currentSlide + 1);
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) {
+      switchSlide(currentSlide - 1);
+    }
+  }
+
+  // Keyboard navigation listener (Left / Right Arrow)
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      prevSlide();
+    }
+  });
+</script>
+
+</body>
+</html>
+
