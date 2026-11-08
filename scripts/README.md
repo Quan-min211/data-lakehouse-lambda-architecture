@@ -6,8 +6,24 @@ Thư mục chứa helper scripts và benchmark runners.
 |:---|:---|
 | `setup_infra.py` | Kiểm tra & khởi tạo hạ tầng (MinIO buckets, Kafka topics, etc.) |
 | `seed_data.py` | Nạp dữ liệu mẫu ban đầu |
+| `auto_pipeline_daemon.py` | **Autonomous Pipeline Daemon**: Tự động chạy nền Ingestion -> Kafka -> Speed + Auto-Batch -> Reconciliation Audit -> ClickHouse Optimize |
 | `run_lambda_pipeline.py` | Chạy một lệnh cho flow Binance REST → mock data → Kafka replay → Batch/Speed → Serving smoke check |
 | `e2e_full_pipeline.py` | Smoke test full pipeline dựa trên `run_lambda_pipeline.py`, kiểm tra batch/speed/watermark/API/Redis |
+
+## Autonomous Zero-Touch Pipeline (Tự động hóa 100%)
+
+Chạy toàn bộ hệ thống tự động khép kín (Ingestion đẩy vào Kafka + Speed Layer xử lý tức thời + Batch Layer tự động đọc Kafka định kỳ, lọc DQ/Quarantine, cập nhật Watermark và đối soát `reconciliation_audit_metrics`):
+
+```bash
+# Chạy tự động với luồng giả lập liên tục + tiêm lỗi & đối soát mỗi 20 giây:
+python scripts/auto_pipeline_daemon.py --mode simulated --batch-interval 20
+
+# Chạy tự động với luồng Binance WebSocket thật (Top 5 coin) mỗi 30 giây:
+python scripts/auto_pipeline_daemon.py --mode live --top-n 5 --batch-interval 30
+
+# Chạy riêng Batch Layer ở chế độ Auto-Daemon đọc trực tiếp từ Kafka:
+python src/batch_layer/spark_batch_jobs.py --from-kafka --daemon --interval 60
+```
 
 ## One-command pipeline
 

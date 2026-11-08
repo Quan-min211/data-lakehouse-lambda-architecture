@@ -48,7 +48,10 @@ class MetricsCalculator:
                 "vwap": 0.0,
             }
 
-        sorted_trades = sorted(trades, key=lambda t: t["trade_time"])
+        sorted_trades = sorted(
+            trades,
+            key=lambda t: (int(t["trade_time"]), int(t.get("trade_id", 0))),
+        )
         prices = [float(t["price"]) for t in sorted_trades]
         quantities = [float(t["quantity"]) for t in sorted_trades]
 
@@ -79,17 +82,21 @@ class MetricsCalculator:
         """
         from pyspark.sql import functions as F  # lazy import
 
-        # Struct ket hop trade_time va price
-        time_price_struct = F.struct(F.col("trade_time"), F.col("price"))
+        # Struct ket hop (trade_time, trade_id, price) de tie-break chuan xac khi cung mili-giay
+        time_price_struct = F.struct(
+            F.col("trade_time"),
+            F.col("trade_id"),
+            F.col("price"),
+        )
 
         return [
-            # Open: gia cua giao dich co trade_time som nhat trong window
+            # Open: gia cua giao dich co (trade_time, trade_id) som nhat trong window
             F.min(time_price_struct).getItem("price").alias("open_price"),
             # High: gia cao nhat trong window
             F.max(F.col("price")).alias("high_price"),
             # Low: gia thap nhat trong window
             F.min(F.col("price")).alias("low_price"),
-            # Close: gia cua giao dich co trade_time muon nhat trong window
+            # Close: gia cua giao dich co (trade_time, trade_id) muon nhat trong window
             F.max(time_price_struct).getItem("price").alias("close_price"),
             # Volume: tong khoi luong giao dich
             F.sum(F.col("quantity")).alias("volume"),

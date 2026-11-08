@@ -162,30 +162,48 @@ class BinanceWebSocketProducer:
         """Tự động gọi Binance REST API bù đắp các trade bị thiếu vào Kafka khi có sequence gap."""
         url = f"{config.binance.rest_url}/api/v3/aggTrades"
         params = {"symbol": symbol, "fromId": from_id, "limit": min(limit, 500)}
-        try:
-            resp = requests.get(url, params=params, timeout=5)
-            if resp.status_code == 200:
-                raw_trades = resp.json()
-                published = 0
-                for item in raw_trades:
-                    trade_dict = {
-                        "s": symbol,
-                        "p": item.get("p"),
-                        "q": item.get("q"),
-                        "T": item.get("T"),
-                        "m": item.get("m", False),
-                        "t": item.get("a", item.get("f", from_id)),
-                    }
-                    te = TradeEvent.from_binance_raw(trade_dict)
-                    if self.producer:
-                        self.producer.send_trade(te)
-                        published += 1
-                if published > 0:
-                    logger.info(
-                        f"✓ [AUTO-BACKFILL SUCCESS] Đã bù đắp {published} trades cho {symbol} (từ ID {from_id})."
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                resp = requests.get(url, params=params, timeout=5)
+                if resp.status_code in (429, 418):
+                    retry_after = int(resp.headers.get("Retry-After", 2 ** attempt))
+                    logger.warning(
+                        f"Binance REST rate-limit (HTTP {resp.status_code}) khi backfill {symbol}. "
+                        f"Đợi {retry_after}s (lần {attempt}/{max_retries})..."
                     )
-        except Exception as e:
-            logger.warning(f"Auto-backfill thất bại cho {symbol} (từ ID {from_id}): {e}")
+                    time.sleep(min(retry_after, 30))
+                    continue
+
+                if resp.status_code == 200:
+                    raw_trades = resp.json()
+                    published = 0
+                    for item in raw_trades:
+                        agg_tid = item.get("a", item.get("t", from_id))
+                        trade_dict = {
+                            "s": symbol,
+                            "a": agg_tid,
+                            "p": item.get("p"),
+                            "q": item.get("q"),
+                            "T": item.get("T"),
+                            "m": item.get("m", False),
+                            "t": agg_tid,
+                        }
+                        te = TradeEvent.from_binance_raw(trade_dict)
+                        if self.producer:
+                            self.producer.send_trade(te)
+                            published += 1
+                    if published > 0:
+                        logger.info(
+                            f"✓ [AUTO-BACKFILL SUCCESS] Đã bù đắp {published} trades cho {symbol} (từ ID {from_id})."
+                        )
+                    return
+                break
+            except Exception as e:
+                if attempt == max_retries:
+                    logger.warning(f"Auto-backfill thất bại cho {symbol} (từ ID {from_id}): {e}")
+                else:
+                    time.sleep(attempt)
 
     def start_streaming(self):
         """Bắt đầu vòng lặp thu thập dữ liệu với cơ chế Auto-reconnect."""

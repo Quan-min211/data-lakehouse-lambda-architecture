@@ -33,13 +33,16 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
+from src.batch_layer.compaction import get_spark_session
+from src.batch_layer.maintenance import run_table_maintenance
 from src.batch_layer.spark_batch_jobs import (
     aggregate_gold_candles,
+    consume_kafka_records,
     load_default_records,
     maybe_write_bronze_to_iceberg,
+    sync_reconciliation_audit,
     write_batch_run_log,
 )
-from src.batch_layer.compaction import CompactionJob, get_spark_session
 from src.data_quality.dq_checks import clean_and_deduplicate
 
 
@@ -50,17 +53,18 @@ def _batch_run_id() -> str:
 
 @asset(
     group_name="lakehouse_batch",
-    description="Load raw TradeEvent records from local datasets and optionally append them to Iceberg Bronze.",
+    description="Load raw TradeEvent records from local datasets (or Kafka incremental) and optionally append them to Iceberg Bronze.",
     metadata={
         "layer": "Bronze",
-        "format": "TradeEvent JSON/CSV -> optional Apache Iceberg",
+        "format": "TradeEvent JSON/CSV/Kafka -> optional Apache Iceberg",
         "table": "iceberg_catalog.bronze.crypto_trades",
     },
 )
 def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
     """Load raw records for the current batch window."""
     batch_run_id = _batch_run_id()
-    records = load_default_records()
+    from_kafka = os.getenv("BATCH_FROM_KAFKA", "false").lower() == "true"
+    records = consume_kafka_records() if from_kafka else load_default_records()
 
     write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "false").lower() == "true"
     iceberg_strict = os.getenv("BATCH_ICEBERG_STRICT", "false").lower() == "true"
@@ -195,6 +199,13 @@ def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any
     """Publish Gold candles to ClickHouse."""
     sync = ClickHouseBatchSync()
     rows_inserted = sync.insert_batch_aggregates(gold["candles"], batch_run_id=gold["batch_run_id"])
+    reconciled_audit_rows = sync_reconciliation_audit(
+        sync=sync,
+        candles=gold["candles"],
+        quality=gold["quality"],
+        batch_run_id=gold["batch_run_id"],
+        duration_s=0.1,
+    )
     write_batch_run_log(
         batch_run_id=gold["batch_run_id"],
         quality=gold["quality"],
@@ -202,17 +213,23 @@ def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any
         clickhouse_rows=rows_inserted,
         watermark=gold["watermark"],
     )
-    context.log.info("ClickHouse batch sync inserted %s rows", rows_inserted)
+    context.log.info(
+        "ClickHouse batch sync inserted %s rows (audit_rows=%s)",
+        rows_inserted,
+        reconciled_audit_rows,
+    )
 
     return Output(
         value={
             "batch_run_id": gold["batch_run_id"],
             "rows_inserted": rows_inserted,
+            "reconciled_audit_rows": reconciled_audit_rows,
             "watermark": gold["watermark"],
             "candles_count": len(gold["candles"]),
         },
         metadata={
             "rows_inserted": MetadataValue.int(rows_inserted),
+            "reconciled_audit_rows": MetadataValue.int(reconciled_audit_rows),
             "candles_count": MetadataValue.int(len(gold["candles"])),
             "clickhouse_table": MetadataValue.text("lakehouse.batch_agg"),
         },
@@ -260,12 +277,11 @@ def system_watermark_sync(context, ch_sync: Dict[str, Any]) -> Output[Dict[str, 
 def iceberg_small_files_compaction(context) -> Output[Dict[str, Any]]:
     """Run full table maintenance pipeline for Iceberg and ClickHouse."""
     try:
-        from src.batch_layer.maintenance import run_table_maintenance
         spark = get_spark_session("Dagster-IcebergCompaction")
         maint_result = run_table_maintenance(
             spark=spark,
             target_file_size_mb=128,
-            snapshot_expire_days=7,
+            expire_older_than_days=7,
             orphan_older_than_days=3,
             with_sort=False,
         )

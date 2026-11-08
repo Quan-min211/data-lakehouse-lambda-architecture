@@ -165,18 +165,21 @@ class ClickHouseSpeedWriter:
     def write_batch_from_spark(self, batch_df, batch_id: int):
         """
         Hàm callback sử dụng cho DataFrame.writeStream.foreachBatch().
+        Chỉ gọi 1 Spark action (collect) thay vì gọi cả count() + collect()
+        để giảm một nửa chi phí thực thi DAG mỗi micro-batch.
         """
         start_t = time.time()
-        count = batch_df.count()
+        rows = batch_df.collect()
+        count = len(rows)
         if count == 0:
             return
 
         logger.info(f"[Batch {batch_id}] Nhận {count} bản ghi tổng hợp từ Spark Streaming.")
 
-        # Thu thập dữ liệu dạng Pandas / Dict để nạp vào ClickHouse
+        # Thu thập dữ liệu dạng Dict để nạp vào ClickHouse & Redis
         # Mapping cấu trúc window.start và window.end
         collected = []
-        for row in batch_df.collect():
+        for row in rows:
             r_dict = row.asDict(recursive=True)
             if "window" in r_dict:
                 w = r_dict["window"]

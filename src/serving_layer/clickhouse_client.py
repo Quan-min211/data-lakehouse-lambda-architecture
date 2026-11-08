@@ -7,6 +7,8 @@ Client truy vấn dữ liệu nến từ ClickHouse:
 """
 
 import os
+import re
+import threading
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
@@ -23,6 +25,16 @@ logger = setup_logger("serving_ch_client")
 
 class ClickHouseQueryClient:
     """Truy vấn các bảng tổng hợp trong ClickHouse."""
+
+    ALLOWED_TABLES = {
+        "batch_agg",
+        "speed_agg",
+        "system_watermark",
+        "dq_quarantine",
+        "reconciliation_audit_metrics",
+    }
+    _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    _SYMBOL_RE = re.compile(r"^[A-Z0-9_-]{1,32}$")
 
     def __init__(
         self,
@@ -41,6 +53,24 @@ class ClickHouseQueryClient:
         self.database = database
         self._mock_data = mock_data or {}
         self._client = None
+        self._query_lock = threading.Lock()
+
+    @classmethod
+    def _sanitize_symbol(cls, symbol: str) -> str:
+        """Chuẩn hóa và kiểm tra symbol chống SQL Injection."""
+        clean = str(symbol or "").strip().upper()
+        if not cls._SYMBOL_RE.match(clean):
+            raise ValueError(f"Symbol không hợp lệ: {symbol!r}")
+        return clean
+
+    def _validate_table(self, table: str) -> str:
+        """Kiểm tra tên bảng hợp lệ nằm trong danh sách cho phép."""
+        clean_table = str(table or "").strip()
+        if clean_table not in self.ALLOWED_TABLES or not self._IDENT_RE.match(clean_table):
+            raise ValueError(f"Bảng truy vấn không hợp lệ: {table!r}")
+        if not self._IDENT_RE.match(self.database):
+            raise ValueError(f"Database không hợp lệ: {self.database!r}")
+        return clean_table
 
     def set_mock_data(self, table: str, records: List[Dict[str, Any]]):
         """Thiết lập dữ liệu mock cho unit test."""
@@ -117,6 +147,10 @@ class ClickHouseQueryClient:
                     results.append(candle)
             return sorted(results, key=lambda x: x["window_start"])
 
+        # Chuẩn hóa và kiểm tra an toàn SQL cho table & symbol
+        safe_table = self._validate_table(table)
+        safe_symbol = self._sanitize_symbol(symbol)
+
         # Truy vấn trực tiếp từ ClickHouse
         client = self.get_client()
         if client is None:
@@ -140,14 +174,15 @@ class ClickHouseQueryClient:
             trade_count,
             vwap,
             is_spike
-        FROM {self.database}.{table}{final_clause}
-        WHERE symbol = '{symbol.upper()}'
+        FROM {self.database}.{safe_table}{final_clause}
+        WHERE symbol = '{safe_symbol}'
           AND window_start >= toDateTime64('{start_str}', 3, 'UTC')
           AND window_start < toDateTime64('{end_str}', 3, 'UTC')
         ORDER BY window_start ASC
         """
         try:
-            res = client.query(query)
+            with self._query_lock:
+                res = client.query(query)
             candles = []
             for row in res.result_rows:
                 w_s = row[1]

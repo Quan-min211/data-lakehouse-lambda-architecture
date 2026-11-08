@@ -18,6 +18,7 @@ import csv
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -97,8 +98,118 @@ def load_records_from_path(path: Path) -> List[Dict[str, Any]]:
     return []
 
 
-def load_default_records() -> List[Dict[str, Any]]:
-    """Load records from the first populated default dataset directory."""
+def consume_kafka_records(
+    bootstrap_servers: Optional[str] = None,
+    topic: Optional[str] = None,
+    max_records: int = 50000,
+    poll_timeout_ms: int = 2000,
+    offset_file: Optional[Path] = None,
+    reset_offsets: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Doc incremental cac ban ghi TradeEvent truc tiep tu Kafka topic 'crypto_trades_raw'
+    va luu checkpoint offset vao file JSON de cac chu ky Batch tu dong tiep tuc
+    doc tu offset chua xu ly.
+    """
+    try:
+        from kafka import KafkaConsumer, TopicPartition
+    except ImportError:
+        logger.warning("kafka-python chua duoc cai dat; bo qua consume_kafka_records.")
+        return []
+
+    from src.utils.config import get_kafka_config
+
+    kafka_cfg = get_kafka_config()
+    brokers = bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS", kafka_cfg.bootstrap_servers)
+    topic_name = topic or os.getenv("KAFKA_TOPIC_RAW", kafka_cfg.topic_raw)
+    checkpoint_path = offset_file or (RESULT_LOG_DIR / "batch_kafka_offsets.json")
+
+    saved_offsets: Dict[str, int] = {}
+    if not reset_offsets and checkpoint_path.exists():
+        try:
+            saved_offsets = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Khong doc duoc file offset %s: %s", checkpoint_path, exc)
+
+    records: List[Dict[str, Any]] = []
+    new_offsets: Dict[str, int] = dict(saved_offsets)
+
+    try:
+        consumer = KafkaConsumer(
+            bootstrap_servers=brokers,
+            enable_auto_commit=False,
+            value_deserializer=lambda b: json.loads(b.decode("utf-8", errors="ignore")),
+            consumer_timeout_ms=poll_timeout_ms,
+            request_timeout_ms=5000,
+            api_version_auto_timeout_ms=5000,
+        )
+        partitions = consumer.partitions_for_topic(topic_name)
+        if not partitions:
+            consumer.close()
+            return []
+
+        tps = [TopicPartition(topic_name, p) for p in sorted(partitions)]
+        consumer.assign(tps)
+        beginning = consumer.beginning_offsets(tps)
+        end_offsets = consumer.end_offsets(tps)
+
+        has_unread = False
+        for tp in tps:
+            key = f"{tp.topic}:{tp.partition}"
+            start_off = saved_offsets.get(key, beginning.get(tp, 0))
+            # Neu Kafka retention da xoa offset cu hoac topic duoc tao lai
+            if start_off < beginning.get(tp, 0) or start_off > end_offsets.get(tp, 0):
+                start_off = beginning.get(tp, 0)
+            consumer.seek(tp, start_off)
+            if start_off < end_offsets.get(tp, 0):
+                has_unread = True
+
+        if not has_unread:
+            consumer.close()
+            return []
+
+        while len(records) < max_records:
+            batch = consumer.poll(timeout_ms=poll_timeout_ms, max_records=min(5000, max_records - len(records)))
+            if not batch:
+                break
+            reached_end = True
+            for tp, messages in batch.items():
+                key = f"{tp.topic}:{tp.partition}"
+                for msg in messages:
+                    if isinstance(msg.value, dict):
+                        records.append(msg.value)
+                    new_offsets[key] = msg.offset + 1
+                if new_offsets.get(key, 0) < end_offsets.get(tp, 0):
+                    reached_end = False
+            if reached_end:
+                break
+
+        consumer.close()
+
+        if records:
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint_path.write_text(json.dumps(new_offsets, indent=2), encoding="utf-8")
+            logger.info(
+                "Consumed %d raw records from Kafka topic '%s' (saved offsets to %s)",
+                len(records),
+                topic_name,
+                checkpoint_path,
+            )
+    except Exception as exc:
+        logger.warning("Khong the doc du lieu tu Kafka (%s): %s", brokers, exc)
+
+    return records
+
+
+def load_default_records(from_kafka: bool = False) -> List[Dict[str, Any]]:
+    """Load records from Kafka (when enabled) or the first populated default dataset directory."""
+    use_kafka = from_kafka or (os.getenv("BATCH_CONSUME_KAFKA", "false").lower() in {"true", "1", "yes"})
+    if use_kafka:
+        kafka_records = consume_kafka_records()
+        if kafka_records:
+            return kafka_records
+        logger.info("Khong co ban ghi moi trong Kafka; fallback sang default datasets.")
+
     for path in DEFAULT_INPUTS:
         records = load_records_from_path(path)
         if records:
@@ -308,12 +419,103 @@ def maybe_write_bronze_to_iceberg(
     return write_bronze_to_iceberg(records, batch_run_id, strict=strict)
 
 
+def sync_reconciliation_audit(
+    sync: ClickHouseBatchSync,
+    candles: List[Dict[str, Any]],
+    quality: QualityReport,
+    batch_run_id: str,
+    duration_s: float,
+) -> int:
+    """
+    Tu dong doi soat nen Batch (Ground Truth) voi nen Speed (Provisional) trong ClickHouse
+    va luu chi so vao bang lakehouse.reconciliation_audit_metrics.
+    """
+    if not candles:
+        return 0
+    try:
+        from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+
+        ch_query = ClickHouseQueryClient(
+            host=sync.host,
+            port=sync.port,
+            user=sync.user,
+            password=sync.password,
+            database=sync.database,
+        )
+        by_symbol: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for c in candles:
+            by_symbol[c["symbol"]].append(c)
+
+        dup_ratio = (
+            round(quality.duplicates_removed / quality.total_records * 100.0, 4)
+            if quality.total_records > 0
+            else 0.0
+        )
+        audit_rows: List[Dict[str, Any]] = []
+
+        for sym, sym_candles in by_symbol.items():
+            min_ws = min(c["window_start"] for c in sym_candles)
+            max_we = max(c["window_end"] for c in sym_candles)
+            speed_rows = ch_query.query_candles(
+                table="speed_agg",
+                symbol=sym,
+                start_time=min_ws,
+                end_time=max_we,
+            )
+            speed_by_ws = {s["window_start"]: s for s in speed_rows}
+
+            for b in sym_candles:
+                ws = b["window_start"]
+                s = speed_by_ws.get(ws)
+                b_vol = float(b["volume"])
+                s_vol = float(s["volume"]) if s else 0.0
+                b_vwap = float(b["vwap"])
+                s_vwap = float(s["vwap"]) if s else 0.0
+                vol_drift = round(abs(s_vol - b_vol) / b_vol * 100.0, 4) if (s and b_vol > 0) else 0.0
+                vwap_err = round(abs(s_vwap - b_vwap), 4) if s else 0.0
+
+                if s is None:
+                    status = "BATCH_ONLY"
+                elif vol_drift < 1e-4 and vwap_err < 1e-4:
+                    status = "MATCHED"
+                else:
+                    status = "RECONCILED_AND_HEALED"
+
+                audit_rows.append({
+                    "run_id": batch_run_id,
+                    "symbol": sym,
+                    "window_start": ws,
+                    "window_end": b["window_end"],
+                    "speed_count": int(s["trade_count"]) if s else 0,
+                    "batch_count": int(b["trade_count"]),
+                    "speed_volume": s_vol,
+                    "batch_volume": b_vol,
+                    "speed_vwap": s_vwap,
+                    "batch_vwap": b_vwap,
+                    "volume_drift_pct": vol_drift,
+                    "vwap_error": vwap_err,
+                    "sequence_gap_count": 0,
+                    "sequence_gap_rate": 0.0,
+                    "duplicate_count": quality.duplicates_removed,
+                    "duplication_ratio": dup_ratio,
+                    "convergence_latency_seconds": round(duration_s, 3),
+                    "reconciliation_status": status,
+                })
+
+        if audit_rows:
+            return sync.insert_reconciliation_audit_metrics(audit_rows, run_id=batch_run_id)
+    except Exception as exc:
+        logger.warning("Khong the dong bo reconciliation_audit_metrics: %s", exc)
+    return 0
+
+
 def run_batch_pipeline(
     input_path: Optional[Path] = None,
     batch_run_id: Optional[str] = None,
     sync_clickhouse: bool = True,
     write_iceberg: bool = False,
     iceberg_strict: bool = False,
+    from_kafka: bool = False,
 ) -> Dict[str, Any]:
     """
     Run the batch pipeline and return a structured summary.
@@ -325,9 +527,15 @@ def run_batch_pipeline(
         write_iceberg:  If True, append clean Bronze records to Iceberg table.
         iceberg_strict: If True (and write_iceberg=True), raise RuntimeError on Iceberg
                         failure instead of silently skipping. Use this in Docker pipelines.
+        from_kafka:     If True, consume new TradeEvent records directly from Kafka first.
     """
+    t0 = time.perf_counter()
     batch_run_id = batch_run_id or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    raw_records = load_records_from_path(input_path) if input_path else load_default_records()
+    raw_records = (
+        load_records_from_path(input_path)
+        if input_path
+        else load_default_records(from_kafka=from_kafka)
+    )
     clean_records, rejected_records, quality = clean_and_deduplicate(raw_records)
     candles = aggregate_gold_candles(clean_records)
     watermark = max((row["window_end"] for row in candles), default=None)
@@ -339,6 +547,7 @@ def run_batch_pipeline(
 
     clickhouse_rows = 0
     quarantine_rows = 0
+    reconciled_audit_rows = 0
     watermark_synced = False
     if sync_clickhouse:
         sync = ClickHouseBatchSync()
@@ -349,6 +558,14 @@ def run_batch_pipeline(
         clickhouse_rows = sync.insert_batch_aggregates(candles, batch_run_id=batch_run_id)
         if watermark is not None:
             watermark_synced = sync.update_watermark(watermark)
+        elapsed_s = time.perf_counter() - t0
+        reconciled_audit_rows = sync_reconciliation_audit(
+            sync=sync,
+            candles=candles,
+            quality=quality,
+            batch_run_id=batch_run_id,
+            duration_s=elapsed_s,
+        )
 
     log_path = write_batch_run_log(
         batch_run_id=batch_run_id,
@@ -368,6 +585,7 @@ def run_batch_pipeline(
         "candles_count": len(candles),
         "clickhouse_rows": clickhouse_rows,
         "quarantine_rows": quarantine_rows,
+        "reconciled_audit_rows": reconciled_audit_rows,
         "watermark": watermark.isoformat() if watermark else None,
         "watermark_synced": watermark_synced,
         "iceberg_result": iceberg_result,
@@ -388,6 +606,9 @@ def main() -> None:
             "  # Chay pipeline thong thuong (chi ClickHouse):\n"
             "  python src/batch_layer/spark_batch_jobs.py\n"
             "\n"
+            "  # Chay pipeline doc truc tiep tu Kafka va tu dong lap moi 60s:\n"
+            "  python src/batch_layer/spark_batch_jobs.py --from-kafka --daemon --interval 60\n"
+            "\n"
             "  # Chay pipeline + ghi Bronze vao Iceberg (can MinIO + Iceberg REST dang chay):\n"
             "  docker compose up -d minio iceberg-rest\n"
             "  python src/batch_layer/spark_batch_jobs.py --write-iceberg\n"
@@ -400,6 +621,12 @@ def main() -> None:
                         help="Execution mode")
     parser.add_argument("--input", default=None,
                         help="JSON/CSV file or directory to load")
+    parser.add_argument("--from-kafka", action="store_true",
+                        help="Consume incremental raw TradeEvent records directly from Kafka topic")
+    parser.add_argument("--daemon", action="store_true",
+                        help="Run continuously in a loop every --interval seconds (Auto-Batch mode)")
+    parser.add_argument("--interval", type=int, default=60,
+                        help="Seconds between Batch runs when --daemon is active (default: 60)")
     parser.add_argument("--batch-run-id", default=None,
                         help="Optional deterministic batch run id")
     parser.add_argument("--no-clickhouse", action="store_true",
@@ -434,14 +661,46 @@ def main() -> None:
                 sys.exit(1)
 
     input_path = Path(args.input).resolve() if args.input else None
-    summary = run_batch_pipeline(
-        input_path=input_path,
-        batch_run_id=args.batch_run_id,
-        sync_clickhouse=not args.no_clickhouse,
-        write_iceberg=args.write_iceberg,
-        iceberg_strict=args.iceberg_strict,
+
+    if not args.daemon:
+        summary = run_batch_pipeline(
+            input_path=input_path,
+            batch_run_id=args.batch_run_id,
+            sync_clickhouse=not args.no_clickhouse,
+            write_iceberg=args.write_iceberg,
+            iceberg_strict=args.iceberg_strict,
+            from_kafka=args.from_kafka,
+        )
+        print(json.dumps(summary, indent=2, default=str))
+        return
+
+    logger.info(
+        "Khoi dong Auto-Batch Daemon (interval=%ds, from_kafka=%s, write_iceberg=%s)...",
+        args.interval,
+        args.from_kafka,
+        args.write_iceberg,
     )
-    print(json.dumps(summary, indent=2, default=str))
+    cycle = 0
+    try:
+        while True:
+            cycle += 1
+            run_id = (
+                f"{args.batch_run_id}_{cycle}"
+                if args.batch_run_id
+                else f"auto_batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+            )
+            summary = run_batch_pipeline(
+                input_path=input_path,
+                batch_run_id=run_id,
+                sync_clickhouse=not args.no_clickhouse,
+                write_iceberg=args.write_iceberg,
+                iceberg_strict=args.iceberg_strict,
+                from_kafka=args.from_kafka,
+            )
+            print(json.dumps(summary, indent=2, default=str), flush=True)
+            time.sleep(max(5, args.interval))
+    except KeyboardInterrupt:
+        logger.info("Nhan Ctrl+C — Dung Auto-Batch Daemon.")
 
 
 if __name__ == "__main__":

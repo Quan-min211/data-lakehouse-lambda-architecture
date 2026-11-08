@@ -17,6 +17,7 @@ from src.speed_layer.spike_detector import SpikeDetector
 from src.speed_layer.trade_schema import TRADE_EVENT_FIELD_NAMES
 from src.speed_layer.redis_writer import RedisSpeedWriter
 from src.speed_layer.spark_streaming import kafka_source_options
+from src.speed_layer.window_aggregator import WindowAggregator
 
 
 class FakeRedisPipeline:
@@ -88,6 +89,28 @@ class TestMetricsCalculator(unittest.TestCase):
         ohlcv = MetricsCalculator.calculate_ohlcv_python(shuffled)
         self.assertEqual(ohlcv["open"], 60000.0)
         self.assertEqual(ohlcv["close"], 61000.0)
+
+    def test_ohlcv_same_millisecond_tie_breaker_by_trade_id(self):
+        # 2 giao dịch cùng chính xác 1 mili-giây nhưng khác trade_id và giá
+        same_ms_trades = [
+            {"trade_id": 105, "price": 60500.0, "quantity": 1.0, "trade_time": 1700000000000},
+            {"trade_id": 101, "price": 60100.0, "quantity": 1.0, "trade_time": 1700000000000},
+        ]
+        ohlcv = MetricsCalculator.calculate_ohlcv_python(same_ms_trades)
+        self.assertEqual(ohlcv["open"], 60100.0)
+        self.assertEqual(ohlcv["close"], 60500.0)
+
+    def test_streaming_filter_and_deduplicate_python(self):
+        raw_stream = [
+            {"trade_id": 1, "symbol": "btcusdt", "price": 60000.0, "quantity": 1.0, "trade_time": 1000},
+            {"trade_id": 1, "symbol": "BTCUSDT", "price": 60000.0, "quantity": 1.0, "trade_time": 1000},  # dup
+            {"trade_id": 2, "symbol": "BTCUSDT", "price": -50.0, "quantity": 1.0, "trade_time": 1001},    # bad price
+            {"trade_id": 3, "symbol": "BTCUSDT", "price": 60100.0, "quantity": 0.0, "trade_time": 1002},  # bad qty
+        ]
+        cleaned = WindowAggregator.filter_and_deduplicate_python(raw_stream)
+        self.assertEqual(len(cleaned), 1)
+        self.assertEqual(cleaned[0]["trade_id"], 1)
+        self.assertEqual(cleaned[0]["symbol"], "BTCUSDT")
 
 
 class TestSpikeDetector(unittest.TestCase):

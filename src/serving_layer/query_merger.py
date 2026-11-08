@@ -179,25 +179,28 @@ class AutoCorrectingQueryMerger:
             source_breakdown["speed"] = len(raw_speed)
 
             # 3.3: Tính sai số đối soát (Reconciliation Delta) tại vùng biên Watermark
-            # Lấy nến tại hoặc sát mốc Watermark để so sánh sai lệch giữa Speed và Batch
-            boundary_batch = self.ch_client.query_candles(
-                table="batch_agg",
-                symbol=symbol,
-                start_time=start_time,
-                end_time=watermark,
-            )
-            boundary_speed = self.ch_client.query_candles(
-                table="speed_agg",
-                symbol=symbol,
-                start_time=start_time,
-                end_time=watermark,
-            )
-            if boundary_batch and boundary_speed:
-                last_b = boundary_batch[-1]
-                last_s = boundary_speed[-1]
-                vwap_b = float(last_b.get("vwap", 0.0))
-                vwap_s = float(last_s.get("vwap", 0.0))
-                reconciliation_delta = round(abs(vwap_s - vwap_b), 4)
+            # Tái sử dụng raw_batch (tránh query ClickHouse 2 lần) và đối chiếu đúng cùng window_start
+            if raw_batch:
+                boundary_speed = self.ch_client.query_candles(
+                    table="speed_agg",
+                    symbol=symbol,
+                    start_time=start_time,
+                    end_time=watermark,
+                )
+                if boundary_speed:
+                    batch_by_ws = {b["window_start"]: b for b in raw_batch}
+                    speed_by_ws = {s["window_start"]: s for s in boundary_speed}
+                    common_windows = sorted(set(batch_by_ws.keys()) & set(speed_by_ws.keys()))
+                    if common_windows:
+                        latest_ws = common_windows[-1]
+                        last_b = batch_by_ws[latest_ws]
+                        last_s = speed_by_ws[latest_ws]
+                    else:
+                        last_b = raw_batch[-1]
+                        last_s = boundary_speed[-1]
+                    vwap_b = float(last_b.get("vwap", 0.0))
+                    vwap_s = float(last_s.get("vwap", 0.0))
+                    reconciliation_delta = round(abs(vwap_s - vwap_b), 4)
 
         candles, duplicate_count = self._dedupe_prefer_batch(candles)
         source_breakdown["deduplicated"] = duplicate_count

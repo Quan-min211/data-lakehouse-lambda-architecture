@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
@@ -31,27 +31,37 @@ logger = setup_logger("iceberg_maintenance")
 
 
 def run_table_maintenance(
-    spark=None,
+    spark: Any = None,
+    target_file_size_mb: int = 128,
     expire_older_than_days: int = 7,
+    snapshot_expire_days: Optional[int] = None,
     retain_last_n_snapshots: int = 3,
     orphan_older_than_days: int = 3,
     rewrite_manifests: bool = True,
+    with_sort: bool = False,
 ) -> Dict[str, Any]:
     """
     Thực thi chu trình bảo trì bảng Iceberg định kỳ.
 
     Args:
         spark: SparkSession đã kết nối Iceberg Catalog (hoặc None để tự khởi tạo).
+        target_file_size_mb: Kích thước tệp mục tiêu (MB) khi gộp small files (0 để bỏ qua).
         expire_older_than_days: Số ngày lưu snapshot tối đa trước khi hết hạn.
+        snapshot_expire_days: Bí danh tương thích cho expire_older_than_days (nếu được truyền).
         retain_last_n_snapshots: Số snapshot tối thiểu bắt buộc giữ lại.
         orphan_older_than_days: Ngưỡng ngày để dọn dẹp orphan files.
         rewrite_manifests: Có thực hiện gộp manifest files hay không.
+        with_sort: Có chạy thêm Sort Compaction sau Bin-Packing hay không.
 
     Returns:
         dict: Kết quả bảo trì chi tiết từng bước.
     """
     if spark is None:
         spark = get_spark_session("IcebergTableMaintenance")
+
+    effective_expire_days = (
+        snapshot_expire_days if snapshot_expire_days is not None else expire_older_than_days
+    )
 
     job = CompactionJob(spark)
     run_id = f"maint_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
@@ -62,11 +72,32 @@ def run_table_maintenance(
     t_start = time.time()
     results: Dict[str, Any] = {"run_id": run_id, "steps": {}}
 
+    # 0. Bin-Packing / Sort Compaction (nếu target_file_size_mb > 0)
+    if target_file_size_mb > 0:
+        logger.info("[0/3] Bin-Packing Small Files Compaction...")
+        try:
+            results["steps"]["bin_packing"] = job.run_bin_packing_compaction(
+                target_file_size_bytes=target_file_size_mb * 1048576
+            )
+        except Exception as exc:
+            logger.warning(f"Bin-Packing Compaction bỏ qua hoặc lỗi: {exc}")
+            results["steps"]["bin_packing"] = {"skipped": True, "reason": str(exc)}
+
+        if with_sort:
+            logger.info("[0b/3] Sort Compaction...")
+            try:
+                results["steps"]["sort_compaction"] = job.run_sort_compaction(
+                    target_file_size_bytes=target_file_size_mb * 1048576
+                )
+            except Exception as exc:
+                logger.warning(f"Sort Compaction bỏ qua hoặc lỗi: {exc}")
+                results["steps"]["sort_compaction"] = {"skipped": True, "reason": str(exc)}
+
     # 1. Dọn dẹp Snapshots cũ
     logger.info("[1/3] Expire Old Snapshots...")
     try:
         results["steps"]["expire_snapshots"] = job.expire_old_snapshots(
-            older_than_days=expire_older_than_days,
+            older_than_days=effective_expire_days,
             retain_last_n=retain_last_n_snapshots,
         )
     except Exception as exc:

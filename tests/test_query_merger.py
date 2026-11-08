@@ -55,6 +55,18 @@ class TestClickHouseQueryClient(unittest.TestCase):
 
         self.assertIn("FROM lakehouse.batch_agg FINAL", recorded_client.queries[0])
 
+    def test_query_candles_rejects_sql_injection_inputs(self):
+        client = ClickHouseQueryClient()
+        client._client = _RecordedClickHouseClient()
+        t0 = datetime(2026, 9, 4, 10, 0, tzinfo=timezone.utc)
+        t1 = datetime(2026, 9, 4, 11, 0, tzinfo=timezone.utc)
+
+        with self.assertRaises(ValueError):
+            client.query_candles("batch_agg; DROP TABLE", "BTCUSDT", t0, t1)
+
+        with self.assertRaises(ValueError):
+            client.query_candles("batch_agg", "BTCUSDT' OR '1'='1", t0, t1)
+
 
 class TestAutoCorrectingQueryMerger(unittest.TestCase):
     """Kiểm thử thuật toán Query Merger với 3 Case kinh điển."""

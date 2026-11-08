@@ -35,7 +35,12 @@ sys.path.insert(0, str(ROOT_DIR))
 from src.ingestion.models import TradeEvent
 from src.ingestion.fault_injector import FaultInjector
 from src.data_quality.dq_checks import clean_and_deduplicate
+from src.batch_layer.spark_batch_jobs import aggregate_gold_candles
+from src.speed_layer.window_aggregator import WindowAggregator
+from src.speed_layer.metrics_calculator import MetricsCalculator
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+from src.serving_layer.query_merger import AutoCorrectingQueryMerger
+from src.serving_layer.watermark_reader import WatermarkReader
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
 from src.utils.logger import setup_logger
 
@@ -97,16 +102,17 @@ def run_test_case_1(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     batch_vol_target = sum(t.quantity for t in clean_trades)
     pre_vol_drift = round(abs(speed_vol - batch_vol_target) / batch_vol_target * 100.0, 2)
 
-    # Simulated Batch/REST Backfill heals the missing range [u_prev + 1, U_curr - 1]
+    # Batch/REST Backfill heals the missing range [u_prev + 1, U_curr - 1] via Batch DQ + Gold aggregation
     t_start = time.perf_counter()
-    backfilled_trades = speed_trades + dropped_slice
-    backfilled_trades.sort(key=lambda t: t.trade_id)
-    t_conv = max(round(time.perf_counter() - t_start + 0.12, 3), 0.05)
+    raw_combined = [t.to_dict() for t in speed_trades] + [t.to_dict() for t in dropped_slice]
+    backfilled_clean, _, _ = clean_and_deduplicate(raw_combined)
+    _ = aggregate_gold_candles(backfilled_clean)
+    t_conv = max(round(time.perf_counter() - t_start, 4), 0.001)
 
-    post_ids = [t.trade_id for t in backfilled_trades]
+    post_ids = [int(r["trade_id"]) for r in backfilled_clean]
     post_missing = sum(max(0, post_ids[i] - post_ids[i - 1] - 1) for i in range(1, len(post_ids)))
     post_gap_rate = round((post_missing / (post_ids[-1] - post_ids[0] + 1)) * 100.0, 2)
-    post_vol = sum(t.quantity for t in backfilled_trades)
+    post_vol = sum(float(r["quantity"]) for r in backfilled_clean)
     post_vol_drift = round(abs(post_vol - batch_vol_target) / batch_vol_target * 100.0, 4)
 
     status = "PASS" if (post_gap_rate == 0.0 and post_vol_drift == 0.0) else "FAIL"
@@ -161,12 +167,20 @@ def run_test_case_2(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     total_ground_truth_vol = sum(t.quantity for t in clean_trades)
     pre_vol_drift = round(abs(speed_vol - total_ground_truth_vol) / total_ground_truth_vol * 100.0, 2)
 
-    # Batch layer processes partition by event_time without watermark drop
+    # Batch layer processes partition by event_time without watermark drop and reconciles via QueryMerger
     t_start = time.perf_counter()
-    batch_cleaned, _, _ = clean_and_deduplicate([t.__dict__ for t in clean_trades])
-    t_conv = max(round(time.perf_counter() - t_start + 0.25, 3), 0.1)
+    batch_cleaned, _, _ = clean_and_deduplicate([t.to_dict() for t in clean_trades])
+    batch_candles = aggregate_gold_candles(batch_cleaned)
+    speed_candles = aggregate_gold_candles([t.to_dict() for t in speed_accepted])
+    mock_ch = ClickHouseQueryClient()
+    mock_ch.set_mock_data("batch_agg", batch_candles)
+    mock_ch.set_mock_data("speed_agg", speed_candles)
+    wm = max(c["window_end"] for c in batch_candles)
+    merger = AutoCorrectingQueryMerger(watermark_reader=WatermarkReader(mock_watermark=wm), ch_client=mock_ch)
+    merged_resp = merger.merge_query(symbol, min(c["window_start"] for c in batch_candles), wm)
+    t_conv = max(round(time.perf_counter() - t_start, 4), 0.001)
 
-    batch_vol = sum(float(r["quantity"]) for r in batch_cleaned)
+    batch_vol = sum(c.volume for c in merged_resp.candles)
     post_vol_drift = round(abs(batch_vol - total_ground_truth_vol) / total_ground_truth_vol * 100.0, 4)
 
     status = "PASS" if post_vol_drift == 0.0 else "FAIL"
@@ -205,12 +219,14 @@ def run_test_case_3(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     pre_vol_drift = round(100.0, 2)  # 2x volume inflation
 
     t_start = time.perf_counter()
+    speed_deduped = WindowAggregator.filter_and_deduplicate_python(raw_payloads)
     clean_records, rejected_records, report = clean_and_deduplicate(raw_payloads)
-    t_conv = max(round(time.perf_counter() - t_start + 0.18, 3), 0.08)
+    _ = aggregate_gold_candles(clean_records)
+    t_conv = max(round(time.perf_counter() - t_start, 4), 0.001)
 
-    # Verify post-dedup count equals distinct trade_ids
+    # Verify both Speed Layer bounded dedup and Batch Silver DQ Gate deduplicate 100%
     unique_ids = set(r["trade_id"] for r in clean_records)
-    post_dup_count = len(clean_records) - len(unique_ids)
+    post_dup_count = (len(clean_records) - len(unique_ids)) + (len(speed_deduped) - len(unique_ids))
     post_dup_ratio = round((post_dup_count / len(clean_records)) * 100.0, 4) if clean_records else 0.0
 
     post_vol = sum(float(r["quantity"]) for r in clean_records)
@@ -247,14 +263,16 @@ def run_test_case_4(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     max_offsets = 20000  # verified guardrail
     t_start = time.perf_counter()
 
-    # Simulate ingestion under rate-limiting
+    # Simulate ingestion under rate-limiting through actual Speed + Batch aggregation
     processed = 0
     chunks = math.ceil(len(burst_trades) / max_offsets)
     for c in range(chunks):
-        chunk = burst_trades[c * max_offsets : (c + 1) * max_offsets]
-        processed += len(chunk)
+        chunk = [t.to_dict() for t in burst_trades[c * max_offsets : (c + 1) * max_offsets]]
+        valid_chunk = WindowAggregator.filter_and_deduplicate_python(chunk)
+        _ = MetricsCalculator.calculate_ohlcv_python(valid_chunk)
+        processed += len(valid_chunk)
 
-    t_conv = max(round(time.perf_counter() - t_start + 0.08, 3), 0.05)
+    t_conv = max(round(time.perf_counter() - t_start, 4), 0.001)
 
     status = "PASS" if processed == len(burst_trades) else "FAIL"
     return {

@@ -86,25 +86,79 @@ class WindowAggregator:
 
         return df_with_time
 
+    @staticmethod
+    def filter_and_deduplicate_python(records: list[dict]) -> list[dict]:
+        """
+        Loc bo ban ghi vi pham Data Contract (gia/khoi luong <= 0, thieu truong)
+        va khu trung lap theo (symbol, trade_id) cho luong Speed Layer (Pure Python).
+        """
+        seen: set[tuple[str, int]] = set()
+        valid: list[dict] = []
+        for r in records:
+            try:
+                tid = int(r["trade_id"])
+                sym = str(r["symbol"]).strip().upper()
+                price = float(r["price"])
+                qty = float(r["quantity"])
+                ttime = int(r["trade_time"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if tid < 0 or not sym or price <= 0 or qty <= 0 or ttime <= 0:
+                continue
+            key = (sym, tid)
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned = dict(r)
+            cleaned["trade_id"] = tid
+            cleaned["symbol"] = sym
+            cleaned["price"] = price
+            cleaned["quantity"] = qty
+            cleaned["trade_time"] = ttime
+            valid.append(cleaned)
+        return valid
+
     def aggregate_tumbling_window(self, events_df: "DataFrame") -> "DataFrame":
         """
-        Thuc hien Watermarking va Window Aggregation:
-        1. withWatermark(event_time, watermark_duration)
-        2. groupBy(window(event_time, window_duration), symbol)
-        3. Tinh OHLCV va VWAP
-        4. Gan co Price Spike (is_spike)
+        Thuc hien Streaming DQ Filter, Watermarking, Bounded Deduplication va Window Aggregation:
+        1. Filter ban ghi hop le (price > 0, quantity > 0, trade_id >= 0, symbol != '')
+        2. withWatermark(event_time, watermark_duration)
+        3. dropDuplicatesWithinWatermark(['symbol', 'trade_id']) chong nhan doi volume
+        4. groupBy(window(event_time, window_duration), symbol)
+        5. Tinh OHLCV va VWAP
+        6. Gan co Price Spike (is_spike)
         """
         # Lazy import PySpark
         from pyspark.sql import functions as F
 
-        # 1. Thiet lap Watermark xu ly late data
-        watermarked_df = events_df.withWatermark("event_time", self.watermark_duration)
+        # 1. Streaming Data Quality Filter (chan gia am, khoi luong <= 0, null fields)
+        valid_events_df = events_df.filter(
+            F.col("trade_id").isNotNull()
+            & (F.col("trade_id") >= 0)
+            & F.col("symbol").isNotNull()
+            & (F.length(F.trim(F.col("symbol"))) > 0)
+            & F.col("price").isNotNull()
+            & (F.col("price") > 0)
+            & F.col("quantity").isNotNull()
+            & (F.col("quantity") > 0)
+            & F.col("trade_time").isNotNull()
+            & (F.col("trade_time") > 0)
+        )
 
-        # 2. Group by cua so thoi gian va Symbol
+        # 2. Thiet lap Watermark xu ly late data & gioi han bo nho state
+        watermarked_df = valid_events_df.withWatermark("event_time", self.watermark_duration)
+
+        # 3. Khu trung lap trong cua so Watermark (chong duplicate seam / retry)
+        if hasattr(watermarked_df, "dropDuplicatesWithinWatermark"):
+            deduped_df = watermarked_df.dropDuplicatesWithinWatermark(["symbol", "trade_id"])
+        else:
+            deduped_df = watermarked_df.dropDuplicates(["symbol", "trade_id"])
+
+        # 4. Group by cua so thoi gian va Symbol
         agg_exprs = MetricsCalculator.get_spark_aggregation_exprs()
 
         aggregated_df = (
-            watermarked_df.groupBy(
+            deduped_df.groupBy(
                 F.window(F.col("event_time"), self.window_duration),
                 F.col("symbol"),
             )
