@@ -341,25 +341,39 @@ def write_csv_log(results: List[Dict[str, Any]]) -> None:
     logger.info("Chaos smoke test results saved to %s", OUTPUT_CSV)
 
 
-def print_markdown_report(results: List[Dict[str, Any]]) -> None:
-    """Print markdown audit report table exactly matching Section 6 of SKILL.md."""
+def print_audit_report(results: List[Dict[str, Any]]) -> None:
+    """Print clean, professional CLI test runner report."""
     all_passed = all(r["status"] == "PASS" for r in results)
 
     print("\n" + "=" * 80)
-    print("  PRE-BENCHMARK AUDIT REPORT — CHAOS SMOKE TEST PROTOCOL")
-    print("=" * 80 + "\n")
+    print("CHAOS SMOKE TEST PROTOCOL — LAMBDA RECONCILIATION AUDIT")
+    print("=" * 80)
 
-    print("| Test Case | Injected Anomaly | Pre-Reconciliation Drift (ΔV% / Gaps) | Post-Reconciliation Drift | Convergence Time (T_conv) | Status |")
-    print("| :--- | :--- | :--- | :--- | :--- | :---: |")
     for r in results:
-        print(f"| **{r['test_case']}** | {r['injected_anomaly']} | {r['pre_drift']} | {r['post_drift']} | {r['convergence_s']} | **{r['status']}** |")
+        tc = r["test_case"]
+        inj = r["injected_anomaly"]
+        pre = r["pre_drift"]
+        post = r["post_drift"]
+        t_conv = r["convergence_s"]
+        status = r["status"]
+
+        print(f"\n{tc}")
+        print(f"  [INJECT] {inj}")
+        print(f"  [DRIFT ] Pre-reconciliation  : {pre}")
+        print(f"  [RECON ] Post-reconciliation : {post}")
+        print(f"  [RESULT] {status} (T_conv = {t_conv})")
 
     print("\n" + "-" * 80)
+    total_passed = sum(1 for r in results if r["status"] == "PASS")
+    total_failed = len(results) - total_passed
+    print(f"Suite Summary: {total_passed} passed, {total_failed} failed")
+    print("Audit Log    : results/logs/chaos_smoke_tests.csv")
+    print("Audit Metrics: Synced to ClickHouse table 'lakehouse.reconciliation_audit_metrics'")
     if all_passed:
-        print(" [GATE DECISION] ==> GO FOR 24/7 STREAMING BURN-IN: All 4 readiness tests PASSED.")
+        print("Status       : ALL CHECKS PASSED (System ready for continuous streaming)")
     else:
-        print(" [GATE DECISION] ==> NO-GO: One or more readiness tests FAILED.")
-    print("-" * 80 + "\n")
+        print("Status       : FAILED (Review rejected records in ClickHouse)")
+    print("=" * 80 + "\n")
 
 
 def main() -> None:
@@ -376,7 +390,7 @@ def main() -> None:
 
     write_csv_log(results)
     sync_chaos_results_to_clickhouse(results)
-    print_markdown_report(results)
+    print_audit_report(results)
 
 
 if __name__ == "__main__":

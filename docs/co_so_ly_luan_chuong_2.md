@@ -377,3 +377,4 @@ Toàn bộ hệ thống được container hóa 100% bằng **Docker Compose**, 
 ```
 
 Hệ sinh thái này đảm bảo tính tương thích cao, mã nguồn mở hoàn toàn, không phụ thuộc vào bất kỳ dịch vụ đám mây thương mại độc quyền nào, và cho phép tái lập thử nghiệm dễ dàng trên mọi môi trường chuẩn POSIX / Windows Docker Desktop.
+
