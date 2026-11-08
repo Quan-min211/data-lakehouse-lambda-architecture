@@ -36,51 +36,34 @@ from dashboard.components.watermark_status import render_watermark_status_bar
 from dashboard.components.system_status import render_system_status_panel
 
 
-# =============================================================================
-# CẤU HÌNH TRANG STREAMLIT
-# =============================================================================
-st.set_page_config(
-    page_title="Crypto Lakehouse | Lambda Architecture Dashboard",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from dashboard.components.theme import (
+    COLORS,
+    chip,
+    html_block,
+    icon,
+    inject_global_css,
+    render_html,
+    section_header,
+    sidebar_label,
 )
+from dashboard.components.watermark_status import resolve_watermark
 
-# Custom CSS cho phong cách hiện đại Dark Crypto Trading
-st.markdown(
-    """
-    <style>
-    .metric-card {
-        background-color: #1E222D;
-        border: 1px solid #2A2E39;
-        border-radius: 8px;
-        padding: 12px;
-    }
-    .badge-reconciled {
-        background-color: #00E676;
-        color: #000000;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-weight: bold;
-    }
-    .badge-provisional {
-        background-color: #AB47BC;
-        color: #FFFFFF;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-weight: bold;
-    }
-    .badge-hybrid {
-        background-color: #FFA726;
-        color: #000000;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-weight: bold;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+DEFAULT_API_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
+TOP_COINS = [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "SUIUSDT",
+]
+TIME_PRESETS = {"15m": 15, "30m": 30, "1H": 60, "3H": 180, "6H": 360}
+
+
+def _configure_page() -> None:
+    """Cấu hình trang Streamlit và nạp design system (chỉ gọi khi chạy app)."""
+    st.set_page_config(
+        page_title="Market Monitor · Lambda Lakehouse",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    inject_global_css()
 
 
 # =============================================================================
@@ -102,12 +85,16 @@ def fetch_api_data(
     try:
         resp = requests.get(endpoint, params=params, timeout=4)
         if resp.status_code == 200:
-            return resp.json()
+            payload = resp.json()
+            payload["data_source"] = "live"
+            return payload
     except Exception:
         pass
 
     # Fallback dữ liệu mô phỏng an toàn nếu FastAPI server chưa bật
-    return generate_fallback_market_data(symbol, start_time, end_time)
+    payload = generate_fallback_market_data(symbol, start_time, end_time)
+    payload["data_source"] = "demo"
+    return payload
 
 
 def fetch_watermark(api_url: str) -> Optional[Dict[str, Any]]:
@@ -246,122 +233,228 @@ def generate_fallback_market_data(
 # =============================================================================
 # GIAO DIỆN CHÍNH STREAMLIT
 # =============================================================================
-def main():
-    # --- SIDEBAR: ĐIỀU KHIỂN & BỘ LỌC ---
-    st.sidebar.image(
-        "https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg",
-        width=48
+def render_sidebar() -> Dict[str, Any]:
+    """Render sidebar điều khiển và trả về cấu hình người dùng chọn.
+
+    Returns:
+        dict: symbol, minutes_back, api_base_url, auto_refresh, refresh_rate.
+    """
+    st.sidebar.markdown(
+        html_block(
+            f"""
+            <div class="lh-brand" style="margin-bottom:6px;">
+            <div class="lh-brand-mark">{icon("layers", 15)}</div>
+            <div><div class="lh-brand-title">Lambda Lakehouse</div>
+            <div class="lh-brand-sub">Market data platform</div></div>
+            </div>
+            """
+        ),
+        unsafe_allow_html=True,
     )
-    st.sidebar.title("Cấu Hình Giám Sát")
 
-    # 1. Chọn cặp coin
-    top_coins = [
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
-        "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "SUIUSDT"
-    ]
-    selected_symbol = st.sidebar.selectbox("Cặp tiền mã hóa:", top_coins, index=0)
+    sidebar_label("Instrument")
+    symbol = st.sidebar.selectbox("Cặp giao dịch", TOP_COINS, index=0, label_visibility="collapsed")
 
-    # 2. Chọn khoảng thời gian
-    time_presets = {
-        "15 phút gần nhất": 15,
-        "30 phút gần nhất": 30,
-        "1 giờ gần nhất": 60,
-        "3 giờ gần nhất": 180,
-        "6 giờ gần nhất": 360,
-    }
-    selected_preset = st.sidebar.selectbox("Khung thời gian truy vấn:", list(time_presets.keys()), index=2)
-    minutes_back = time_presets[selected_preset]
+    sidebar_label("Time range")
+    preset = st.sidebar.radio(
+        "Khung thời gian", list(TIME_PRESETS.keys()), index=2,
+        horizontal=True, label_visibility="collapsed",
+    )
 
-    now_utc = datetime.now(timezone.utc)
-    start_time = now_utc - timedelta(minutes=minutes_back)
-    end_time = now_utc
+    sidebar_label("Connection")
+    api_base_url = st.sidebar.text_input("Serving API", value=DEFAULT_API_URL, label_visibility="collapsed")
 
-    # 3. Cấu hình Serving API Server
-    api_base_url = st.sidebar.text_input("Serving API URL:", value="http://localhost:8000")
-
-    # 4. Tự động làm mới (Auto-Refresh)
-    st.sidebar.markdown("---")
-    auto_refresh = st.sidebar.checkbox("Bật tự động làm mới (Auto-Refresh)", value=False)
-    refresh_rate = st.sidebar.slider("Tần suất làm mới (giây):", min_value=3, max_value=30, value=5)
-
-    if st.sidebar.button("🔄 Làm mới thủ công", use_container_width=True):
+    sidebar_label("Refresh")
+    auto_refresh = st.sidebar.toggle("Tự động làm mới", value=False)
+    refresh_rate = st.sidebar.slider("Chu kỳ (giây)", min_value=3, max_value=30, value=5, disabled=not auto_refresh)
+    if st.sidebar.button("Làm mới ngay", use_container_width=True):
         st.rerun()
 
-    # --- KHU VỰC TIÊU ĐỀ CHÍNH ---
-    st.title(f"⚡ Giám Sát Thị Trường Real-time — {selected_symbol}")
-    st.caption(
-        "Đề tài Khóa Luận Tốt Nghiệp: **Data Lakehouse Kiến trúc Lambda Hỗ trợ Đối soát Dữ liệu Thời gian thực** "
-        "| SVTH: Nguyễn Đặng Quốc Anh & Phạm Minh Quân"
+    return {
+        "symbol": symbol,
+        "minutes_back": TIME_PRESETS[preset],
+        "range_label": preset,
+        "api_base_url": api_base_url,
+        "auto_refresh": auto_refresh,
+        "refresh_rate": refresh_rate,
+    }
+
+
+def render_topbar(market_data: Dict[str, Any], system_status: Optional[Dict[str, Any]], now_utc: datetime) -> None:
+    """Thanh trên cùng: tên sản phẩm, nguồn dữ liệu, tình trạng API và đồng hồ UTC."""
+    is_live = market_data.get("data_source") == "live"
+    source_chip = (
+        chip("Live · Serving API", COLORS["reconciled"]) if is_live
+        else chip("Demo data · API offline", COLORS["provisional"])
     )
+    if system_status:
+        ok = str(system_status.get("status", "")).lower() == "ok"
+        health_chip = chip("Systems nominal" if ok else "Degraded", COLORS["reconciled"] if ok else COLORS["provisional"])
+    else:
+        health_chip = chip("Health unknown", COLORS["text_muted"])
+
+    render_html(
+        f"""
+        <div class="lh-topbar">
+        <div class="lh-brand">
+        <div class="lh-brand-mark">{icon("activity", 15)}</div>
+        <div><div class="lh-brand-title">Market Monitor</div>
+        <div class="lh-brand-sub">Speed + Batch serving · Auto-correcting query merger</div></div>
+        </div>
+        <div class="lh-topbar-right">
+        {source_chip}{health_chip}
+        <span class="lh-chip lh-num" style="color:var(--text)">{now_utc.strftime('%H:%M:%S')} UTC</span>
+        </div>
+        </div>
+        """
+    )
+
+
+def build_demo_reconciliation(candles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sinh bảng đối soát minh họa từ nến khi API /api/reconciliation không khả dụng."""
+    return [
+        {
+            "window_start": c["window_start"],
+            "window_end": c["window_end"],
+            "batch_vwap": c["vwap"] - 2.5 if c["status"] == "Reconciled" else None,
+            "speed_vwap": c["vwap"],
+            "vwap_delta": 2.5 if c["status"] == "Reconciled" else None,
+            "batch_volume": c["volume"],
+            "speed_volume": c["volume"] + 0.1,
+            "volume_delta": 0.1,
+            "is_reconciled": (c["status"] == "Reconciled"),
+        }
+        for c in candles[-10:]
+    ]
+
+
+def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
+    """Tab nhật ký phát hiện biến động giá bất thường."""
+    section_header(
+        "Biến động bất thường",
+        "Nến có biên độ |close − open| / open vượt ngưỡng của SpikeDetector trong Speed Layer.",
+        "alert",
+    )
+    spike_candles = [c for c in candles if c.get("is_spike") == 1]
+    if not spike_candles:
+        st.info("Không ghi nhận nến biến động bất thường trong khung thời gian đang xem.")
+        return
+    spike_df = pd.DataFrame(spike_candles)
+    spike_df["amplitude_pct"] = (
+        (spike_df["close_price"] - spike_df["open_price"]) / spike_df["open_price"] * 100
+    ).round(3)
+    st.dataframe(
+        spike_df,
+        use_container_width=True,
+        hide_index=True,
+        column_order=["window_start", "open_price", "close_price", "high_price", "low_price", "amplitude_pct", "volume", "status"],
+        column_config={
+            "window_start": st.column_config.DatetimeColumn("Thời điểm (UTC)", format="YYYY-MM-DD HH:mm"),
+            "open_price": st.column_config.NumberColumn("Open", format="%.4f"),
+            "close_price": st.column_config.NumberColumn("Close", format="%.4f"),
+            "high_price": st.column_config.NumberColumn("High", format="%.4f"),
+            "low_price": st.column_config.NumberColumn("Low", format="%.4f"),
+            "amplitude_pct": st.column_config.NumberColumn("Biên độ (%)", format="%.3f"),
+            "volume": st.column_config.NumberColumn("Volume", format="%.4f"),
+            "status": st.column_config.TextColumn("Trạng thái"),
+        },
+    )
+
+
+def render_architecture_tab() -> None:
+    """Tab mô tả cơ chế định tuyến của Auto-Correcting Query Merger."""
+    section_header(
+        "Cơ chế định tuyến truy vấn",
+        "Query Merger chia khoảng truy vấn [T_start, T_end] tại mốc Watermark W do Batch Layer "
+        "công bố, đảm bảo mỗi cửa sổ 1 phút chỉ được lấy từ đúng một nguồn.",
+        "merge",
+    )
+    cases = [
+        ("Case 1 · History", "T_end ≤ W", COLORS["reconciled"], "Reconciled",
+         "Toàn bộ dữ liệu đọc từ <code>lakehouse.batch_agg</code> (FINAL). Đây là ground truth sau DQ gate và dedup."),
+        ("Case 2 · Realtime", "T_start > W", COLORS["provisional"], "Provisional",
+         "Toàn bộ dữ liệu đọc từ <code>lakehouse.speed_agg</code> do Spark Structured Streaming ghi mỗi micro-batch."),
+        ("Case 3 · Hybrid", "T_start ≤ W < T_end", COLORS["hybrid"], "Partially Reconciled",
+         "<code>[T_start, W]</code> từ Batch view, <code>(W, T_end]</code> từ Speed view. Cửa sổ trùng tại biên ưu tiên Batch — không double-count."),
+    ]
+    cols = st.columns(3)
+    for col, (title, cond, color, label, body) in zip(cols, cases):
+        with col:
+            render_html(
+                f"""
+                <div class="lh-case" style="border-top:2px solid {color};">
+                <div class="lh-case-head"><span class="lh-case-title">{title}</span>
+                <span class="lh-badge" style="background:{color}1F;color:{color};border:1px solid {color}55;">{label}</span></div>
+                <div class="lh-num" style="font-size:12px;color:var(--text);margin-bottom:8px;">{cond}</div>
+                <div class="lh-case-body">{body}</div>
+                </div>
+                """
+            )
+
+
+def main() -> None:
+    """Điểm vào giao diện Streamlit."""
+    _configure_page()
+    cfg = render_sidebar()
+
+    now_utc = datetime.now(timezone.utc)
+    start_time = now_utc - timedelta(minutes=cfg["minutes_back"])
+    end_time = now_utc
+    api_base_url = cfg["api_base_url"]
+    selected_symbol = cfg["symbol"]
 
     # Lấy dữ liệu
     market_data = fetch_api_data(api_base_url, selected_symbol, start_time, end_time)
     watermark_info = fetch_watermark(api_base_url)
     system_status = fetch_system_status(api_base_url)
     latest_speed = fetch_latest_speed_candle(api_base_url, selected_symbol)
+    candles = market_data.get("candles", [])
 
-    # 1. Vẽ hàng thẻ chỉ số KPI & Phân luồng Query Merger
+    # 1. Top bar + header giá + dải trạng thái Lambda
+    render_topbar(market_data, system_status, now_utc)
     render_metrics_cards(market_data, watermark_info)
-
-    # Thanh trạng thái System Watermark & Huy hiệu thời gian thực
     render_watermark_status_bar(watermark_info, market_data)
 
-    st.markdown("---")
+    # 2. Biểu đồ nến (vùng sau W được đánh dấu Provisional)
+    fig = render_candlestick_chart(
+        candles,
+        symbol=selected_symbol,
+        watermark=resolve_watermark(watermark_info, market_data),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "displayModeBar": "hover"})
 
-    # 2. Vẽ biểu đồ nến Plotly chuyên nghiệp
-    candles = market_data.get("candles", [])
-    fig = render_candlestick_chart(candles, symbol=selected_symbol)
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 3. Tabs: Market + Benchmark + Data Quality + System + Architecture
-    tab_market, tab_bench, tab_dq, tab_system, tab_spike, tab_arch = st.tabs([
-        "📊 Đối Soát Hai Tầng",
-        "🏆 Benchmark & Đánh Giá",
-        "🛡️ Data Quality & Quarantine",
-        "🧭 System Readiness",
-        "⚠️ Cảnh Báo Sốc Giá",
-        "🏛️ Kiến Trúc Lambda",
+    # 3. Tabs chi tiết
+    tab_recon, tab_bench, tab_dq, tab_system, tab_spike, tab_arch = st.tabs([
+        "Đối soát",
+        "Benchmark",
+        "Data quality",
+        "Hệ thống",
+        "Biến động",
+        "Kiến trúc",
     ])
 
-    with tab_market:
-        st.markdown(
-            "Co che **Auto-Correcting Query Merger** lien tuc so sanh nen tao boi Tang Toc Do (**Speed Layer**) "
-            "voi du lieu chuan sau khi Tang Xu Ly Theo Lo (**Batch Layer**) chot moc Watermark de tinh sai so hieu chinh."
-        )
+    with tab_recon:
         report_data = fetch_reconciliation_report(api_base_url, selected_symbol, start_time, end_time)
         if not report_data and candles:
-            report_data = [
-                {
-                    "window_start": c["window_start"],
-                    "window_end": c["window_end"],
-                    "batch_vwap": c["vwap"] - 2.5 if c["status"] == "Reconciled" else None,
-                    "speed_vwap": c["vwap"],
-                    "vwap_delta": 2.5 if c["status"] == "Reconciled" else None,
-                    "batch_volume": c["volume"],
-                    "speed_volume": c["volume"] + 0.1,
-                    "volume_delta": 0.1,
-                    "is_reconciled": (c["status"] == "Reconciled"),
-                }
-                for c in candles[-10:]
-            ]
+            report_data = build_demo_reconciliation(candles)
         render_reconciliation_table(report_data)
 
     with tab_bench:
         bench_sub = st.radio(
-            "Chon Benchmark can xem:",
-            ["Tong Quan", "BM1: Query Latency", "BM2: Reconciliation", "BM3: Compaction", "Bieu Do Goc (PNG)"],
+            "Benchmark",
+            ["Tổng quan", "BM1 · Query latency", "BM2 · Reconciliation", "BM3 · Compaction", "Biểu đồ gốc"],
             horizontal=True,
+            label_visibility="collapsed",
         )
-        st.markdown("---")
-        if bench_sub == "Tong Quan":
+        if bench_sub == "Tổng quan":
             render_benchmark_overview()
-        elif bench_sub == "BM1: Query Latency":
+        elif bench_sub == "BM1 · Query latency":
             render_benchmark1_latency()
-        elif bench_sub == "BM2: Reconciliation":
+        elif bench_sub == "BM2 · Reconciliation":
             render_benchmark2_reconciliation()
-        elif bench_sub == "BM3: Compaction":
+        elif bench_sub == "BM3 · Compaction":
             render_benchmark3_compaction()
-        elif bench_sub == "Bieu Do Goc (PNG)":
+        else:
             render_benchmark_images()
 
     with tab_dq:
@@ -370,43 +463,30 @@ def main():
         render_dq_quarantine_panel(clickhouse_host=ch_host, clickhouse_port=ch_port)
 
     with tab_system:
-        st.subheader("System Readiness & Freshness")
         render_system_status_panel(system_status, latest_speed=latest_speed)
         source_breakdown = market_data.get("source_breakdown", {})
         if source_breakdown:
-            st.markdown("##### Query Source Breakdown")
-            st.json(source_breakdown)
+            with st.expander("Query source breakdown (raw)"):
+                st.json(source_breakdown)
 
     with tab_spike:
-        st.subheader("Nhat Ky Phat Hien Bien Dong Bat Thuong (Spike Detection)")
-        spike_candles = [c for c in candles if c.get("is_spike") == 1]
-        if spike_candles:
-            spike_df = pd.DataFrame(spike_candles)[[
-                "window_start", "open_price", "close_price", "high_price", "low_price", "volume", "status"
-            ]]
-            spike_df["Bien do (%)"] = (
-                abs(spike_df["close_price"] - spike_df["open_price"]) / spike_df["open_price"] * 100
-            ).round(2)
-            st.dataframe(spike_df, use_container_width=True, hide_index=True)
-        else:
-            st.success("Khong ghi nhan bien dong soc gia bat thuong nao trong khung thoi gian nay.")
+        render_spike_tab(candles)
 
     with tab_arch:
-        st.subheader("Kien Truc Auto-Correcting Query Merger")
-        st.markdown(
-            """
-            * **Case 1 (History):** Lay 100% tu **Batch View** (`lakehouse.batch_agg`) — Nhan: **`Reconciled`**.
-            * **Case 2 (Realtime):** Lay 100% tu **Speed View** (`lakehouse.speed_agg`) — Nhan: **`Provisional`**.
-            * **Case 3 (Hybrid):** Tu dong phan tach tai Watermark W:
-              * `[T_start, W]` lay tu Batch View.
-              * `(W, T_end]` lay tu Speed View.
-              * **ZERO DOUBLE-COUNTING:** Bao dam khong bao gio tinh trung lap cay nen tai bien.
-            """
-        )
+        render_architecture_tab()
+
+    render_html(
+        f"""
+        <div class="lh-footnote">
+        Khóa luận tốt nghiệp · Data Lakehouse kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực ·
+        Nguyễn Đặng Quốc Anh, Phạm Minh Quân · Dữ liệu cập nhật {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC
+        </div>
+        """
+    )
 
     # Xử lý tự động làm mới trang
-    if auto_refresh:
-        time.sleep(refresh_rate)
+    if cfg["auto_refresh"]:
+        time.sleep(cfg["refresh_rate"])
         st.rerun()
 
 

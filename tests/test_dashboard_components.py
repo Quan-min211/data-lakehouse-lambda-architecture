@@ -85,14 +85,15 @@ class TestDashboardComponents(unittest.TestCase):
         """Kiểm tra badge watermark trạng thái Provisional / Reconciled."""
         badge_reconciled = get_badge_html("Reconciled")
         self.assertIn("Reconciled", badge_reconciled)
-        self.assertIn("#00E676", badge_reconciled)
+        self.assertIn("#3FB68B", badge_reconciled)
 
         badge_provisional = get_badge_html("Provisional")
         self.assertIn("Provisional", badge_provisional)
-        self.assertIn("#B388FF", badge_provisional)
+        self.assertIn("#E3A008", badge_provisional)
 
         badge_partial = get_badge_html("Partially Reconciled")
         self.assertIn("Partially Reconciled", badge_partial)
+        self.assertIn("#4C8DF6", badge_partial)
 
     def test_dq_quarantine_fallback_and_schema(self):
         """Kiểm tra fallback generator và trường dữ liệu của DQ quarantine."""

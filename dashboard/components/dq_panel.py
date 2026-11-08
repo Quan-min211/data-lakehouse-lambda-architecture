@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+from dashboard.components.theme import CATEGORICAL, PLOTLY_TEMPLATE, section_header
 
 # ── FALLBACK SYNTHETIC DATA GENERATOR ─────────────────────────────────────────
 def _generate_fallback_quarantine_records() -> List[Dict[str, Any]]:
@@ -117,20 +119,11 @@ def render_dq_quarantine_panel(
     clickhouse_db: str = "lakehouse",
 ) -> None:
     """Render Tab Data Quality & Quarantine tren Streamlit Dashboard."""
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1E222D 0%, #171A21 100%);
-                    border-radius: 12px; padding: 20px; border-left: 5px solid #FF5252; margin-bottom: 20px;">
-            <div style="font-size: 20px; font-weight: bold; color: #FFFFFF;">
-                🛡️ Bảng Kiểm Soát Chất Lượng Dữ Liệu & Cách Ly (Data Quality Gate & Quarantine)
-            </div>
-            <div style="font-size: 13px; color: #B2B5BE; margin-top: 6px;">
-                Cơ chế <b>Quarantine Pattern</b>: Tự động phát hiện và cách ly các bản ghi vi phạm hợp đồng dữ liệu
-                (Data Contract) vào bảng <code>lakehouse.dq_quarantine</code>, bảo vệ tính toàn vẹn của Tầng Silver & Gold mà không làm gián đoạn pipeline.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    section_header(
+        "Data quality gate & quarantine",
+        "Bản ghi vi phạm data contract được tách vào <code>lakehouse.dq_quarantine</code> thay vì làm dừng pipeline, "
+        "bảo vệ tính toàn vẹn của tầng Silver và Gold.",
+        "shield",
     )
 
     records, is_live = fetch_quarantine_data_from_clickhouse(
@@ -138,10 +131,10 @@ def render_dq_quarantine_panel(
     )
 
     if not is_live:
-        st.info("💡 Đang hiển thị dữ liệu mẫu mô phỏng của Data Quality Gate (ClickHouse chưa có bản ghi mới).")
+        st.info("Đang hiển thị dữ liệu mẫu: ClickHouse không khả dụng hoặc chưa có bản ghi bị cách ly.")
 
     if not records:
-        st.success("✅ Toàn bộ dữ liệu sạch hoàn hảo. Không có bản ghi nào bị cách ly!")
+        st.success("Không có bản ghi nào bị cách ly trong kỳ quan sát.")
         return
 
     df = pd.DataFrame(records)
@@ -155,25 +148,25 @@ def render_dq_quarantine_panel(
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(
-            label="Tổng Bản Ghi Bị Cách Ly",
+            label="Bản ghi bị cách ly",
             value=f"{total_quarantined:,}",
             help="Số lượng bản ghi vi phạm Data Quality Gate đã bị chặn lại",
         )
     with col2:
         st.metric(
-            label="Số Loại Vi Phạm Phát Hiện",
+            label="Loại vi phạm",
             value=f"{unique_errors}",
             help="Phân loại các vi phạm schema, giá âm, khối lượng âm...",
         )
     with col3:
         st.metric(
-            label="Cặp Coin Bị Ảnh Hưởng",
+            label="Cặp bị ảnh hưởng",
             value=f"{unique_symbols}",
             help="Các thị trường phát hiện dữ liệu lỗi",
         )
     with col4:
         st.metric(
-            label="Lần Cách Ly Gần Nhất",
+            label="Cách ly gần nhất",
             value=str(latest_time)[:16],
             help="Thời điểm phát hiện bản ghi lỗi mới nhất",
         )
@@ -184,12 +177,12 @@ def render_dq_quarantine_panel(
     chart_col1, chart_col2 = st.columns([1, 1])
 
     with chart_col1:
-        st.markdown("##### 📌 Phân Bố Loại Vi Phạm (Error Breakdown)")
+        section_header("Phân bố loại vi phạm")
         error_counts = df["dq_error"].value_counts().reset_index()
         error_counts.columns = ["dq_error", "count"]
 
         # Color palette cho cac loai loi
-        colors = ["#FF5252", "#FF7A00", "#FFD600", "#00E5FF", "#D500F9", "#7C4DFF"]
+        colors = CATEGORICAL
         fig_pie = go.Figure(
             data=[
                 go.Pie(
@@ -197,21 +190,22 @@ def render_dq_quarantine_panel(
                     values=error_counts["count"],
                     hole=0.45,
                     marker=dict(colors=colors[:len(error_counts)]),
-                    textinfo="label+percent",
-                    insidetextorientation="radial",
+                    textinfo="percent",
+                    marker_line=dict(color="#0B0E11", width=2),
                 )
             ]
         )
         fig_pie.update_layout(
-            template="plotly_dark",
-            margin=dict(l=20, r=20, t=30, b=20),
-            height=340,
-            showlegend=False,
+            template=PLOTLY_TEMPLATE,
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=320,
+            showlegend=True,
+            legend=dict(orientation="v", x=1.0, y=0.5),
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with chart_col2:
-        st.markdown("##### 🪙 Số Bản Ghi Lỗi Theo Cặp Coin")
+        section_header("Số bản ghi lỗi theo cặp")
         sym_counts = df["symbol"].value_counts().reset_index()
         sym_counts.columns = ["symbol", "count"]
 
@@ -219,23 +213,22 @@ def render_dq_quarantine_panel(
             sym_counts,
             x="symbol",
             y="count",
-            color="symbol",
             text="count",
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             labels={"symbol": "Cặp Coin", "count": "Số Bản Ghi"},
         )
         fig_bar.update_layout(
-            margin=dict(l=20, r=20, t=30, b=20),
-            height=340,
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=320,
             showlegend=False,
         )
-        fig_bar.update_traces(textposition="outside")
+        fig_bar.update_traces(textposition="outside", marker_color=CATEGORICAL[0], marker_line_width=0)
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.markdown("---")
 
     # ── 3. FILTER CONTROLS & RECORDS TABLE ────────────────────────────────────
-    st.markdown("##### 📋 Danh Sách Bản Ghi Đang Bị Cách Ly (Quarantine Records)")
+    section_header("Bản ghi đang bị cách ly")
 
     f_col1, f_col2, f_col3 = st.columns([2, 2, 3])
 
@@ -288,7 +281,7 @@ def render_dq_quarantine_panel(
     act_col1, act_col2 = st.columns([3, 1])
 
     with act_col1:
-        with st.expander("🔍 Xem Chi Tiết Bản Ghi Gốc (Raw Record Payload Inspector)"):
+        with st.expander("Raw payload của bản ghi đầu tiên"):
             if not filtered_df.empty:
                 first_row = filtered_df.iloc[0]
                 raw_txt = first_row.get("raw_record", "{}")
@@ -303,7 +296,7 @@ def render_dq_quarantine_panel(
     with act_col2:
         csv_data = filtered_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="📥 Tải Báo Cáo CSV",
+            label="Xuất CSV",
             data=csv_data,
             file_name=f"quarantine_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",

@@ -3,98 +3,34 @@ watermark_status.py
 ===================
 Component hiển thị trạng thái System Watermark và Badge dữ liệu thời gian thực:
 - Trạng thái nến: Reconciled (Chuẩn hóa) vs Provisional (Tức thời) vs Partially Reconciled (Lai)
-- Huy hiệu (Badge) động với hiệu ứng nhấp nháy (Pulsing Dot)
-- Thanh trạng thái Watermark (Status Ribbon) phân tích độ trễ chốt sổ giữa Batch Layer và Speed Layer
+- Huy hiệu (Badge) trạng thái dạng phẳng, màu mang ngữ nghĩa
+- Dải trạng thái Lambda (Serving route, Watermark, độ trễ chốt sổ, sai số đối soát)
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
 import streamlit as st
 
+from dashboard.components.theme import COLORS, icon, render_html
 
-# ── CSS STYLES CHO BADGES VÀ HIỆU ỨNG PULSE ──────────────────────────────────
-BADGE_CSS = """
-<style>
-.badge-container {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-.badge-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    display: inline-block;
-}
-.pulse-green {
-    background-color: #00E676;
-    box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7);
-    animation: pulse-green-anim 2s infinite;
-}
-.pulse-purple {
-    background-color: #D500F9;
-    box-shadow: 0 0 0 0 rgba(213, 0, 249, 0.7);
-    animation: pulse-purple-anim 2s infinite;
-}
-.pulse-orange {
-    background-color: #FF9100;
-    box-shadow: 0 0 0 0 rgba(255, 145, 0, 0.7);
-    animation: pulse-orange-anim 2s infinite;
-}
-@keyframes pulse-green-anim {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7); }
-    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
-}
-@keyframes pulse-purple-anim {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(213, 0, 249, 0.7); }
-    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(213, 0, 249, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(213, 0, 249, 0); }
-}
-@keyframes pulse-orange-anim {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 145, 0, 0.7); }
-    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(255, 145, 0, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 145, 0, 0); }
+STATUS_STYLES = {
+    "reconciled": (COLORS["reconciled"], "Reconciled"),
+    "provisional": (COLORS["provisional"], "Provisional"),
+    "hybrid": (COLORS["hybrid"], "Partially Reconciled"),
 }
 
-.status-ribbon {
-    background: linear-gradient(90deg, #1A1F2C 0%, #131722 100%);
-    border: 1px solid #2A2E39;
-    border-radius: 10px;
-    padding: 12px 18px;
-    margin-bottom: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-.ribbon-item {
-    display: flex;
-    flex-direction: column;
-}
-.ribbon-label {
-    font-size: 11px;
-    color: #848E9C;
-    text-transform: uppercase;
-    font-weight: 600;
-}
-.ribbon-val {
-    font-size: 14px;
-    color: #EAECEF;
-    font-weight: bold;
-    font-family: monospace;
-}
-</style>
-"""
+
+def _status_key(status: str) -> str:
+    """Chuẩn hóa chuỗi trạng thái về khóa 'reconciled' | 'provisional' | 'hybrid'."""
+    clean_status = str(status).strip()
+    if "Reconciled" in clean_status and "Partially" not in clean_status:
+        return "reconciled"
+    if "Provisional" in clean_status:
+        return "provisional"
+    return "hybrid"
 
 
 def get_badge_html(status: str) -> str:
@@ -106,119 +42,136 @@ def get_badge_html(status: str) -> str:
     Returns:
         Chuỗi HTML hiển thị badge.
     """
-    clean_status = str(status).strip()
-
-    if "Reconciled" in clean_status and "Partially" not in clean_status:
-        bg_color = "rgba(0, 230, 118, 0.15)"
-        border_color = "#00E676"
-        text_color = "#00E676"
-        dot_class = "pulse-green"
-        label = "Reconciled (Ground Truth)"
-    elif "Provisional" in clean_status:
-        bg_color = "rgba(179, 136, 255, 0.15)"
-        border_color = "#B388FF"
-        text_color = "#B388FF"
-        dot_class = "pulse-purple"
-        label = "Provisional (Speed Layer)"
-    else:  # Partially Reconciled / Hybrid
-        bg_color = "rgba(255, 145, 0, 0.15)"
-        border_color = "#FF9100"
-        text_color = "#FFB74D"
-        dot_class = "pulse-orange"
-        label = "Partially Reconciled (Hybrid)"
-
+    color, label = STATUS_STYLES[_status_key(status)]
     return (
-        f'{BADGE_CSS}'
-        f'<div class="badge-container" style="background:{bg_color}; border: 1px solid {border_color}; color:{text_color};">'
-        f'<span class="badge-dot {dot_class}"></span>'
-        f'<span>{label}</span>'
-        f'</div>'
+        f'<span class="lh-badge" style="background:{color}1F;color:{color};border:1px solid {color}55;">'
+        f'<span class="lh-dot" style="background:{color}"></span>{label}</span>'
     )
 
 
 def render_watermark_badge(status: str) -> None:
     """Render trực tiếp badge trạng thái vào giao diện Streamlit."""
-    html = get_badge_html(status)
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(get_badge_html(status), unsafe_allow_html=True)
+
+
+def _parse_dt(raw: Any) -> Optional[datetime]:
+    """Parse datetime/ISO string về datetime có timezone UTC."""
+    dt: Optional[datetime] = None
+    if isinstance(raw, datetime):
+        dt = raw
+    elif isinstance(raw, str) and raw:
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if dt is not None and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def resolve_watermark(
+    watermark_info: Optional[Dict[str, Any]],
+    market_data: Dict[str, Any],
+) -> Optional[datetime]:
+    """Lấy mốc Watermark ưu tiên từ /api/watermark, fallback sang payload /api/market."""
+    if watermark_info and watermark_info.get("watermark_time"):
+        return _parse_dt(watermark_info["watermark_time"])
+    return _parse_dt(market_data.get("watermark"))
+
+
+def _format_lag(seconds: float) -> str:
+    """Định dạng độ trễ giây thành chuỗi ngắn gọn."""
+    if seconds >= 86400:
+        return f"{seconds / 86400:.1f} ngày"
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f} giờ"
+    if seconds >= 60:
+        return f"{seconds / 60:.1f} phút"
+    return f"{int(seconds)} giây"
+
+
+def _source_split(candles: List[Dict[str, Any]]) -> Tuple[int, int]:
+    """Đếm số nến Reconciled (Batch) và Provisional (Speed)."""
+    batch = sum(1 for c in candles if _status_key(c.get("status", "")) == "reconciled")
+    return batch, len(candles) - batch
 
 
 def render_watermark_status_bar(
     watermark_info: Optional[Dict[str, Any]],
     market_data: Dict[str, Any],
 ) -> None:
-    """Render thanh trạng thái Watermark chi tiết (Status Ribbon) trên đầu giao diện.
+    """Render dải trạng thái Lambda Serving dưới header giá.
 
     Hiển thị:
-      - Trạng thái dữ liệu hiện hành (Badge)
+      - Tuyến truy vấn Query Merger (Case 1 / 2 / 3) + tỷ lệ nến Batch/Speed
       - Mốc System Watermark W
-      - Phân luồng Query Merger (Case 1 / 2 / 3)
       - Độ trễ chốt sổ (Watermark Lag)
+      - Sai số đối soát tại biên (Reconciliation Δ)
     """
     overall_status = market_data.get("overall_status", "Provisional")
     query_case = market_data.get("query_case", 1)
+    candles = market_data.get("candles", []) or []
+    delta = market_data.get("reconciliation_delta")
 
-    # 1. Parse Watermark Time
-    wm_time_str = "--"
-    wm_dt: Optional[datetime] = None
-    if watermark_info and watermark_info.get("watermark_time"):
-        raw_wm = watermark_info["watermark_time"]
-        if isinstance(raw_wm, str):
-            wm_time_str = raw_wm.replace("T", " ")[:19]
-            try:
-                wm_dt = datetime.fromisoformat(raw_wm)
-            except Exception:
-                pass
-        elif isinstance(raw_wm, datetime):
-            wm_dt = raw_wm
-            wm_time_str = wm_dt.strftime("%Y-%m-%d %H:%M:%S")
-    elif market_data.get("watermark"):
-        wm_time_str = str(market_data["watermark"]).replace("T", " ")[:19]
+    # 1. Serving route + split bar
+    case_names = {1: "Batch view", 2: "Speed view", 3: "Hybrid merge"}
+    case_name = case_names.get(query_case, "Unknown")
+    batch_n, speed_n = _source_split(candles)
+    total = max(batch_n + speed_n, 1)
+    batch_pct = batch_n / total * 100
+    split_bar = (
+        f'<div class="lh-split">'
+        f'<span style="width:{batch_pct:.1f}%;background:{COLORS["reconciled"]}"></span>'
+        f'<span style="width:{100 - batch_pct:.1f}%;background:{COLORS["provisional"]}"></span>'
+        f'</div>'
+    )
 
-    # 2. Tính Watermark Lag
-    lag_str = "Thời gian thực"
+    # 2. Watermark + lag
+    wm_dt = resolve_watermark(watermark_info, market_data)
+    wm_str = wm_dt.strftime("%H:%M:%S") if wm_dt else "--:--:--"
+    wm_date = wm_dt.strftime("%Y-%m-%d UTC") if wm_dt else "Chưa có mốc chốt sổ"
     if wm_dt:
-        if wm_dt.tzinfo is None:
-            wm_dt = wm_dt.replace(tzinfo=timezone.utc)
-        now_utc = datetime.now(timezone.utc)
-        diff_sec = (now_utc - wm_dt).total_seconds()
-        if diff_sec > 86400:
-            lag_str = f"{diff_sec / 86400:.1f} ngày trước"
-        elif diff_sec > 3600:
-            lag_str = f"{diff_sec / 3600:.1f} giờ trước"
-        elif diff_sec > 60:
-            lag_str = f"{diff_sec / 60:.1f} phút trước"
-        else:
-            lag_str = f"{int(diff_sec)}s lag"
+        lag_sec = max((datetime.now(timezone.utc) - wm_dt).total_seconds(), 0.0)
+        lag_str = _format_lag(lag_sec)
+        lag_color = COLORS["text"] if lag_sec < 1800 else COLORS["provisional"]
+    else:
+        lag_str, lag_color = "--", COLORS["text_muted"]
 
-    # 3. Text mô tả Case
-    case_desc_map = {
-        1: "Case 1: 100% Batch View",
-        2: "Case 2: 100% Speed View",
-        3: "Case 3: Hybrid (Zero Double-Counting)",
-    }
-    case_str = case_desc_map.get(query_case, f"Case {query_case}")
+    # 3. Reconciliation delta
+    if delta is None:
+        delta_str, delta_note, delta_color = "--", "Chưa có vùng giao thoa", COLORS["text_muted"]
+    elif float(delta) == 0.0:
+        delta_str, delta_note, delta_color = "0.0000", "Khớp hoàn toàn tại biên W", COLORS["reconciled"]
+    else:
+        delta_str, delta_note, delta_color = f"{float(delta):,.4f}", "|VWAP speed − VWAP batch|", COLORS["provisional"]
 
-    badge_html = get_badge_html(overall_status)
-
-    ribbon_html = f"""
-    {BADGE_CSS}
-    <div class="status-ribbon">
-        <div class="ribbon-item">
-            <span class="ribbon-label">Trạng Thái Dữ Liệu</span>
-            <div style="margin-top: 4px;">{badge_html}</div>
+    render_html(
+        f"""
+        <div class="lh-grid" style="grid-template-columns: 1.3fr 1fr 1fr 1fr;">
+        <div class="lh-cell">
+        <div class="lh-cell-label">{icon("merge", 13)}Serving route</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+        <span class="lh-cell-value" style="font-family:var(--sans);font-weight:600;">Case {query_case} · {case_name}</span>
+        {get_badge_html(overall_status)}
         </div>
-        <div class="ribbon-item">
-            <span class="ribbon-label">System Watermark (W)</span>
-            <span class="ribbon-val" style="color: #64B5F6;">{wm_time_str} UTC</span>
+        {split_bar}
+        <div class="lh-cell-note"><span class="lh-num">{batch_n}</span> nến batch · <span class="lh-num">{speed_n}</span> nến speed</div>
         </div>
-        <div class="ribbon-item">
-            <span class="ribbon-label">Độ Trễ Chốt Sổ (Lag)</span>
-            <span class="ribbon-val" style="color: #FFB74D;">{lag_str}</span>
+        <div class="lh-cell">
+        <div class="lh-cell-label">{icon("database", 13)}Batch watermark</div>
+        <div class="lh-cell-value">{wm_str}</div>
+        <div class="lh-cell-note">{wm_date}</div>
         </div>
-        <div class="ribbon-item">
-            <span class="ribbon-label">Phân Luồng Query Merger</span>
-            <span class="ribbon-val" style="color: #81C784;">{case_str}</span>
+        <div class="lh-cell">
+        <div class="lh-cell-label">{icon("clock", 13)}Độ trễ chốt sổ</div>
+        <div class="lh-cell-value" style="color:{lag_color}">{lag_str}</div>
+        <div class="lh-cell-note">Khoảng cách now − W</div>
         </div>
-    </div>
-    """
-    st.markdown(ribbon_html, unsafe_allow_html=True)
+        <div class="lh-cell">
+        <div class="lh-cell-label">{icon("scale", 13)}Sai số đối soát Δ</div>
+        <div class="lh-cell-value" style="color:{delta_color}">{delta_str}</div>
+        <div class="lh-cell-note">{delta_note}</div>
+        </div>
+        </div>
+        """
+    )

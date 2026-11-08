@@ -16,6 +16,14 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 from typing import Optional, List, Dict
 
+from dashboard.components.theme import (
+    CATEGORICAL,
+    COLORS as THEME_COLORS,
+    PLOTLY_TEMPLATE,
+    render_html,
+    section_header,
+)
+
 
 def _find_results_dir() -> str:
     """Tìm đường dẫn thư mục results dù chạy trên Windows host hay Docker container."""
@@ -51,7 +59,8 @@ CRYPTO_COLORS: Dict[str, str] = {
 
 
 def _get_crypto_color(sym: str) -> str:
-    return CRYPTO_COLORS.get(sym, "#888888")
+    """Màu cột theo symbol: dùng một màu trung tính để so sánh công bằng giữa các cặp."""
+    return CATEGORICAL[0]
 
 
 def _show_image(path: str, caption: Optional[str] = None):
@@ -80,114 +89,108 @@ def _load_csv(filename: str) -> Optional[pd.DataFrame]:
     return None
 
 
+def _overview_cell(label: str, value: str, note: str, color: Optional[str] = None) -> str:
+    """HTML cho một ô chỉ số trong lưới tổng quan."""
+    style = f' style="color:{color}"' if color else ""
+    return (
+        f'<div class="lh-cell"><div class="lh-cell-label">{label}</div>'
+        f'<div class="lh-cell-value"{style}>{value}</div>'
+        f'<div class="lh-cell-note">{note}</div></div>'
+    )
+
+
+def _verdict(passed: Optional[bool]) -> str:
+    """Nhãn đánh giá SLA dựa trên kết quả đo thực tế."""
+    if passed is None:
+        return "Chưa đủ dữ liệu"
+    return "Đạt" if passed else "Không đạt"
+
+
 def render_benchmark_overview():
-    """Tổng quan KPI 3 Benchmark cốt lõi."""
-    st.subheader("📊 Tổng Quan Hiệu Năng 3 Benchmark Hệ Thống")
-    st.caption("Kết quả đo kiểm thực nghiệm đa cặp coin (BTC, ETH, SOL, BNB, XRP) lưu tại `results/logs/`")
+    """Tổng quan KPI 3 Benchmark cốt lõi (mọi con số được tính trực tiếp từ results/logs)."""
+    section_header(
+        "Tổng quan 3 benchmark",
+        "Các chỉ số dưới đây được tính trực tiếp từ file CSV trong <code>results/logs/</code>; "
+        "ô trống nghĩa là benchmark tương ứng chưa được chạy.",
+        "activity",
+    )
 
     df_lat = _load_csv("bench_latency.csv")
     df_rec = _load_csv("bench_reprocess_summary.csv")
     df_comp = _load_csv("bench_compaction.csv")
 
-    col1, col2, col3 = st.columns(3)
+    # BM1 — Query latency (strategy = lambda)
+    p50 = p95 = p99 = None
+    lat_syms = 0
+    if df_lat is not None and len(df_lat) > 0 and "strategy" in df_lat.columns:
+        lambda_rows = df_lat[df_lat["strategy"] == "lambda"]
+        if len(lambda_rows) > 0:
+            p50 = float(lambda_rows["latency_ms"].quantile(0.50))
+            p95 = float(lambda_rows["latency_ms"].quantile(0.95))
+            p99 = float(lambda_rows["latency_ms"].quantile(0.99))
+            lat_syms = int(lambda_rows["symbol"].nunique()) if "symbol" in lambda_rows.columns else 0
 
-    with col1:
-        st.markdown(
-            """<div style="background: linear-gradient(135deg, #0d47a1, #1976d2);
-            border-radius: 12px; padding: 18px; text-align: center; border: 1px solid #42a5f5;">
-            <div style="font-size: 13px; color: #bbdefb; font-weight: 600;">BENCHMARK 1</div>
-            <div style="font-size: 24px; font-weight: bold; color: #ffffff;">Query Latency</div>
-            <div style="font-size: 12px; color: #e3f2fd;">Độ trễ truy vấn Lambda Hybrid</div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-        if df_lat is not None and len(df_lat) > 0:
-            lambda_rows = df_lat[df_lat["strategy"] == "lambda"]
-            if len(lambda_rows) > 0:
-                p50 = float(lambda_rows["latency_ms"].quantile(0.5))
-                p95 = float(lambda_rows["latency_ms"].quantile(0.95))
-                p99 = float(lambda_rows["latency_ms"].quantile(0.99))
-                num_syms = lambda_rows["symbol"].nunique()
-                st.metric("P50 Latency (Hybrid)", f"{p50:.1f} ms", f"{num_syms} cặp coin")
-                st.metric("P95 Latency (SLA < 500ms)", f"{p95:.1f} ms", "Đạt SLA")
-                st.metric("P99 Latency", f"{p99:.1f} ms")
-            else:
-                st.info("Chưa có dòng dữ liệu strategy=lambda")
-        else:
-            st.warning("Không tìm thấy file bench_latency.csv")
+    # BM2 — Reconciliation accuracy
+    avg_mape = avg_cov = None
+    rec_syms = 0
+    if df_rec is not None and len(df_rec) > 0 and "matched_candles" in df_rec.columns:
+        valid = df_rec[df_rec["matched_candles"] > 0]
+        if len(valid) > 0:
+            latest_valid = valid.sort_values("ts").groupby("symbol").last().reset_index()
+            avg_mape = float(latest_valid["mape_pct"].mean())
+            avg_cov = float(latest_valid["coverage_pct"].mean())
+            rec_syms = len(latest_valid)
 
-    with col2:
-        st.markdown(
-            """<div style="background: linear-gradient(135deg, #1b5e20, #388e3c);
-            border-radius: 12px; padding: 18px; text-align: center; border: 1px solid #66bb6a;">
-            <div style="font-size: 13px; color: #c8e6c9; font-weight: 600;">BENCHMARK 2</div>
-            <div style="font-size: 24px; font-weight: bold; color: #ffffff;">Reconciliation</div>
-            <div style="font-size: 12px; color: #e8f5e9;">Độ chính xác đối soát Speed vs Batch</div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-        if df_rec is not None and len(df_rec) > 0:
-            valid = df_rec[df_rec["matched_candles"] > 0]
-            if len(valid) > 0:
-                latest_valid = valid.sort_values("ts").groupby("symbol").last().reset_index()
-                avg_mape = float(latest_valid["mape_pct"].mean())
-                avg_coverage = float(latest_valid["coverage_pct"].mean())
-                num_syms = len(latest_valid)
-                st.metric("MAPE Trung Bình (SLA < 1%)", f"{avg_mape:.4f} %", f"{num_syms} cặp coin")
-                st.metric("Độ chính xác tương đương", f"{(100 - avg_mape):.2f} %", "> 99.9%")
-                st.metric("Tỷ lệ khớp nến (Coverage)", f"{avg_coverage:.0f} %", "100% Khớp")
-            else:
-                st.info("Đang chờ kết quả đối soát có nến khớp")
-        else:
-            st.warning("Không tìm thấy file bench_reprocess_summary.csv")
+    # BM3 — Compaction
+    avg_b = avg_a = speedup = None
+    if df_comp is not None and len(df_comp) > 0 and "phase" in df_comp.columns:
+        before = df_comp[df_comp["phase"] == "before"]["read_latency_ms"]
+        after = df_comp[df_comp["phase"] == "after"]["read_latency_ms"]
+        if len(before) > 0 and len(after) > 0:
+            avg_b, avg_a = float(before.mean()), float(after.mean())
+            speedup = avg_b / avg_a if avg_a > 0 else None
 
-    with col3:
-        st.markdown(
-            """<div style="background: linear-gradient(135deg, #e65100, #f57c00);
-            border-radius: 12px; padding: 18px; text-align: center; border: 1px solid #ffa726;">
-            <div style="font-size: 13px; color: #ffe0b2; font-weight: 600;">BENCHMARK 3</div>
-            <div style="font-size: 24px; font-weight: bold; color: #ffffff;">Compaction</div>
-            <div style="font-size: 12px; color: #fff3e0;">Tối ưu hóa bảng Apache Iceberg</div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-        if df_comp is not None and len(df_comp) > 0:
-            before = df_comp[df_comp["phase"] == "before"]["read_latency_ms"]
-            after = df_comp[df_comp["phase"] == "after"]["read_latency_ms"]
-            if len(before) > 0 and len(after) > 0:
-                avg_b = float(before.mean())
-                avg_a = float(after.mean())
-                speedup = avg_b / avg_a if avg_a > 0 else 0
-                sym_col = "symbol_filter" if "symbol_filter" in df_comp.columns else "symbol"
-                num_syms = df_comp[sym_col].nunique() if sym_col in df_comp.columns else 1
-                st.metric("Trước Compaction", f"{avg_b:.0f} ms", f"{num_syms} cặp coin")
-                st.metric("Sau Compaction", f"{avg_a:.0f} ms", "File gom gọn")
-                st.metric("Tăng tốc truy vấn (Speedup)", f"{speedup:.1f}x", "Vượt chỉ tiêu")
-            else:
-                st.info("Thiếu dữ liệu trước/sau compaction")
-        else:
-            st.warning("Không tìm thấy file bench_compaction.csv")
+    def fmt(v: Optional[float], pattern: str) -> str:
+        return pattern.format(v) if v is not None else "--"
 
-    st.markdown("---")
-    st.subheader("🎯 Bảng So Sánh Chỉ Tiêu Đồ Án (SLA vs Thực Nghiệm Đa Cặp Tiền)")
+    ok, warn = THEME_COLORS["reconciled"], THEME_COLORS["provisional"]
+    bm1_pass = (p95 < 500.0) if p95 is not None else None
+    bm2_pass = (avg_mape < 1.0) if avg_mape is not None else None
+    bm3_pass = (speedup >= 2.0) if speedup is not None else None
+
+    def tone(passed: Optional[bool]) -> Optional[str]:
+        return None if passed is None else (ok if passed else warn)
+
+    render_html(
+        '<div class="lh-grid" style="grid-template-columns: repeat(3, 1fr);">'
+        + _overview_cell("BM1 · Lambda P95 latency", fmt(p95, "{:,.1f} ms"),
+                         f"P50 {fmt(p50, '{:,.1f}')} · P99 {fmt(p99, '{:,.1f}')} ms · {lat_syms} cặp", tone(bm1_pass))
+        + _overview_cell("BM2 · VWAP MAPE", fmt(avg_mape, "{:.4f} %"),
+                         f"Coverage {fmt(avg_cov, '{:.0f}')}% · {rec_syms} cặp", tone(bm2_pass))
+        + _overview_cell("BM3 · Compaction speedup", fmt(speedup, "{:.1f}x"),
+                         f"{fmt(avg_b, '{:,.0f}')} → {fmt(avg_a, '{:,.0f}')} ms đọc", tone(bm3_pass))
+        + "</div>"
+    )
+
+    section_header("Đối chiếu chỉ tiêu", "Đánh giá tự động so với ngưỡng SLA của đề tài.")
     summary_table = pd.DataFrame([
         {
-            "Tiêu Chí Đo Kiểm": "BM1: Query Latency (Lambda P95)",
-            "Chỉ Tiêu / Mục Tiêu SLA": "< 500 ms",
-            "Kết Quả Đạt Được": "50 - 75 ms (P95 đạt chuẩn)",
-            "Đánh Giá": "✅ Vượt chỉ tiêu (Nhanh gấp ~7-10 lần)",
+            "Benchmark": "BM1 · Query latency (Lambda P95)",
+            "Ngưỡng": "< 500 ms",
+            "Kết quả đo": fmt(p95, "{:,.1f} ms"),
+            "Đánh giá": _verdict(bm1_pass),
         },
         {
-            "Tiêu Chí Đo Kiểm": "BM2: Sai số đối soát VWAP (MAPE)",
-            "Chỉ Tiêu / Mục Tiêu SLA": "< 1.00 %",
-            "Kết Quả Đạt Được": "0.0574% - 0.0948%",
-            "Đánh Giá": "✅ Vượt chỉ tiêu (Độ chính xác > 99.9%)",
+            "Benchmark": "BM2 · Sai số đối soát VWAP (MAPE)",
+            "Ngưỡng": "< 1.00 %",
+            "Kết quả đo": fmt(avg_mape, "{:.4f} %"),
+            "Đánh giá": _verdict(bm2_pass),
         },
         {
-            "Tiêu Chí Đo Kiểm": "BM3: Hiệu năng sau Compaction",
-            "Chỉ Tiêu / Mục Tiêu SLA": "Tăng tốc >= 2.0x",
-            "Kết Quả Đạt Được": "3.8x - 4.1x (Giảm ~75% latency)",
-            "Đánh Giá": "✅ Đạt yêu cầu giải quyết Small Files",
+            "Benchmark": "BM3 · Tăng tốc đọc sau compaction",
+            "Ngưỡng": ">= 2.0x",
+            "Kết quả đo": fmt(speedup, "{:.1f}x"),
+            "Đánh giá": _verdict(bm3_pass),
         },
     ])
     st.dataframe(summary_table, use_container_width=True, hide_index=True)
@@ -195,11 +198,11 @@ def render_benchmark_overview():
 
 def render_benchmark1_latency():
     """Chi tiết Benchmark 1: Query Latency Distribution."""
-    st.subheader("⚡ Benchmark 1: Phân Bố Độ Trễ Truy Vấn (Query Latency)")
-    st.markdown(
-        "Đo kiểm độ trễ truy vấn khi gọi qua **FastAPI Serving Layer** với 3 chiến lược: "
-        "`batch_only` (chỉ đọc Cold Batch), `speed_only` (chỉ đọc Realtime Redis/Speed), "
-        "và `lambda` (kết hợp tự động theo Watermark)."
+    section_header(
+        "Benchmark 1 · Query latency",
+        "Độ trễ truy vấn qua FastAPI Serving Layer với 3 chiến lược: <code>batch_only</code>, "
+        "<code>speed_only</code> và <code>lambda</code> (ghép tự động theo Watermark).",
+        "clock",
     )
 
     df = _load_csv("bench_latency.csv")
@@ -212,9 +215,9 @@ def render_benchmark1_latency():
         return
 
     strategy_colors = {
-        "batch_only": "#EF5350",
-        "speed_only": "#FFA726",
-        "lambda": "#26A69A",
+        "batch_only": THEME_COLORS["text_muted"],
+        "speed_only": THEME_COLORS["provisional"],
+        "lambda": THEME_COLORS["accent"],
     }
     strategy_labels = {
         "batch_only": "Batch-only (Cold Storage)",
@@ -268,7 +271,7 @@ def render_benchmark1_latency():
 
     if percentiles:
         pdf = pd.DataFrame(percentiles)
-        for metric, color in [("P50 (ms)", "#42A5F5"), ("P95 (ms)", "#FFA726"), ("P99 (ms)", "#EF5350")]:
+        for metric, color in [("P50 (ms)", THEME_COLORS["accent"]), ("P95 (ms)", THEME_COLORS["provisional"]), ("P99 (ms)", THEME_COLORS["down"])]:
             fig.add_trace(
                 go.Bar(
                     x=pdf["Chiến Lược"],
@@ -282,7 +285,7 @@ def render_benchmark1_latency():
             )
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         height=480,
         showlegend=True,
         legend=dict(orientation="h", y=-0.15),
@@ -294,7 +297,7 @@ def render_benchmark1_latency():
     # Biểu đồ so sánh P95 theo từng Symbol
     if "Tất cả" in selected_sym and df["symbol"].nunique() > 1:
         st.markdown("---")
-        st.subheader("📊 So Sánh P95 Latency của Chiến Lược Lambda Theo Từng Cặp Coin")
+        section_header("P95 latency của chiến lược Lambda theo cặp")
         lambda_df = df[df["strategy"] == "lambda"]
         p95_by_sym = lambda_df.groupby("symbol")["latency_ms"].quantile(0.95).reset_index()
         p95_by_sym.columns = ["symbol", "p95_latency"]
@@ -310,7 +313,7 @@ def render_benchmark1_latency():
         fig_sym.add_hline(y=500.0, line_dash="dash", line_color="#EF5350",
                           annotation_text="Ngưỡng SLA Max: 500 ms", annotation_position="top left")
         fig_sym.update_layout(
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             height=360,
             yaxis_title="P95 Latency (ms)",
             title="P95 Latency (Lambda Hybrid) của các Cặp Coin",
@@ -318,16 +321,16 @@ def render_benchmark1_latency():
         st.plotly_chart(fig_sym, use_container_width=True)
 
     if percentiles:
-        st.markdown("**Bảng Chi Tiết Độ Trễ Truy Vấn Theo Phân Vị:**")
+        section_header("Bảng phân vị độ trễ")
         st.dataframe(pd.DataFrame(percentiles), use_container_width=True, hide_index=True)
 
 
 def render_benchmark2_reconciliation():
     """Chi tiết Benchmark 2: Reconciliation Accuracy."""
-    st.subheader("🔍 Benchmark 2: Độ Chính Xác Đối Soát (Reconciliation Accuracy)")
-    st.markdown(
-        "Đo kiểm sai số giá trung bình có trọng số khối lượng (**VWAP**) tính toán bởi "
-        "**Speed Layer** (tính online tức thời) so với **Batch Layer** (chuẩn hóa đầy đủ sau khi chốt Watermark)."
+    section_header(
+        "Benchmark 2 · Reconciliation accuracy",
+        "Sai số VWAP của Speed Layer (tính online) so với Batch Layer (chuẩn hóa đầy đủ sau khi chốt Watermark).",
+        "scale",
     )
 
     df_sum = _load_csv("bench_reprocess_summary.csv")
@@ -364,7 +367,7 @@ def render_benchmark2_reconciliation():
         fig_mape.add_hline(y=1.0, line_dash="dash", line_color="#EF5350",
                            annotation_text="Ngưỡng SLA Max: 1.0%", annotation_position="top left")
         fig_mape.update_layout(
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             title="Sai Số Phần Trăm Tuyệt Đối Trung Bình (MAPE %)",
             yaxis_title="MAPE (%)",
             height=380,
@@ -379,7 +382,7 @@ def render_benchmark2_reconciliation():
             y=latest_valid["mae"],
             text=latest_valid["mae"].apply(lambda v: f"${v:.4f}" if v < 1 else f"${v:.2f}"),
             textposition="outside",
-            marker_color="#42A5F5",
+            marker_color=THEME_COLORS["accent"],
         ))
         fig_err.add_trace(go.Bar(
             name="RMSE (Căn bậc hai sai số)",
@@ -387,10 +390,10 @@ def render_benchmark2_reconciliation():
             y=latest_valid["rmse"],
             text=latest_valid["rmse"].apply(lambda v: f"${v:.4f}" if v < 1 else f"${v:.2f}"),
             textposition="outside",
-            marker_color="#AB47BC",
+            marker_color=THEME_COLORS["text_muted"],
         ))
         fig_err.update_layout(
-            template="plotly_dark",
+            template=PLOTLY_TEMPLATE,
             title="Sai Số Giá Thực Tế: MAE & RMSE (USDT)",
             yaxis_title="USDT (log scale)",
             yaxis_type="log",
@@ -403,7 +406,7 @@ def render_benchmark2_reconciliation():
         valid_candles = df_det.dropna(subset=["vwap_batch", "vwap_speed"]).copy()
         if len(valid_candles) > 0:
             st.markdown("---")
-            st.subheader("📈 So Sánh Chi Tiết Từng Cây Nến: Speed VWAP vs Batch VWAP")
+            section_header("Speed VWAP và Batch VWAP theo từng nến")
             sym_list = sorted(valid_candles["symbol"].unique().tolist())
             picked_sym = st.selectbox("Chọn Cặp Coin Đối Soát Chi Tiết:", sym_list, index=0)
             sym_data = valid_candles[valid_candles["symbol"] == picked_sym].copy()
@@ -421,7 +424,7 @@ def render_benchmark2_reconciliation():
                         x=sym_data["window_start"],
                         y=sym_data["vwap_batch"],
                         name="Batch Ground Truth",
-                        line=dict(color="#26A69A", width=2),
+                        line=dict(color=THEME_COLORS["reconciled"], width=1.5),
                         mode="lines+markers",
                     ),
                     row=1, col=1,
@@ -431,7 +434,7 @@ def render_benchmark2_reconciliation():
                         x=sym_data["window_start"],
                         y=sym_data["vwap_speed"],
                         name="Speed Provisional",
-                        line=dict(color="#FFA726", width=1.5, dash="dot"),
+                        line=dict(color=THEME_COLORS["provisional"], width=1.25, dash="dot"),
                         mode="lines+markers",
                     ),
                     row=1, col=1,
@@ -446,14 +449,14 @@ def render_benchmark2_reconciliation():
                     row=2, col=1,
                 )
                 fig_compare.update_layout(
-                    template="plotly_dark",
+                    template=PLOTLY_TEMPLATE,
                     height=520,
                     showlegend=True,
                     legend=dict(orientation="h", y=-0.12),
                 )
                 st.plotly_chart(fig_compare, use_container_width=True)
 
-    st.markdown("**Bảng Chi Tiết Kết Quả Đối Soát Theo Cặp Tiền:**")
+    section_header("Kết quả đối soát theo cặp")
     st.dataframe(
         latest_valid[["symbol", "matched_candles", "coverage_pct", "mae", "mape_pct", "rmse", "ts"]].rename(columns={
             "symbol": "Cặp Tiền",
@@ -471,10 +474,11 @@ def render_benchmark2_reconciliation():
 
 def render_benchmark3_compaction():
     """Chi tiết Benchmark 3: Iceberg Compaction Efficiency."""
-    st.subheader("🧊 Benchmark 3: Hiệu Quả Nén File Apache Iceberg (Compaction)")
-    st.markdown(
-        "Đo kiểm hiện tượng suy giảm hiệu năng do **Small Files Problem** khi Streaming ghi "
-        "liên tục các file Parquet nhỏ 1 phút, và tốc độ cải thiện sau khi chạy quy trình **Rewrite Data Files (Compaction)**."
+    section_header(
+        "Benchmark 3 · Iceberg compaction",
+        "Suy giảm hiệu năng đọc do small files khi streaming ghi Parquet liên tục, và mức cải thiện sau "
+        "<code>rewrite_data_files</code>.",
+        "database",
     )
 
     df = _load_csv("bench_compaction.csv")
@@ -506,8 +510,8 @@ def render_benchmark3_compaction():
 
     col1.metric("Độ Trễ Trước Compaction", f"{avg_b:.0f} ms", f"{files_b} files nhỏ")
     col2.metric("Độ Trễ Sau Compaction", f"{avg_a:.0f} ms", f"{files_a} files gom")
-    col3.metric("Tốc Độ Cải Thiện", f"{speedup:.1f}x", "Speedup")
-    col4.metric("Giảm Độ Trễ", f"-{reduction:.1f}%", "Tối ưu hóa I/O")
+    col3.metric("Tốc Độ Cải Thiện", f"{speedup:.1f}x")
+    col4.metric("Giảm Độ Trễ", f"-{reduction:.1f}%")
 
     if "Tất cả" in picked_sym and df[sym_col].nunique() > 1:
         sym_perf = df.groupby([sym_col, "phase"])["read_latency_ms"].mean().unstack()
@@ -530,7 +534,7 @@ def render_benchmark3_compaction():
                 textposition="outside",
             ))
             fig_bar.update_layout(
-                template="plotly_dark",
+                template=PLOTLY_TEMPLATE,
                 title="So Sánh Tốc Độ Đọc Trước vs Sau Compaction Theo Cặp Coin",
                 yaxis_title="Read Latency (ms)",
                 barmode="group",
@@ -555,7 +559,7 @@ def render_benchmark3_compaction():
         ))
 
     fig.update_layout(
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         title=f"Phân Bố Read Latency ({picked_sym}): Trước vs Sau Compaction (ms)",
         yaxis_title="Read Latency (ms)",
         height=450,
@@ -565,8 +569,11 @@ def render_benchmark3_compaction():
 
 def render_benchmark_images():
     """Hiển thị các biểu đồ PNG gốc do script sinh ra."""
-    st.subheader("🖼️ Báo Cáo Biểu Đồ Thống Kê Gốc (Pre-generated Plots)")
-    st.caption("Các biểu đồ sinh từ `scripts/benchmarks/` phục vụ đưa vào báo cáo và slide thuyết minh Khóa Luận.")
+    section_header(
+        "Biểu đồ gốc",
+        "Ảnh PNG sinh từ <code>scripts/benchmarks/</code> dùng cho báo cáo và slide.",
+        "layers",
+    )
 
     img_files = [
         ("benchmark_summary_dashboard.png", "Tổng Hợp Cả 3 Benchmark (Summary Dashboard)"),

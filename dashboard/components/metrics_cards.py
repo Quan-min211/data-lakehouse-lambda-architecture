@@ -1,99 +1,87 @@
 """
 metrics_cards.py
 ================
-Hiển thị các thẻ chỉ số KPI tài chính và trạng thái Lambda Serving:
-- Giá mới nhất & Biến động
-- VWAP thời gian thực
-- Kịch bản phân luồng Query Merger (Case 1 / 2 / 3)
-- Mốc System Watermark
-- Sai số đối soát (Reconciliation Delta)
+Header thông tin công cụ giao dịch (Instrument Ticker Header) kiểu sàn giao dịch:
+- Giá mới nhất & biến động trong khung thời gian truy vấn
+- Thống kê khung: Open / High / Low / Volume / VWAP / Số giao dịch
 """
 
-import streamlit as st
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+from dashboard.components.theme import COLORS, fmt_compact, fmt_price, render_html
 
 
-def render_metrics_cards(market_data: Dict[str, Any], watermark_info: Optional[Dict[str, Any]] = None):
-    """Vẽ hàng thẻ chỉ số KPI tổng quan trên đầu trang Dashboard."""
-    candles = market_data.get("candles", [])
-    query_case = market_data.get("query_case", 1)
-    reconcil_delta = market_data.get("reconciliation_delta")
-    overall_status = market_data.get("overall_status", "Provisional")
+def _symbol_pair(symbol: str) -> str:
+    """Tách 'BTCUSDT' thành 'BTC / USDT' để hiển thị."""
+    sym = symbol.upper()
+    for quote in ("USDT", "USDC", "BUSD", "BTC", "ETH"):
+        if sym.endswith(quote) and len(sym) > len(quote):
+            return f"<b>{sym[:-len(quote)]}</b> / {quote}"
+    return f"<b>{sym}</b>"
 
-    latest_price = 0.0
-    price_change_str = "--"
-    delta_color = "normal"
-    latest_vwap = 0.0
 
+def render_metrics_cards(market_data: Dict[str, Any], watermark_info: Optional[Dict[str, Any]] = None) -> None:
+    """Vẽ header giá & thống kê khung thời gian ở đầu Dashboard.
+
+    Args:
+        market_data: Payload trả về từ Serving API /api/market.
+        watermark_info: Payload /api/watermark (giữ tham số để tương thích, không bắt buộc).
+    """
+    candles = market_data.get("candles", []) or []
+    symbol = str(market_data.get("symbol", "--"))
+
+    latest_price = open_price = high = low = vwap = None
+    volume = 0.0
+    trades = 0
     if candles:
         last_c = candles[-1]
-        latest_price = float(last_c.get("close_price", 0.0))
-        latest_vwap = float(last_c.get("vwap", 0.0))
+        latest_price = float(last_c.get("close_price", 0.0) or 0.0)
+        vwap = float(last_c.get("vwap", 0.0) or 0.0)
+        open_price = float(candles[0].get("open_price", 0.0) or 0.0)
+        high = max(float(c.get("high_price", 0.0) or 0.0) for c in candles)
+        low = min(float(c.get("low_price", 0.0) or 0.0) for c in candles)
+        volume = sum(float(c.get("volume", 0.0) or 0.0) for c in candles)
+        trades = sum(int(c.get("trade_count", 0) or 0) for c in candles)
 
-        if len(candles) >= 2:
-            prev_c = candles[-2]
-            prev_close = float(prev_c.get("close_price", 0.0))
-            if prev_close > 0:
-                diff = latest_price - prev_close
-                diff_pct = (diff / prev_close) * 100
-                price_change_str = f"{diff:+.2f} USDT ({diff_pct:+.2f}%)"
-                delta_color = "normal" if diff >= 0 else "inverse"
+    change_html = '<span class="lh-change lh-muted">--</span>'
+    price_color = COLORS["text"]
+    if latest_price and open_price:
+        diff = latest_price - open_price
+        diff_pct = diff / open_price * 100
+        tone = COLORS["up"] if diff >= 0 else COLORS["down"]
+        price_color = tone
+        sign = "+" if diff >= 0 else "−"
+        change_html = (
+            f'<span class="lh-change" style="color:{tone};background:{tone}1A;">'
+            f'{sign}{fmt_price(abs(diff))} ({sign}{abs(diff_pct):.2f}%)</span>'
+        )
 
-    case_badges = {
-        1: ("🟢 CASE 1: HISTORY", "100% Batch View (Reconciled)", "off"),
-        2: ("🟣 CASE 2: REALTIME", "100% Speed View (Provisional)", "normal"),
-        3: ("🟠 CASE 3: HYBRID", "Cắt ghép Batch + Speed (Partially Reconciled)", "inverse"),
-    }
-    case_title, case_desc, _ = case_badges.get(
-        query_case, ("XÁC ĐỊNH...", "Đang phân tích", "off")
+    def stat(label: str, value: str) -> str:
+        return (
+            f'<div class="lh-stat"><span class="lh-stat-label">{label}</span>'
+            f'<span class="lh-stat-value">{value}</span></div>'
+        )
+
+    stats_html = "".join([
+        stat("Open", fmt_price(open_price)),
+        stat("High", fmt_price(high)),
+        stat("Low", fmt_price(low)),
+        stat("VWAP", fmt_price(vwap)),
+        stat("Volume", fmt_compact(volume) if candles else "--"),
+        stat("Trades", f"{trades:,}" if candles else "--"),
+    ])
+
+    render_html(
+        f"""
+        <div class="lh-ticker">
+        <div class="lh-ticker-main">
+        <span class="lh-symbol">{_symbol_pair(symbol)} &nbsp;·&nbsp; 1m</span>
+        <div class="lh-price-row">
+        <span class="lh-price" style="color:{price_color}">{fmt_price(latest_price)}</span>
+        {change_html}
+        </div>
+        </div>
+        <div class="lh-stats">{stats_html}</div>
+        </div>
+        """
     )
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-        st.metric(
-            label="Giá Hiện Tại",
-            value=f"${latest_price:,.2f}" if latest_price > 0 else "--",
-            delta=price_change_str,
-            delta_color=delta_color
-        )
-
-    with col2:
-        st.metric(
-            label="Chỉ Số VWAP",
-            value=f"${latest_vwap:,.2f}" if latest_vwap > 0 else "--",
-            help="Volume-Weighted Average Price tính từ trọng số khối lượng"
-        )
-
-    with col3:
-        st.metric(
-            label="Phân Luồng Query Merger",
-            value=case_title,
-            delta=overall_status,
-            delta_color="normal" if overall_status == "Reconciled" else "off",
-            help=case_desc
-        )
-
-    with col4:
-        wm_str = "--"
-        if watermark_info and "watermark_time" in watermark_info:
-            wm_str = str(watermark_info["watermark_time"]).replace("T", " ")[:19]
-        elif market_data.get("watermark"):
-            wm_str = str(market_data["watermark"]).replace("T", " ")[:19]
-
-        st.metric(
-            label="System Watermark",
-            value=wm_str,
-            help="Mốc ranh giới thời gian mà Batch Layer đã chốt dữ liệu chuẩn xác"
-        )
-
-    with col5:
-        delta_val = f"${reconcil_delta:,.4f}" if reconcil_delta is not None else "0.0000"
-        status_note = "Khớp 100%" if reconcil_delta == 0.0 else ("Chưa đối soát" if reconcil_delta is None else "Sai lệch biên")
-        st.metric(
-            label="Sai Số Đối Soát (Δ)",
-            value=delta_val,
-            delta=status_note,
-            delta_color="normal" if reconcil_delta == 0.0 else "inverse",
-            help="|VWAP_speed - VWAP_batch| tại vùng giao thoa giữa 2 tầng"
-        )

@@ -6,31 +6,59 @@ cho hệ thống Data Lakehouse Lambda Architecture:
 - Subplot 1: Nến OHLCV + Đường VWAP + Dấu hiệu Cảnh báo Sốc giá (Price Spike)
 - Subplot 2: Khối lượng giao dịch (Volume Bars)
 - Phân biệt trực quan trạng thái: Reconciled (Đã chốt từ Batch) vs Provisional (Tức thời từ Speed)
+  bằng vùng tô nền sau mốc Watermark W và đường ranh giới W.
 """
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from typing import List, Dict, Any
+
+from dashboard.components.theme import COLORS, FONT_MONO, PLOTLY_TEMPLATE
 
 
-def render_candlestick_chart(candles: List[Dict[str, Any]], symbol: str = "BTCUSDT") -> go.Figure:
+def _to_utc_timestamp(value: Any) -> Optional[pd.Timestamp]:
+    """Chuyển datetime / ISO string về pandas Timestamp UTC (hoặc None)."""
+    if value is None:
+        return None
+    try:
+        ts = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
+def render_candlestick_chart(
+    candles: List[Dict[str, Any]],
+    symbol: str = "BTCUSDT",
+    watermark: Optional[datetime] = None,
+) -> go.Figure:
     """
-    Tạo biểu đồ Plotly Candlestick chuyên nghiệp từ danh sách nến trả về bởi Serving API.
+    Tạo biểu đồ Plotly Candlestick từ danh sách nến trả về bởi Serving API.
+
+    Args:
+        candles: Danh sách nến OHLCV (window_start, open/high/low/close_price, volume, vwap, ...).
+        symbol: Mã cặp giao dịch.
+        watermark: Mốc System Watermark W; vùng sau W được tô nền là Provisional.
+
+    Returns:
+        go.Figure đã cấu hình theme dashboard.
     """
     if not candles:
         fig = go.Figure()
         fig.add_annotation(
-            text="Chưa có dữ liệu nến cho khoảng thời gian này.<br>Vui lòng chọn khoảng thời gian khác hoặc kiểm tra API.",
+            text="Chưa có dữ liệu nến cho khoảng thời gian này",
             xref="paper", yref="paper",
             x=0.5, y=0.5, showarrow=False,
-            font=dict(size=16, color="#9E9E9E")
+            font=dict(size=13, color=COLORS["text_muted"])
         )
         fig.update_layout(
-            template="plotly_dark",
-            xaxis=dict(showgrid=False, zeroline=False),
-            yaxis=dict(showgrid=False, zeroline=False),
-            height=500
+            template=PLOTLY_TEMPLATE,
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            height=520
         )
         return fig
 
@@ -41,15 +69,38 @@ def render_candlestick_chart(candles: List[Dict[str, Any]], symbol: str = "BTCUS
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["window_start"] = pd.to_datetime(df["window_start"], utc=True, errors="coerce")
 
-    # Tạo Subplots: Row 1 = Nến + VWAP (75% height), Row 2 = Volume (25% height)
+    # Tạo Subplots: Row 1 = Nến + VWAP (78% height), Row 2 = Volume (22% height)
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=[0.75, 0.25],
-        specs=[[{"secondary_y": False}], [{"secondary_y": False}]]
+        vertical_spacing=0.02,
+        row_heights=[0.78, 0.22],
     )
+
+    # 0. Vùng Provisional sau Watermark W + đường ranh giới
+    wm_ts = _to_utc_timestamp(watermark)
+    x_min, x_max = df["window_start"].min(), df["window_start"].max() + pd.Timedelta(minutes=1)
+    if wm_ts is not None and x_min <= wm_ts <= x_max:
+        fig.add_shape(
+            type="rect", xref="x", yref="paper",
+            x0=wm_ts, x1=x_max, y0=0, y1=1,
+            fillcolor=COLORS["provisional"], opacity=0.05, line_width=0, layer="below",
+        )
+        fig.add_shape(
+            type="line", xref="x", yref="paper",
+            x0=wm_ts, x1=wm_ts, y0=0, y1=1,
+            line=dict(color=COLORS["provisional"], width=1, dash="dot"),
+        )
+        fig.add_annotation(
+            x=wm_ts, y=1, xref="x", yref="paper",
+            text=f"W {wm_ts.strftime('%H:%M')}  ·  provisional →",
+            showarrow=False, xanchor="left", yanchor="top", xshift=6, yshift=-4,
+            font=dict(size=10, color=COLORS["provisional"], family=FONT_MONO),
+        )
+
+    statuses = df["status"].tolist() if "status" in df.columns else [""] * len(df)
 
     # 1. Vẽ Candlestick
     fig.add_trace(
@@ -59,13 +110,11 @@ def render_candlestick_chart(candles: List[Dict[str, Any]], symbol: str = "BTCUS
             high=df["high_price"],
             low=df["low_price"],
             close=df["close_price"],
-            name="OHLCV",
-            increasing=dict(line=dict(color="#00E676", width=1.5), fillcolor="#00E676"),
-            decreasing=dict(line=dict(color="#FF5252", width=1.5), fillcolor="#FF5252"),
-            hovertext=[
-                f"Status: {s}<br>Spike: {'CÓ' if spk else 'Không'}"
-                for s, spk in zip(df.get("status", [""] * len(df)), df.get("is_spike", [0] * len(df)))
-            ]
+            name=symbol.upper(),
+            increasing=dict(line=dict(color=COLORS["up"], width=1), fillcolor=COLORS["up"]),
+            decreasing=dict(line=dict(color=COLORS["down"], width=1), fillcolor=COLORS["down"]),
+            text=[f"Status: {s}" for s in statuses],
+            whiskerwidth=0,
         ),
         row=1, col=1
     )
@@ -77,9 +126,9 @@ def render_candlestick_chart(candles: List[Dict[str, Any]], symbol: str = "BTCUS
                 x=df["window_start"],
                 y=df["vwap"],
                 mode="lines",
-                name="VWAP (Tỷ trọng khối lượng)",
-                line=dict(color="#FFD600", width=2, dash="dot"),
-                hoverinfo="x+y+name"
+                name="VWAP",
+                line=dict(color=COLORS["vwap"], width=1.25),
+                hovertemplate="%{y:,.4f}<extra>VWAP</extra>",
             ),
             row=1, col=1
         )
@@ -91,62 +140,58 @@ def render_candlestick_chart(candles: List[Dict[str, Any]], symbol: str = "BTCUS
             fig.add_trace(
                 go.Scatter(
                     x=spike_df["window_start"],
-                    y=spike_df["high_price"] * 1.002,  # Đặt ngay trên đỉnh nến
-                    mode="markers+text",
-                    name="Cảnh báo Price Spike",
+                    y=spike_df["high_price"] * 1.0015,  # Đặt ngay trên đỉnh nến
+                    mode="markers",
+                    name="Price spike",
                     marker=dict(
                         symbol="triangle-down",
-                        size=12,
-                        color="#FF1744",
-                        line=dict(width=1, color="#FFFFFF")
+                        size=9,
+                        color=COLORS["danger"],
+                        line=dict(width=0),
                     ),
-                    text=["⚠️ SPIKE"] * len(spike_df),
-                    textposition="top center",
-                    textfont=dict(color="#FF5252", size=10),
-                    hoverinfo="x+y+name"
+                    hovertemplate="Spike @ %{x|%H:%M}<extra></extra>",
                 ),
                 row=1, col=1
             )
 
     # 4. Vẽ Khối lượng giao dịch (Volume Bar Chart)
     volume_colors = [
-        "#00E676" if c >= o else "#FF5252"
+        COLORS["up"] if c >= o else COLORS["down"]
         for o, c in zip(df["open_price"], df["close_price"])
     ]
     fig.add_trace(
         go.Bar(
             x=df["window_start"],
             y=df["volume"],
-            name="Khối lượng",
-            marker=dict(color=volume_colors, opacity=0.8),
-            hoverinfo="x+y+name"
+            name="Volume",
+            marker=dict(color=volume_colors, opacity=0.45, line_width=0),
+            hovertemplate="%{y:,.4f}<extra>Volume</extra>",
+            showlegend=False,
         ),
         row=2, col=1
     )
 
-    # Cấu hình giao diện chuẩn Dark Mode Crypto Trading
+    # Cấu hình giao diện
     fig.update_layout(
-        template="plotly_dark",
-        title=dict(
-            text=f"<b>{symbol.upper()}</b> — Biểu đồ Nến Thời gian thực & VWAP",
-            font=dict(size=20, color="#FFFFFF"),
-            x=0.01, y=0.98
-        ),
+        template=PLOTLY_TEMPLATE,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(size=11)
+            yanchor="bottom", y=1.0,
+            xanchor="left", x=0,
+            font=dict(size=11),
         ),
-        xaxis=dict(rangeslider=dict(visible=False), showgrid=True, gridcolor="#263238"),
-        xaxis2=dict(showgrid=True, gridcolor="#263238", title="Thời gian (UTC)"),
-        yaxis=dict(showgrid=True, gridcolor="#263238", title="Giá (USDT)", side="right"),
-        yaxis2=dict(showgrid=True, gridcolor="#263238", title="Volume", side="right"),
-        margin=dict(l=20, r=60, t=60, b=20),
-        height=620,
-        hovermode="x unified"
+        xaxis=dict(rangeslider=dict(visible=False), showgrid=False),
+        xaxis2=dict(showgrid=False, tickformat="%H:%M"),
+        yaxis=dict(side="right", tickformat=",.2f", showgrid=True),
+        yaxis2=dict(side="right", showgrid=False, tickformat="~s"),
+        margin=dict(l=8, r=8, t=28, b=8),
+        height=540,
+        hovermode="x unified",
+        bargap=0.15,
+    )
+    fig.update_xaxes(
+        showspikes=True, spikemode="across", spikesnap="cursor",
+        spikecolor=COLORS["border_strong"], spikethickness=1, spikedash="solid",
     )
 
     return fig
