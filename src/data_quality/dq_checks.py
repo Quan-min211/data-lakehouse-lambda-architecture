@@ -9,6 +9,7 @@ and unit tests can reuse the same validation rules without requiring Spark.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -56,11 +57,29 @@ def normalize_trade_record(raw: Record) -> Record:
         "price": float(raw["price"]),
         "quantity": float(raw["quantity"]),
         "trade_time": int(raw["trade_time"]),
-        "is_buyer_maker": bool(raw.get("is_buyer_maker", False)),
+        "is_buyer_maker": _to_bool(raw.get("is_buyer_maker", False)),
         "ingestion_time": int(raw.get("ingestion_time") or raw["trade_time"]),
-        "is_injected": bool(raw.get("is_injected", False)),
-        "fault_type": raw.get("fault_type"),
+        "is_injected": _to_bool(raw.get("is_injected", False)),
+        "fault_type": raw.get("fault_type") or None,
     }
+
+
+_TRUE_STRINGS = {"true", "1", "yes", "y", "t"}
+
+
+def _to_bool(value: Any) -> bool:
+    """Chuyen gia tri sang bool an toan voi du lieu CSV.
+
+    bool("False") cua Python tra ve True (moi chuoi khac rong deu la True), nen cac
+    cot boolean doc tu CSV truoc day luon thanh True.
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() in _TRUE_STRINGS
+    return bool(value)
 
 
 def validate_trade_record(record: Record) -> Tuple[bool, str | None]:
@@ -76,6 +95,12 @@ def validate_trade_record(record: Record) -> Tuple[bool, str | None]:
         return False, "trade_id_negative"
     if not record["symbol"]:
         return False, "symbol_empty"
+    # NaN/inf vuot qua phep so sanh <= 0 (NaN <= 0 la False), va json.loads chap nhan
+    # NaN/Infinity, nen phai chan rieng truoc khi kiem tra dau.
+    if not math.isfinite(record["price"]):
+        return False, "price_not_finite"
+    if not math.isfinite(record["quantity"]):
+        return False, "quantity_not_finite"
     if record["price"] <= 0:
         return False, "price_non_positive"
     if record["quantity"] <= 0:

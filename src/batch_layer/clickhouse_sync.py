@@ -280,8 +280,36 @@ class ClickHouseBatchSync:
         )
         return len(data)
 
+    def get_current_watermark(self, layer: str = "batch_layer") -> Optional[datetime]:
+        """Doc moc watermark lon nhat da cong bo (None neu chua co hoac khong ket noi duoc)."""
+        client = self.get_client()
+        if client is None:
+            return None
+        try:
+            res = client.query(
+                "SELECT max(watermark_time), count() FROM lakehouse.system_watermark WHERE layer = {layer:String}",
+                parameters={"layer": layer},
+            )
+        except Exception as exc:
+            logger.warning("Khong doc duoc watermark hien tai: %s", exc)
+            return None
+        if not res.result_rows or int(res.result_rows[0][1]) == 0:
+            return None
+        current = res.result_rows[0][0]
+        if isinstance(current, datetime) and current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return current
+
     def update_watermark(self, watermark_time: datetime, layer: str = "batch_layer") -> bool:
-        """Insert a new batch watermark row."""
+        """Cong bo watermark moi theo quy tac don dieu tang (khong bao gio lui).
+
+        Mot lan chay chi chua su kien tre (hoac du lieu cu) se tao ung vien W nho
+        hon moc hien tai; truoc day ung vien nay van duoc ghi va keo W lui ve qua
+        khu. Gio ung vien chi duoc ghi khi lon hon moc dang co.
+
+        Returns:
+            True neu da ghi moc moi, False neu khong ket noi duoc hoac moc khong tien.
+        """
         client = self.get_client()
         if client is None:
             return False
@@ -289,6 +317,13 @@ class ClickHouseBatchSync:
         self.initialize_tables()
         if watermark_time.tzinfo is None:
             watermark_time = watermark_time.replace(tzinfo=timezone.utc)
+        current = self.get_current_watermark(layer)
+        if current is not None and watermark_time <= current:
+            logger.info(
+                "Giu nguyen %s watermark %s (ung vien %s khong lon hon)",
+                layer, current.isoformat(), watermark_time.isoformat(),
+            )
+            return False
         client.insert(
             "lakehouse.system_watermark",
             [[layer, watermark_time, datetime.now(timezone.utc)]],

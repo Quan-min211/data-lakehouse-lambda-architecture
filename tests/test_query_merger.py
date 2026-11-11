@@ -55,6 +55,30 @@ class TestClickHouseQueryClient(unittest.TestCase):
 
         self.assertIn("FROM lakehouse.batch_agg FINAL", recorded_client.queries[0])
 
+    def test_query_candles_converts_offset_times_to_utc(self):
+        """17:00+07:00 phải thành 10:00 UTC trong SQL (trước đây giữ nguyên 17:00 rồi gắn nhãn UTC)."""
+        from datetime import timedelta
+        client = ClickHouseQueryClient()
+        recorded_client = _RecordedClickHouseClient()
+        client._client = recorded_client
+        ict = timezone(timedelta(hours=7))
+
+        client.query_candles(
+            table="batch_agg",
+            symbol="BTCUSDT",
+            start_time=datetime(2026, 9, 4, 17, 0, tzinfo=ict),
+            end_time=datetime(2026, 9, 4, 18, 0, tzinfo=ict),
+        )
+
+        self.assertIn("toDateTime64('2026-09-04 10:00:00.000', 3, 'UTC')", recorded_client.queries[0])
+        self.assertIn("toDateTime64('2026-09-04 11:00:00.000', 3, 'UTC')", recorded_client.queries[0])
+
+    def test_api_time_param_is_normalised_to_utc(self):
+        from src.serving_layer.api_routes import parse_datetime_param
+        dt = parse_datetime_param("2026-09-04T17:00:00+07:00")
+        self.assertEqual(dt, datetime(2026, 9, 4, 10, 0, tzinfo=timezone.utc))
+        self.assertEqual(dt.utcoffset().total_seconds(), 0)
+
     def test_query_candles_rejects_sql_injection_inputs(self):
         client = ClickHouseQueryClient()
         client._client = _RecordedClickHouseClient()
@@ -160,6 +184,18 @@ class TestAutoCorrectingQueryMerger(unittest.TestCase):
             watermark_reader=self.wm_reader,
             ch_client=self.ch_client,
         )
+
+    def test_offset_aware_range_routes_like_utc(self):
+        """Khoảng 18:58–19:00 (+07:00) = 11:58–12:00 UTC <= W nên phải là Case 1."""
+        from datetime import timedelta
+        ict = timezone(timedelta(hours=7))
+        resp = self.merger.merge_query(
+            "BTCUSDT",
+            datetime(2026, 9, 4, 18, 58, tzinfo=ict),
+            datetime(2026, 9, 4, 19, 0, tzinfo=ict),
+        )
+        self.assertEqual(resp.query_case, QueryCase.CASE_1_HISTORY)
+        self.assertEqual(resp.candles_count, 2)
 
     def test_spike_candle_raises_single_price_spike_alert(self):
         """Nến is_spike = 1 phát đúng một cảnh báo PRICE_SPIKE dù bị truy vấn lặp lại."""

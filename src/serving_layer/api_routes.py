@@ -68,7 +68,8 @@ def parse_datetime_param(dt_str: Optional[str], default_offset_minutes: int = 0)
         dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+        # Quy doi moi offset (vd +07:00) ve UTC truoc khi so voi Watermark va dua vao SQL
+        return dt.astimezone(timezone.utc)
     except Exception as e:
         raise HTTPException(
             status_code=400,

@@ -135,10 +135,39 @@ def clean_streaming_checkpoints(dry_run: bool = False) -> list[str]:
     return cleaned
 
 
+def clean_batch_incremental_state(dry_run: bool = False) -> list[str]:
+    """Xóa kho Silver tích lũy và file offset Kafka của Batch CÙNG LÚC.
+
+    Hai trạng thái này phải đi cùng nhau: xóa kho Silver mà giữ offset thì các cửa sổ
+    cũ sẽ bị tính lại từ dữ liệu thiếu; xóa offset mà giữ kho thì chỉ gây đọc lại
+    (an toàn nhờ khử trùng). Batch sẽ đọc lại Kafka từ offset sớm nhất còn lưu.
+    """
+    from src.batch_layer.silver_store import SilverTradeStore
+
+    targets = [SilverTradeStore().root, ROOT_DIR / "results" / "logs" / "batch_kafka_offsets.json"]
+    cleaned = []
+    for target in targets:
+        if not target.exists():
+            continue
+        if dry_run:
+            logger.info(f"[DRY-RUN] Sẽ xóa: {target}")
+        elif target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+        cleaned.append(str(target))
+    return cleaned
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Reset trạng thái dữ liệu demo/benchmark có kiểm soát")
     parser.add_argument("--dry-run", action="store_true", help="Chạy thử nghiệm không thực sự xóa")
     parser.add_argument("--keep-watermark", action="store_true", help="Giữ lại mốc batch watermark trong ClickHouse")
+    parser.add_argument(
+        "--clear-batch-state",
+        action="store_true",
+        help="Xóa kho Silver tích lũy và file offset Kafka của Batch (Batch đọc lại Kafka từ đầu)",
+    )
     args = parser.parse_args()
 
     print("\n" + "=" * 70)
@@ -151,12 +180,15 @@ def main() -> None:
     ch_cleared = reset_clickhouse(keep_watermark=args.keep_watermark, dry_run=args.dry_run)
     redis_deleted = reset_redis(dry_run=args.dry_run)
     cp_cleaned = clean_streaming_checkpoints(dry_run=args.dry_run)
+    batch_state = clean_batch_incremental_state(dry_run=args.dry_run) if args.clear_batch_state else []
 
     print("\n" + "-" * 70)
     print("  KẾT QUẢ RESET:")
     print(f"  • ClickHouse: Đã làm sạch {len(ch_cleared)} bảng: {ch_cleared}")
     print(f"  • Redis: Đã xóa {redis_deleted} hot cache keys")
     print(f"  • Checkpoints: Đã làm sạch {len(cp_cleaned)} thư mục: {cp_cleaned}")
+    if args.clear_batch_state:
+        print(f"  • Batch incremental state: {batch_state}")
     print("-" * 70 + "\n")
     logger.info("Reset hoàn tất. Môi trường sẵn sàng cho lượt chạy demo/benchmark mới!")
 

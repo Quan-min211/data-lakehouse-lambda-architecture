@@ -88,6 +88,33 @@ class TestDQChecks(unittest.TestCase):
         self.assertEqual(report.total_records, 4)
         self.assertEqual(report.pass_rate, 50.0)
 
+    def test_csv_boolean_strings_are_parsed(self):
+        """bool("False") la True trong Python; chuoi CSV phai duoc doc dung."""
+        base = {"trade_id": "1", "symbol": "BTCUSDT", "price": "1", "quantity": "1", "trade_time": "1000"}
+        norm = normalize_trade_record({**base, "is_buyer_maker": "False", "is_injected": "false"})
+        self.assertFalse(norm["is_buyer_maker"])
+        self.assertFalse(norm["is_injected"])
+        norm = normalize_trade_record({**base, "is_buyer_maker": "True", "is_injected": "1"})
+        self.assertTrue(norm["is_buyer_maker"])
+        self.assertTrue(norm["is_injected"])
+
+    def test_non_finite_price_and_quantity_are_rejected(self):
+        """NaN/inf vuot qua phep so sanh <= 0 nen phai bi chan rieng."""
+        base = {"trade_id": 1, "symbol": "BTCUSDT", "price": 1.0, "quantity": 1.0, "trade_time": 1000}
+        cases = [
+            ({"price": float("nan")}, "price_not_finite"),
+            ({"price": float("inf")}, "price_not_finite"),
+            ({"quantity": float("nan")}, "quantity_not_finite"),
+        ]
+        for override, expected in cases:
+            ok, reason = validate_trade_record({**base, **override})
+            self.assertFalse(ok)
+            self.assertEqual(reason, expected)
+        # Chuoi "NaN" tu JSON/CSV cung bi chan sau khi chuan hoa
+        clean, rejected, _ = clean_and_deduplicate([{**base, "price": "NaN"}])
+        self.assertEqual(len(clean), 0)
+        self.assertEqual(rejected[0]["dq_error"], "price_not_finite")
+
 
 class TestQuarantineManager(unittest.TestCase):
     """Kiem tra QuarantineManager trong quarantine.py."""

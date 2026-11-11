@@ -29,8 +29,16 @@ from src.serving_layer.watermark_reader import WatermarkReader
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
 from src.utils.alerting import get_alert_manager
 from src.utils.logger import setup_logger
+from src.utils.reconciliation import classify_window, volume_drift_pct
 
 logger = setup_logger("query_merger")
+
+
+def _to_utc(dt: datetime) -> datetime:
+    """Naive datetime được hiểu là UTC; datetime có offset được quy đổi về UTC."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 class AutoCorrectingQueryMerger:
@@ -88,11 +96,9 @@ class AutoCorrectingQueryMerger:
         if start_time >= end_time:
             raise ValueError(f"start_time ({start_time}) phải nhỏ hơn end_time ({end_time})")
 
-        # Đảm bảo timezone UTC
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=timezone.utc)
-        if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=timezone.utc)
+        # Đảm bảo timezone UTC (naive -> gắn UTC; có offset khác -> quy đổi về UTC)
+        start_time = _to_utc(start_time)
+        end_time = _to_utc(end_time)
 
         symbol = symbol.upper()
         # 1. Đọc mốc Watermark hiện tại của Batch Layer
@@ -235,6 +241,8 @@ class AutoCorrectingQueryMerger:
         Báo cáo đối soát chi tiết so sánh song song giữa Batch View và Speed View
         phục vụ Benchmark 2 (Reconciliation Accuracy) và Dashboard Audit.
         """
+        start_time = _to_utc(start_time)
+        end_time = _to_utc(end_time)
         batch_candles = {
             c["window_start"]: c
             for c in self.ch_client.query_candles("batch_agg", symbol, start_time, end_time)
@@ -261,26 +269,18 @@ class AutoCorrectingQueryMerger:
 
             w_end = (b or s)["window_end"]
 
-            vol_drift_pct: Optional[float] = None
-            if b_vol is not None and s_vol is not None:
-                if b_vol > 0:
-                    vol_drift_pct = round(abs(s_vol - b_vol) / b_vol * 100.0, 4)
-                elif s_vol == 0:
-                    vol_drift_pct = 0.0
+            vol_drift_pct = volume_drift_pct(b_vol, s_vol)
 
             if vol_drift_pct is not None:
                 get_alert_manager().check_volume_drift(symbol, vol_drift_pct, str(w))
 
-            if b is not None and s is not None:
-                is_matched = (
-                    (vwap_delta is not None and vwap_delta < 1e-4) and
-                    (vol_delta is not None and vol_delta < 1e-6)
-                )
-                recon_status = "MATCHED" if is_matched else "RECONCILED_AND_HEALED"
-            elif b is not None:
-                recon_status = "BATCH_ONLY"
-            else:
-                recon_status = "PROVISIONAL_ONLY"
+            # Cùng quy tắc với bảng reconciliation_audit_metrics của Batch Layer
+            recon_status = classify_window(
+                has_batch=b is not None,
+                has_speed=s is not None,
+                vwap_delta=vwap_delta,
+                drift_pct=vol_drift_pct,
+            )
 
             report.append(
                 ReconciliationDetail(

@@ -156,9 +156,14 @@ class ClickHouseQueryClient:
         if client is None:
             return []
 
-        # Format ISO UTC string cho ClickHouse
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        # Format ISO UTC string cho ClickHouse. Phai quy doi ve UTC truoc: strftime
+        # chi in gio dia phuong cua datetime, con SQL ben duoi gan nhan 'UTC'.
+        def _utc_str(dt: datetime) -> str:
+            dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+            return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+        start_str = _utc_str(start_time)
+        end_str = _utc_str(end_time)
 
         final_clause = " FINAL" if final else ""
         query = f"""

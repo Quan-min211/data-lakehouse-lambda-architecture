@@ -89,6 +89,44 @@ def _load_csv(filename: str) -> Optional[pd.DataFrame]:
     return None
 
 
+def _latest_latency_run(df: pd.DataFrame) -> pd.DataFrame:
+    """Chỉ giữ đợt đo Benchmark 1 mới nhất (run_id của dòng có ts lớn nhất).
+
+    Trước đây dashboard gộp mọi đợt đo trong CSV, nên P50/P95/P99 trộn số liệu cũ và mới.
+    """
+    if df is None or len(df) == 0 or "run_id" not in df.columns or "ts" not in df.columns:
+        return df
+    latest_run = df.sort_values("ts").iloc[-1]["run_id"]
+    return df[df["run_id"] == latest_run]
+
+
+def _latest_real_compaction(df: pd.DataFrame) -> pd.DataFrame:
+    """Chỉ giữ đợt compaction thực (mode=real, simulated=False) mới nhất.
+
+    Quy ước của đề tài: chỉ các dòng mode=real được dùng để kết luận. Một đợt chạy ghi
+    cùng một giá trị ts cho mọi dòng, nên ts lớn nhất xác định đợt mới nhất.
+    """
+    if df is None or len(df) == 0:
+        return df
+    out = df
+    if "mode" in out.columns:
+        out = out[out["mode"].astype(str).str.lower() == "real"]
+    if "simulated" in out.columns:
+        out = out[out["simulated"].astype(str).str.lower().isin({"false", "0"})]
+    if len(out) and "ts" in out.columns:
+        out = out[out["ts"] == out["ts"].max()]
+    return out
+
+
+def _warm_median(series: pd.DataFrame) -> Optional[float]:
+    """Trung vị độ trễ đọc sau khi bỏ lần đọc đầu tiên (đọc lạnh) của pha."""
+    if series is None or len(series) == 0:
+        return None
+    ordered = series.sort_values("run_id") if "run_id" in series.columns else series
+    values = ordered["read_latency_ms"].iloc[1:] if len(ordered) > 1 else ordered["read_latency_ms"]
+    return float(values.median())
+
+
 def _overview_cell(label: str, value: str, note: str, color: Optional[str] = None) -> str:
     """HTML cho một ô chỉ số trong lưới tổng quan."""
     style = f' style="color:{color}"' if color else ""
@@ -123,6 +161,7 @@ def render_benchmark_overview():
     p50 = p95 = p99 = None
     lat_syms = 0
     if df_lat is not None and len(df_lat) > 0 and "strategy" in df_lat.columns:
+        df_lat = _latest_latency_run(df_lat)
         lambda_rows = df_lat[df_lat["strategy"] == "lambda"]
         if len(lambda_rows) > 0:
             p50 = float(lambda_rows["latency_ms"].quantile(0.50))
@@ -144,11 +183,11 @@ def render_benchmark_overview():
     # BM3 — Compaction
     avg_b = avg_a = speedup = None
     if df_comp is not None and len(df_comp) > 0 and "phase" in df_comp.columns:
-        before = df_comp[df_comp["phase"] == "before"]["read_latency_ms"]
-        after = df_comp[df_comp["phase"] == "after"]["read_latency_ms"]
-        if len(before) > 0 and len(after) > 0:
-            avg_b, avg_a = float(before.mean()), float(after.mean())
-            speedup = avg_b / avg_a if avg_a > 0 else None
+        df_comp = _latest_real_compaction(df_comp)
+        avg_b = _warm_median(df_comp[df_comp["phase"] == "before"])
+        avg_a = _warm_median(df_comp[df_comp["phase"] == "after"])
+        if avg_b is not None and avg_a:
+            speedup = avg_b / avg_a
 
     def fmt(v: Optional[float], pattern: str) -> str:
         return pattern.format(v) if v is not None else "--"
@@ -168,7 +207,7 @@ def render_benchmark_overview():
         + _overview_cell("BM2 · VWAP MAPE", fmt(avg_mape, "{:.4f} %"),
                          f"Coverage {fmt(avg_cov, '{:.0f}')}% · {rec_syms} cặp", tone(bm2_pass))
         + _overview_cell("BM3 · Compaction speedup", fmt(speedup, "{:.1f}x"),
-                         f"{fmt(avg_b, '{:,.0f}')} → {fmt(avg_a, '{:,.0f}')} ms đọc", tone(bm3_pass))
+                         f"Trung vị (bỏ lần đọc lạnh) {fmt(avg_b, '{:,.0f}')} → {fmt(avg_a, '{:,.0f}')} ms", tone(bm3_pass))
         + "</div>"
     )
 
@@ -224,6 +263,9 @@ def render_benchmark1_latency():
         "speed_only": "Speed-only (Realtime Cache)",
         "lambda": "Lambda (Auto-Correcting Hybrid)",
     }
+
+    if st.checkbox("Chỉ đợt đo mới nhất", value=True, key="bm1_latest_only"):
+        df = _latest_latency_run(df)
 
     # Bộ lọc Symbol
     available_symbols = ["Tất cả (5 Cặp Coin)"] + sorted(df["symbol"].dropna().unique().tolist())
@@ -490,6 +532,14 @@ def render_benchmark3_compaction():
             st.info("Chưa có dữ liệu Benchmark 3.")
         return
 
+    # Chỉ đợt chạy thực (mode=real) mới nhất được dùng để kết luận
+    df = _latest_real_compaction(df)
+    if len(df) == 0:
+        st.info("Chưa có đợt Benchmark 3 chạy thực (mode=real).")
+        return
+    st.caption(f"Đợt chạy thực mới nhất: {df['ts'].iloc[0] if 'ts' in df.columns else 'N/A'}. "
+               "Độ trễ là trung vị sau khi bỏ lần đọc lạnh đầu tiên của mỗi pha.")
+
     sym_col = "symbol_filter" if "symbol_filter" in df.columns else "symbol"
     symbols_available = ["Tất cả (5 Cặp Coin)"] + sorted(df[sym_col].dropna().unique().tolist())
     picked_sym = st.selectbox("Lọc Compaction theo Cặp Coin:", symbols_available, index=0)
@@ -500,8 +550,8 @@ def render_benchmark3_compaction():
     after_df = filtered_df[filtered_df["phase"] == "after"]
 
     col1, col2, col3, col4 = st.columns(4)
-    avg_b = float(before_df["read_latency_ms"].mean()) if len(before_df) > 0 else 0
-    avg_a = float(after_df["read_latency_ms"].mean()) if len(after_df) > 0 else 0
+    avg_b = _warm_median(before_df) or 0.0
+    avg_a = _warm_median(after_df) or 0.0
     speedup = avg_b / avg_a if avg_a > 0 else 0
     reduction = ((avg_b - avg_a) / avg_b * 100) if avg_b > 0 else 0
 
@@ -510,7 +560,7 @@ def render_benchmark3_compaction():
 
     col1.metric("Độ Trễ Trước Compaction", f"{avg_b:.0f} ms", f"{files_b} files nhỏ")
     col2.metric("Độ Trễ Sau Compaction", f"{avg_a:.0f} ms", f"{files_a} files gom")
-    col3.metric("Tốc Độ Cải Thiện", f"{speedup:.1f}x")
+    col3.metric("Tốc Độ Cải Thiện", f"{speedup:.2f}x")
     col4.metric("Giảm Độ Trễ", f"-{reduction:.1f}%")
 
     if "Tất cả" in picked_sym and df[sym_col].nunique() > 1:

@@ -49,6 +49,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from src.serving_layer.clickhouse_client import ClickHouseQueryClient
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
 from src.utils.logger import setup_logger
+from src.utils.reconciliation import classify_window, volume_drift_pct
 
 logger = setup_logger("bench_reprocess")
 
@@ -212,8 +213,13 @@ def compute_accuracy_metrics(
             sq_errors.append(abs_err ** 2)
             vol_drifts.append(vol_drift)
 
-            is_matched = (abs_err < 1e-4 and abs(vol_speed - vol_batch) < 1e-6)
-            recon_status = "MATCHED" if is_matched else "RECONCILED_AND_HEALED"
+            # Cung quy tac MATCHED voi Batch audit va /api/reconciliation
+            recon_status = classify_window(
+                has_batch=True,
+                has_speed=True,
+                vwap_delta=abs_err,
+                drift_pct=volume_drift_pct(vol_batch, vol_speed),
+            )
 
             per_candle_rows.append({
                 "symbol": symbol,

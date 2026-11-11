@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -37,9 +38,13 @@ from src.batch_layer.compaction import get_spark_session
 from src.batch_layer.maintenance import run_table_maintenance
 from src.batch_layer.spark_batch_jobs import (
     aggregate_gold_candles,
-    consume_kafka_records,
+    build_incremental_gold_candles,
+    commit_kafka_offsets,
+    compute_watermark_candidate,
+    kafka_mode_enabled,
     load_default_records,
     maybe_write_bronze_to_iceberg,
+    read_kafka_records,
     sync_reconciliation_audit,
     write_batch_run_log,
 )
@@ -63,8 +68,11 @@ def _batch_run_id() -> str:
 def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
     """Load raw records for the current batch window."""
     batch_run_id = _batch_run_id()
-    from_kafka = os.getenv("BATCH_FROM_KAFKA", "false").lower() == "true"
-    records = consume_kafka_records() if from_kafka else load_default_records()
+    # Chap nhan ca BATCH_FROM_KAFKA va BATCH_CONSUME_KAFKA (truoc day CLI va Dagster dung hai ten khac nhau)
+    from_kafka = kafka_mode_enabled()
+    # Offset chi duoc commit o asset cuoi (system_watermark_sync), sau khi ClickHouse ghi xong
+    kafka_read = read_kafka_records() if from_kafka else None
+    records = kafka_read.records if kafka_read is not None else load_default_records(from_kafka=False)
 
     write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "false").lower() == "true"
     iceberg_strict = os.getenv("BATCH_ICEBERG_STRICT", "false").lower() == "true"
@@ -79,6 +87,8 @@ def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
             "batch_run_id": batch_run_id,
             "records": records,
             "iceberg_result": iceberg_result,
+            "incremental": from_kafka,
+            "kafka_read": kafka_read,
         },
         metadata={
             "batch_run_id": MetadataValue.text(batch_run_id),
@@ -116,6 +126,8 @@ def silver_cleaned_trades(context, bronze: Dict[str, Any]) -> Output[Dict[str, A
             "records": clean_records,
             "rejected_records": rejected_records,
             "quality": report,
+            "incremental": bronze.get("incremental", False),
+            "kafka_read": bronze.get("kafka_read"),
         },
         metadata={
             "valid_records": MetadataValue.int(report.valid_records),
@@ -138,8 +150,13 @@ def silver_cleaned_trades(context, bronze: Dict[str, Any]) -> Output[Dict[str, A
 )
 def gold_market_aggregates(context, silver: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Build reconciled Gold candles from Silver records."""
-    candles = aggregate_gold_candles(silver["records"])
-    watermark = max((row["window_end"] for row in candles), default=None)
+    incremental = silver.get("incremental", False)
+    if incremental:
+        # Tinh lai cac cua so bi anh huong tu kho Silver tich luy (khong ghi de nen bang nen thieu)
+        candles, _cross_run_dups = build_incremental_gold_candles(silver["records"])
+    else:
+        candles = aggregate_gold_candles(silver["records"])
+    watermark = compute_watermark_candidate(silver["records"], candles, incremental=incremental)
     context.log.info("Aggregated %s Gold candles", len(candles))
 
     return Output(
@@ -148,6 +165,7 @@ def gold_market_aggregates(context, silver: Dict[str, Any]) -> Output[Dict[str, 
             "candles": candles,
             "quality": silver["quality"],
             "watermark": watermark,
+            "kafka_read": silver.get("kafka_read"),
         },
         metadata={
             "total_candles": MetadataValue.int(len(candles)),
@@ -197,6 +215,7 @@ def clickhouse_quarantine_sync(context, silver: Dict[str, Any]) -> Output[Dict[s
 )
 def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any]]:
     """Publish Gold candles to ClickHouse."""
+    t0 = time.perf_counter()
     sync = ClickHouseBatchSync()
     rows_inserted = sync.insert_batch_aggregates(gold["candles"], batch_run_id=gold["batch_run_id"])
     reconciled_audit_rows = sync_reconciliation_audit(
@@ -204,7 +223,7 @@ def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any
         candles=gold["candles"],
         quality=gold["quality"],
         batch_run_id=gold["batch_run_id"],
-        duration_s=0.1,
+        duration_s=time.perf_counter() - t0,  # thoi gian do thuc, khong con hang so 0.1 s
     )
     write_batch_run_log(
         batch_run_id=gold["batch_run_id"],
@@ -226,6 +245,8 @@ def clickhouse_batch_sync(context, gold: Dict[str, Any]) -> Output[Dict[str, Any
             "reconciled_audit_rows": reconciled_audit_rows,
             "watermark": gold["watermark"],
             "candles_count": len(gold["candles"]),
+            "clickhouse_available": sync.get_client() is not None,
+            "kafka_read": gold.get("kafka_read"),
         },
         metadata={
             "rows_inserted": MetadataValue.int(rows_inserted),
@@ -250,18 +271,28 @@ def system_watermark_sync(context, ch_sync: Dict[str, Any]) -> Output[Dict[str, 
     watermark = ch_sync.get("watermark")
     synced = False
     if watermark is not None:
+        # update_watermark chi ghi khi ung vien lon hon moc hien tai (don dieu tang)
         synced = ClickHouseBatchSync().update_watermark(watermark)
     context.log.info("Watermark sync status=%s watermark=%s", synced, watermark)
+
+    # Buoc cuoi cua job: lo du lieu da ghi ben vung -> moi commit offset Kafka (at-least-once)
+    offsets_committed = False
+    if ch_sync.get("clickhouse_available", False):
+        offsets_committed = commit_kafka_offsets(ch_sync.get("kafka_read"))
+    elif ch_sync.get("kafka_read") is not None:
+        context.log.warning("ClickHouse khong kha dung: khong commit offset Kafka, lo se duoc doc lai.")
 
     return Output(
         value={
             "batch_run_id": ch_sync["batch_run_id"],
             "watermark_timestamp": watermark.isoformat() if watermark else None,
             "synced": synced,
+            "kafka_offsets_committed": offsets_committed,
         },
         metadata={
             "new_watermark_utc": MetadataValue.text(watermark.isoformat() if watermark else "none"),
             "synced": MetadataValue.bool(synced),
+            "kafka_offsets_committed": MetadataValue.bool(offsets_committed),
         },
     )
 

@@ -62,8 +62,10 @@ class WatermarkReader:
 
     def get_watermark(self, layer: str = "batch_layer") -> datetime:
         """
-        Lấy mốc Watermark mới nhất của layer được chỉ định.
-        Mặc định: 'batch_layer'.
+        Lấy mốc Watermark của layer được chỉ định. Mặc định: 'batch_layer'.
+
+        Đọc max(watermark_time) thay vì dòng có updated_at mới nhất, để một lần ghi
+        mốc nhỏ hơn (nếu có) không kéo Watermark lùi lại.
         """
         if self._mock_watermark is not None:
             return self._mock_watermark
@@ -71,15 +73,12 @@ class WatermarkReader:
         client = self.get_client()
         if client is not None:
             try:
-                query = f"""
-                SELECT watermark_time, updated_at
-                FROM lakehouse.system_watermark
-                WHERE layer = '{layer}'
-                ORDER BY updated_at DESC
-                LIMIT 1
-                """
-                res = client.query(query)
-                if res.result_rows:
+                res = client.query(
+                    "SELECT max(watermark_time), count() FROM lakehouse.system_watermark "
+                    "WHERE layer = {layer:String}",
+                    parameters={"layer": layer},
+                )
+                if res.result_rows and int(res.result_rows[0][1]) > 0:
                     wm_time = res.result_rows[0][0]
                     if isinstance(wm_time, datetime):
                         if wm_time.tzinfo is None:

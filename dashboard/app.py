@@ -449,7 +449,10 @@ def main() -> None:
 
     with tab_recon:
         report_data = fetch_reconciliation_report(api_base_url, selected_symbol, start_time, end_time)
-        if not report_data and candles:
+        # Chỉ dựng bảng minh họa khi đang ở chế độ demo (API offline). Khi API thật trả về
+        # rỗng, hiển thị rỗng thay vì chèn số liệu bịa không gắn nhãn.
+        if not report_data and candles and market_data.get("data_source") == "demo":
+            st.caption("Bảng đối soát minh họa (dữ liệu demo, API offline).")
             report_data = build_demo_reconciliation(candles)
         render_reconciliation_table(report_data)
 

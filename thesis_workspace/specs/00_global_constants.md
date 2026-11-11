@@ -144,11 +144,18 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 | **Fault Injector** | Ngưỡng cộng dồn $t_1..t_4$ | $t_1 = s$, $t_2 = s + l$, $t_3 = s + l + o$, $t_4 = s + l + o + d$ | Một số ngẫu nhiên $u$ cho mỗi sự kiện; xác suất thực tế của mỗi loại lỗi bằng đúng tham số cấu hình khi $s + l + o + d \le 1$. |
 | **Fault Injector** | Tỷ lệ trong `bench_fault.py` (`fault_rate = 0.20`) | `schema_invalid` 4%, `late_data` 5%, `out_of_order` 4%, `duplicate` 7% | Cộng thêm `negative_price` 2% sinh trước khi qua `FaultInjector`. |
 | **Speed Layer** | Kiểu `trade_id` trong Spark schema | `LongType()` | Khớp với hợp đồng dữ liệu (`integer`); so sánh tie-break theo số nguyên. |
+| **Batch Layer** | `BATCH_WATERMARK_LATENESS_SECONDS` | `60` giây | Chỉ áp dụng khi Batch đọc Kafka theo từng đợt: $W = \lfloor \max(\text{trade\_time}) - 60\text{s} \rfloor_{\text{phút}}$. Đọc file (tập đầy đủ) thì $W = \max(\text{window\_end})$. |
+| **Batch Layer** | Quy tắc ghi Watermark | Đơn điệu tăng | `ClickHouseBatchSync.update_watermark()` chỉ ghi khi ứng viên lớn hơn mốc hiện tại (`get_current_watermark()`). |
+| **Batch Layer** | `BATCH_SILVER_STORE_DIR` | `datasets/processed/silver_store` | Kho Silver tích lũy (JSONL, phân vùng `symbol/ngày/giờ`) dùng để tính lại cửa sổ bị ảnh hưởng ở chế độ Kafka. |
+| **Batch Layer** | Thời điểm commit offset Kafka | Sau khi ghi ClickHouse | Ngữ nghĩa *at-least-once*; offset lưu ở `results/logs/batch_kafka_offsets.json` (ghi nguyên tử bằng `os.replace`). |
+| **Batch Layer** | `BATCH_FROM_KAFKA` / `BATCH_CONSUME_KAFKA` | `false` | Hai tên được chấp nhận như nhau ở CLI và Dagster. Không có bản ghi Kafka mới thì chu kỳ bỏ qua, **không** fallback sang `datasets/mock`. |
+| **Đối soát** | `VWAP_MATCH_TOLERANCE` / `VOLUME_MATCH_TOLERANCE_PCT` | `1e-4` (đơn vị giá) / `1e-4` (%) | Tiêu chí `MATCHED` dùng chung trong [src/utils/reconciliation.py](file:///src/utils/reconciliation.py) cho bảng audit, `/api/reconciliation` và `bench_reprocess.py`. |
 
 > [!NOTE]
 > **Cơ chế đọc Watermark tại Serving Layer ([src/serving_layer/watermark_reader.py](file:///src/serving_layer/watermark_reader.py)):**  
-> Lớp `WatermarkReader` thực thi truy vấn trực tiếp bảng `lakehouse.system_watermark` trên ClickHouse qua câu lệnh SQL:  
-> `SELECT watermark_time, updated_at FROM lakehouse.system_watermark WHERE layer = 'batch_layer' ORDER BY updated_at DESC LIMIT 1`.  
+> Lớp `WatermarkReader` thực thi truy vấn trực tiếp bảng `lakehouse.system_watermark` trên ClickHouse qua câu lệnh SQL có tham số:  
+> `SELECT max(watermark_time), count() FROM lakehouse.system_watermark WHERE layer = {layer:String}` (trước bản sửa 2026-11-12: `ORDER BY updated_at DESC LIMIT 1`, có thể đọc phải mốc nhỏ hơn được ghi sau).  
+> Vì bảng là `ReplacingMergeTree(updated_at) ORDER BY layer`, khi gộp phần dữ liệu ClickHouse chỉ giữ dòng có `updated_at` mới nhất; do đó tính đơn điệu phải được bảo đảm ở phía **ghi**, không chỉ ở phía đọc.  
 > Khối mã đi kèm xử lý ngoại lệ `try...except` và trả về giá trị dự phòng (*fallback*) an toàn `1970-01-01 00:00:00 UTC` khi chưa có dữ liệu hoặc mất kết nối. **Mã nguồn thực tế không sử dụng bộ đệm (In-memory Cache TTL 2s)** để đảm bảo Serving API luôn phản ánh chính xác 100% mốc Watermark mới nhất mà không bị trễ cache.
 
 ### 3.1. Danh Mục Mã Lỗi Phân Loại Dữ Liệu Rác (Quarantine Error Codes)
@@ -159,7 +166,8 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 4. **`symbol_empty`**: Tên cặp tiền giao dịch bị rỗng hoặc không xác định.
 5. **`trade_time_non_positive`**: Dấu thời gian giao dịch $\le 0$.
 6. **`missing required fields: <danh_sách>`**: Bản ghi thiếu một trong các trường bắt buộc (`trade_id`, `symbol`, `price`, `quantity`, `trade_time`).
-7. **`ERR_DUPLICATE_TRADE_ID`**: Bản ghi bị trùng lặp khóa tự nhiên `(symbol, trade_id)` (Bản ghi đến sau có cùng hoặc nhỏ hơn `ingestion_time` sẽ bị loại bỏ).
+7. **`price_not_finite`** / **`quantity_not_finite`** *(bổ sung 2026-11-12)*: Giá hoặc khối lượng là `NaN` / `±inf`. Được kiểm tra trước các luật dấu vì `NaN <= 0` cho kết quả `False` và `json.loads` của Python chấp nhận `NaN`, `Infinity`.
+8. **`ERR_DUPLICATE_TRADE_ID`**: Bản ghi bị trùng lặp khóa tự nhiên `(symbol, trade_id)` (Bản ghi đến sau có cùng hoặc nhỏ hơn `ingestion_time` sẽ bị loại bỏ). **Lưu ý thượng tôn mã nguồn:** mã này *không* xuất hiện trong code; bản trùng không vào `dq_quarantine` mà chỉ được đếm vào `duplicates_removed`. Ở chế độ Kafka, bản trùng với lần chạy trước được đếm riêng (`cross_run_duplicates`).
 
 ### 3.2. Ghi chú Thực tế Triển khai Mã nguồn (Code-Verified Ground Truth)
 1. **Cấu hình Kafka Topic & Producer (`src/ingestion/kafka_producer.py`):**

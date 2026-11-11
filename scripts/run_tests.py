@@ -43,6 +43,7 @@ BOLD   = "\033[1m"
 SUITES = [
     ("Ingestion Models & FaultInjector", "tests.test_ingestion"),
     ("Data Quality, Quarantine & Metrics", "tests.test_data_quality"),
+    ("Batch Layer: Incremental Silver, Watermark, Kafka Offsets", "tests.test_batch_layer"),
     ("Speed Layer: OHLCV / VWAP / SpikeDetector", "tests.test_speed_layer"),
     ("Query Merger: 3-Case Lambda Logic", "tests.test_query_merger"),
     ("Dagster Pipeline Assets", "tests.test_dagster_pipeline"),

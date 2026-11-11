@@ -20,6 +20,7 @@ import os
 import sys
 import time
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -45,9 +46,11 @@ for _base in [os.environ.get("SPARK_HOME", "/opt/spark"), "/opt/spark", "/usr/lo
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.batch_layer.clickhouse_sync import ClickHouseBatchSync
+from src.batch_layer.silver_store import SilverTradeStore
 from src.data_quality.dq_checks import QualityReport, clean_and_deduplicate
 from src.speed_layer.spike_detector import SpikeDetector
 from src.utils.logger import setup_logger
+from src.utils.reconciliation import classify_window, volume_drift_pct
 
 logger = setup_logger("spark_batch_jobs")
 
@@ -98,6 +101,29 @@ def load_records_from_path(path: Path) -> List[Dict[str, Any]]:
     return []
 
 
+@dataclass
+class KafkaReadResult:
+    """Ban ghi doc tu Kafka cung offset CHUA commit (commit sau khi xu ly thanh cong)."""
+
+    records: List[Dict[str, Any]] = field(default_factory=list)
+    offsets: Dict[str, int] = field(default_factory=dict)
+    checkpoint_path: Optional[Path] = None
+    advanced: bool = False  # True neu offsets khac voi checkpoint dang luu
+
+
+def commit_kafka_offsets(read_result: Optional[KafkaReadResult]) -> bool:
+    """Ghi checkpoint offset ra file. Chi goi SAU KHI lo du lieu da duoc ghi ben vung."""
+    if read_result is None or not read_result.advanced or read_result.checkpoint_path is None:
+        return False
+    path = read_result.checkpoint_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(read_result.offsets, indent=2), encoding="utf-8")
+    os.replace(tmp, path)  # ghi nguyen tu: khong de lai file offset do dang
+    logger.info("Committed Kafka offsets to %s", path)
+    return True
+
+
 def consume_kafka_records(
     bootstrap_servers: Optional[str] = None,
     topic: Optional[str] = None,
@@ -105,24 +131,53 @@ def consume_kafka_records(
     poll_timeout_ms: int = 2000,
     offset_file: Optional[Path] = None,
     reset_offsets: bool = False,
+    commit: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Doc incremental cac ban ghi TradeEvent truc tiep tu Kafka topic 'crypto_trades_raw'
-    va luu checkpoint offset vao file JSON de cac chu ky Batch tu dong tiep tuc
-    doc tu offset chua xu ly.
+    Wrapper tuong thich nguoc: doc Kafka va (mac dinh) commit offset ngay.
+
+    Pipeline Batch va Dagster dung `read_kafka_records` + `commit_kafka_offsets`
+    de chi commit sau khi ghi ClickHouse thanh cong (at-least-once).
     """
+    result = read_kafka_records(
+        bootstrap_servers=bootstrap_servers,
+        topic=topic,
+        max_records=max_records,
+        poll_timeout_ms=poll_timeout_ms,
+        offset_file=offset_file,
+        reset_offsets=reset_offsets,
+    )
+    if commit:
+        commit_kafka_offsets(result)
+    return result.records
+
+
+def read_kafka_records(
+    bootstrap_servers: Optional[str] = None,
+    topic: Optional[str] = None,
+    max_records: int = 50000,
+    poll_timeout_ms: int = 2000,
+    offset_file: Optional[Path] = None,
+    reset_offsets: bool = False,
+) -> KafkaReadResult:
+    """
+    Doc incremental cac ban ghi TradeEvent tu Kafka topic 'crypto_trades_raw'
+    bat dau tu offset da luu trong file checkpoint. KHONG ghi checkpoint:
+    nguoi goi phai goi `commit_kafka_offsets` sau khi xu ly xong.
+    """
+    checkpoint_path = offset_file or (RESULT_LOG_DIR / "batch_kafka_offsets.json")
+    out = KafkaReadResult(checkpoint_path=checkpoint_path)
     try:
         from kafka import KafkaConsumer, TopicPartition
     except ImportError:
-        logger.warning("kafka-python chua duoc cai dat; bo qua consume_kafka_records.")
-        return []
+        logger.warning("kafka-python chua duoc cai dat; bo qua read_kafka_records.")
+        return out
 
     from src.utils.config import get_kafka_config
 
     kafka_cfg = get_kafka_config()
     brokers = bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS", kafka_cfg.bootstrap_servers)
     topic_name = topic or os.getenv("KAFKA_TOPIC_RAW", kafka_cfg.topic_raw)
-    checkpoint_path = offset_file or (RESULT_LOG_DIR / "batch_kafka_offsets.json")
 
     saved_offsets: Dict[str, int] = {}
     if not reset_offsets and checkpoint_path.exists():
@@ -146,7 +201,7 @@ def consume_kafka_records(
         partitions = consumer.partitions_for_topic(topic_name)
         if not partitions:
             consumer.close()
-            return []
+            return out
 
         tps = [TopicPartition(topic_name, p) for p in sorted(partitions)]
         consumer.assign(tps)
@@ -166,7 +221,7 @@ def consume_kafka_records(
 
         if not has_unread:
             consumer.close()
-            return []
+            return out
 
         while len(records) < max_records:
             batch = consumer.poll(timeout_ms=poll_timeout_ms, max_records=min(5000, max_records - len(records)))
@@ -186,29 +241,43 @@ def consume_kafka_records(
 
         consumer.close()
 
+        out.records = records
+        out.offsets = new_offsets
+        out.advanced = new_offsets != saved_offsets
         if records:
-            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-            checkpoint_path.write_text(json.dumps(new_offsets, indent=2), encoding="utf-8")
             logger.info(
-                "Consumed %d raw records from Kafka topic '%s' (saved offsets to %s)",
+                "Read %d raw records from Kafka topic '%s' (offsets pending commit)",
                 len(records),
                 topic_name,
-                checkpoint_path,
             )
     except Exception as exc:
         logger.warning("Khong the doc du lieu tu Kafka (%s): %s", brokers, exc)
 
-    return records
+    return out
+
+
+def kafka_mode_enabled(from_kafka: bool = False) -> bool:
+    """Batch doc Kafka khi co co --from-kafka hoac bien moi truong BATCH_FROM_KAFKA / BATCH_CONSUME_KAFKA."""
+    if from_kafka:
+        return True
+    return any(
+        os.getenv(name, "false").lower() in {"true", "1", "yes"}
+        for name in ("BATCH_FROM_KAFKA", "BATCH_CONSUME_KAFKA")
+    )
 
 
 def load_default_records(from_kafka: bool = False) -> List[Dict[str, Any]]:
-    """Load records from Kafka (when enabled) or the first populated default dataset directory."""
-    use_kafka = from_kafka or (os.getenv("BATCH_CONSUME_KAFKA", "false").lower() in {"true", "1", "yes"})
-    if use_kafka:
+    """Load records from Kafka (when enabled) or the first populated default dataset directory.
+
+    Khi o che do Kafka va khong co ban ghi moi, ham tra ve danh sach rong. Truoc day
+    ham fallback sang datasets/mock, khien moi chu ky daemon nap lai toan bo du lieu
+    mock va dat watermark theo du lieu mock.
+    """
+    if kafka_mode_enabled(from_kafka):
         kafka_records = consume_kafka_records()
-        if kafka_records:
-            return kafka_records
-        logger.info("Khong co ban ghi moi trong Kafka; fallback sang default datasets.")
+        if not kafka_records:
+            logger.info("Khong co ban ghi moi trong Kafka; bo qua chu ky nay (khong fallback).")
+        return kafka_records
 
     for path in DEFAULT_INPUTS:
         records = load_records_from_path(path)
@@ -251,6 +320,52 @@ def aggregate_gold_candles(records: Iterable[Dict[str, Any]]) -> List[Dict[str, 
         candles.append(candle)
 
     return sorted(candles, key=lambda row: (row["symbol"], row["window_start"]))
+
+
+def build_incremental_gold_candles(
+    clean_records: List[Dict[str, Any]],
+    store: Optional[SilverTradeStore] = None,
+) -> tuple[List[Dict[str, Any]], int]:
+    """Tinh lai nen cho moi cua so bi anh huong tu TOAN BO ban ghi da biet.
+
+    Dung cho che do doc Kafka theo tung dot. Ban ghi moi duoc nap vao kho Silver,
+    sau do moi cua so (symbol, phut) co ban ghi moi duoc tinh lai tu tat ca ban
+    ghi cua cua so do trong kho. Nen ghi vao ReplacingMergeTree vi vay luon day du,
+    ke ca khi cua so bi chia qua hai lan chay hoac nhan su kien tre.
+
+    Returns:
+        (candles, cross_run_duplicates)
+    """
+    if not clean_records:
+        return [], 0
+    store = store or SilverTradeStore()
+    upsert = store.upsert(clean_records)
+    window_records = store.load_windows(upsert.affected_windows)
+    return aggregate_gold_candles(window_records), upsert.cross_run_duplicates
+
+
+def compute_watermark_candidate(
+    clean_records: List[Dict[str, Any]],
+    candles: List[Dict[str, Any]],
+    incremental: bool,
+    lateness_seconds: Optional[int] = None,
+) -> Optional[datetime]:
+    """Xac dinh moc watermark de cong bo sau lan chay nay.
+
+    - Doc file (tap du lieu day du): W = max(window_end).
+    - Doc Kafka theo dot: phut cuoi co the con thieu giao dich, nen chi chot
+      W = floor_phut(max(trade_time) - lateness). Mac dinh lateness = 60 s,
+      bang watermark cua Speed Layer.
+    """
+    if not candles:
+        return None
+    if not incremental:
+        return max(row["window_end"] for row in candles)
+
+    if lateness_seconds is None:
+        lateness_seconds = int(os.getenv("BATCH_WATERMARK_LATENESS_SECONDS", "60"))
+    max_event = max(parse_epoch_ms(r["trade_time"]) for r in clean_records)
+    return floor_to_minute(max_event - timedelta(seconds=lateness_seconds))
 
 
 def write_batch_run_log(
@@ -471,15 +586,17 @@ def sync_reconciliation_audit(
                 s_vol = float(s["volume"]) if s else 0.0
                 b_vwap = float(b["vwap"])
                 s_vwap = float(s["vwap"]) if s else 0.0
-                vol_drift = round(abs(s_vol - b_vol) / b_vol * 100.0, 4) if (s and b_vol > 0) else 0.0
+                drift = volume_drift_pct(b_vol, s_vol) if s else None
+                vol_drift = drift if drift is not None else 0.0
                 vwap_err = round(abs(s_vwap - b_vwap), 4) if s else 0.0
 
-                if s is None:
-                    status = "BATCH_ONLY"
-                elif vol_drift < 1e-4 and vwap_err < 1e-4:
-                    status = "MATCHED"
-                else:
-                    status = "RECONCILED_AND_HEALED"
+                # Cung quy tac voi GET /api/reconciliation (src/utils/reconciliation.py)
+                status = classify_window(
+                    has_batch=True,
+                    has_speed=s is not None,
+                    vwap_delta=vwap_err if s else None,
+                    drift_pct=drift,
+                )
 
                 audit_rows.append({
                     "run_id": batch_run_id,
@@ -531,14 +648,27 @@ def run_batch_pipeline(
     """
     t0 = time.perf_counter()
     batch_run_id = batch_run_id or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    raw_records = (
-        load_records_from_path(input_path)
-        if input_path
-        else load_default_records(from_kafka=from_kafka)
-    )
+
+    # Che do doc Kafka theo dot: offset chi duoc commit SAU KHI ghi ClickHouse xong
+    incremental = input_path is None and kafka_mode_enabled(from_kafka)
+    kafka_read: Optional[KafkaReadResult] = None
+    if input_path:
+        raw_records = load_records_from_path(input_path)
+    elif incremental:
+        kafka_read = read_kafka_records()
+        raw_records = kafka_read.records
+        if not raw_records:
+            logger.info("Khong co ban ghi moi trong Kafka; chu ky nay khong ghi gi (khong fallback).")
+    else:
+        raw_records = load_default_records(from_kafka=False)
+
     clean_records, rejected_records, quality = clean_and_deduplicate(raw_records)
-    candles = aggregate_gold_candles(clean_records)
-    watermark = max((row["window_end"] for row in candles), default=None)
+    cross_run_duplicates = 0
+    if incremental:
+        candles, cross_run_duplicates = build_incremental_gold_candles(clean_records)
+    else:
+        candles = aggregate_gold_candles(clean_records)
+    watermark = compute_watermark_candidate(clean_records, candles, incremental=incremental)
 
     iceberg_result = (
         write_bronze_to_iceberg(clean_records, batch_run_id, strict=iceberg_strict)
@@ -549,6 +679,8 @@ def run_batch_pipeline(
     quarantine_rows = 0
     reconciled_audit_rows = 0
     watermark_synced = False
+    effective_watermark: Optional[datetime] = watermark
+    persisted = not sync_clickhouse  # khong sync ClickHouse thi khong co dich ghi nao co the loi
     if sync_clickhouse:
         sync = ClickHouseBatchSync()
         quarantine_rows = sync.insert_quarantine_records(
@@ -558,6 +690,9 @@ def run_batch_pipeline(
         clickhouse_rows = sync.insert_batch_aggregates(candles, batch_run_id=batch_run_id)
         if watermark is not None:
             watermark_synced = sync.update_watermark(watermark)
+            effective_watermark = sync.get_current_watermark() or watermark
+        # ClickHouse khong ket noi duoc thi insert tra ve 0 thay vi nem loi -> khong commit offset
+        persisted = sync.get_client() is not None
         elapsed_s = time.perf_counter() - t0
         reconciled_audit_rows = sync_reconciliation_audit(
             sync=sync,
@@ -567,12 +702,22 @@ def run_batch_pipeline(
             duration_s=elapsed_s,
         )
 
+    offsets_committed = False
+    if kafka_read is not None:
+        if persisted:
+            offsets_committed = commit_kafka_offsets(kafka_read)
+        elif kafka_read.records:
+            logger.warning(
+                "ClickHouse khong kha dung: KHONG commit offset Kafka, lo %d ban ghi se duoc doc lai.",
+                len(kafka_read.records),
+            )
+
     log_path = write_batch_run_log(
         batch_run_id=batch_run_id,
         quality=quality,
         candles_count=len(candles),
         clickhouse_rows=clickhouse_rows,
-        watermark=watermark,
+        watermark=effective_watermark,
     )
 
     summary = {
@@ -586,8 +731,12 @@ def run_batch_pipeline(
         "clickhouse_rows": clickhouse_rows,
         "quarantine_rows": quarantine_rows,
         "reconciled_audit_rows": reconciled_audit_rows,
-        "watermark": watermark.isoformat() if watermark else None,
+        "watermark": effective_watermark.isoformat() if effective_watermark else None,
+        "watermark_candidate": watermark.isoformat() if watermark else None,
         "watermark_synced": watermark_synced,
+        "incremental_mode": incremental,
+        "cross_run_duplicates": cross_run_duplicates,
+        "kafka_offsets_committed": offsets_committed,
         "iceberg_result": iceberg_result,
         "rejected_sample": rejected_records[:5],
         "log_path": str(log_path),
