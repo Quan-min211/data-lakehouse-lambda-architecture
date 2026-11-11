@@ -184,15 +184,35 @@ After inspecting the codebase and executing the tests above, generate a concise 
    | :--- | :--- | :--- | :--- | :--- | :--- |
 4. **Go / No-Go Recommendation for 24/7 Streaming:** Clear confirmation that the pipeline is stable and ready for the $24/7$ benchmark run.
 
-# ROLE: Technical Context Extractor 
-Nhiệm vụ của bạn là đọc source code trong thư mục được chỉ định và trích xuất thành một bản đặc tả kỹ thuật cô đọng (Technical Spec) lưu vào `specs/context_muc_[so_muc].md` để làm nguyên liệu viết tiểu luận.
+# QUY CHUẨN BẮT BUỘC THEO QUY ĐỊNH KHOA CNTT - HCMUTE (MẪU 3, 4, 5)
 
-# YÊU CẦU TRÍCH XUẤT BẮT BUỘC:
-1. Kiến trúc & Luồng dữ liệu: Mô tả chính xác dữ liệu đi từ file/hàm nào qua file/hàm nào, định dạng đầu vào/đầu ra (schema, payload, kiểu dữ liệu).
-2. Thuật toán & Logic cốt lõi: Trích xuất tên class, tên hàm, các tham số cấu hình (config/env) thực tế đang dùng trong code. Giải thích vì sao code lại xử lý như vậy (ví dụ: cơ chế retry, batching, caching, xử lý bất đồng bộ, bắt lỗi).
-3. Sơ đồ & Bảng biểu: 
-   - Tạo sẵn 1 đoạn mã Mermaid (`flowchart` hoặc `sequenceDiagram`) mô tả đúng luồng code thực tế.
-   - Lập sẵn 1 bảng Markdown tổng hợp các thông số/cấu trúc bảng/API endpoints liên quan.
-4. Điểm nghẽn & Đánh đổi (Trade-offs): Chỉ ra 2-3 giới hạn thực tế trong đoạn code hiện tại (ví dụ: giới hạn bộ nhớ, độ trễ mạng, các trường hợp edge-case chưa xử lý triệt để) để làm chất liệu phân tích học thuật.
+## 1. Kiểm soát Độ dài & Số trang (50 <= Số trang <= 100)
+- Toàn bộ phần Nội dung báo cáo (Chương 1 đến Chương 5) phải nằm trong khoảng 70 - 90 trang A4 (tương đương 22.000 - 26.000 từ khi trình bày ở cỡ chữ 13pt, dãn dòng 1.5 lines).
+- Định mức độ dài chuẩn cho mỗi tiểu mục cấp 3 (X.Y.Z):
+  + Chương 1 & Chương 2: 400 - 550 từ / tiểu mục.
+  + Chương 3 & Chương 4 (Trọng tâm kỹ thuật & thực nghiệm): 550 - 700 từ / tiểu mục.
+  + Chương 5 (Kết luận): Viết ngắn gọn, súc tích (250 - 400 từ / tiểu mục), đi thẳng vào kết quả đạt được, đóng góp mới, ưu/nhược điểm và hướng phát triển; TUYỆT ĐỐI KHÔNG viết lời bàn hoặc bình luận lan man.
 
-Lưu ý: KHÔNG viết văn xuôi dài dòng. Chỉ xuất ra dữ liệu kỹ thuật chính xác 100% từ codebase dưới dạng cấu trúc rõ ràng.
+## 2. Quy tắc Viết tắt & Thuật ngữ tiếng Anh
+- Không lạm dụng chữ viết tắt hoặc chêm các từ tiếng Anh thông dụng khi đã có thuật ngữ tiếng Việt tương đương.
+- Không viết tắt những cụm từ dài hoặc cụm từ chỉ xuất hiện vài lần trong báo cáo.
+- Chỉ sử dụng các từ viết tắt chuyên ngành cốt lõi đã được định nghĩa trong "Danh mục các chữ viết tắt" (xếp theo thứ tự bảng chữ cái A-Z). Ở lần xuất hiện đầu tiên trong văn bản, phải viết đầy đủ trước khi mở ngoặc ghi từ viết tắt.
+
+## 3. Quy tắc Hồ sơ Thiết kế UML & Nhãn Bảng biểu/Hình vẽ
+- Đối với Chương 3 (Thiết kế & Hiện thực hóa hệ thống), bắt buộc phải sử dụng các biểu đồ chuẩn UML (Use Case Diagram, Component Diagram, Sequence Diagram, Class Diagram, Deployment Diagram) bên cạnh sơ đồ luồng dữ liệu.
+- Mọi Bảng và Hình phải được đánh số theo chương (ví dụ: Bảng 3.1, Hình 3.2) và tuân thủ vị trí nhãn:
+  + Bảng: Tên bảng đặt ở PHÍA TRÊN bảng (In đậm, căn giữa). Ngay PHÍA DƯỚI bảng phải có 1 dòng Chú thích bảng (In nghiêng, căn giữa) giải thích nguồn hoặc ký hiệu trong bảng.
+  + Hình: Tên hình đặt ở PHÍA DƯỚI hình (In đậm, căn giữa).
+- Không dùng số La Mã cho bất kỳ cấp chương/mục nào; chỉ dùng hệ thống số Ả-rập (1, 1.1, 1.1.1).
+
+## 4. Quy ước Trích dẫn Khoa học chuẩn HCMUTE
+- Trong văn bản: Trích dẫn bằng số thứ tự đặt trong ngoặc vuông `[1]`, `[2]` khớp với Danh mục Tài liệu tham khảo đã sắp xếp theo thứ tự từ điển (A-Z).
+- Chỉ trích dẫn và liệt kê những tài liệu thực sự được sử dụng và bàn luận trong báo cáo.
+- Định dạng tại Danh mục Tài liệu tham khảo cuối bài (cỡ chữ 11pt, căn trái):
+  + Sách: Tên tác giả, Tên sách, lần xuất bản, Nhà xuất bản, Nơi xuất bản, năm xuất bản.
+  + Bài báo tạp chí: Tên tác giả, Tên bài báo, Tên tạp chí, tập (số), năm, pp. trang đầu - trang cuối.
+  + Bài hội nghị: Tên tác giả, Tên bài báo, Tên hội nghị, tên tuyển tập báo cáo, nơi và thời gian tổ chức, năm, pp. trang.
+  # QUY TẮC THƯỢNG TÔN MÃ NGUỒN (CODE-FIRST GROUNDING RULE)
+1. Mã nguồn thực tế trong `src/`, `configs/`, `dbt_project/`, `dagster_project/`, `dashboard/` là chân lý cao nhất.
+2. Khi trích xuất `specs/context_3_X.md`, nếu bất kỳ mô tả nào trong đề cương (`master_outline.md`), báo cáo tóm tắt (`SHORT_REPORT.md`) hay gợi ý trong prompt mâu thuẫn với code thực tế trong `src/`, Agent BẮT BUỘC phải viết theo đúng logic trong code thực tế và ghi chú rõ sự khác biệt đó ở đầu file spec.
+3. Tuyệt đối không bịa thêm tham số, bộ đệm (cache), khóa Redis hay điều kiện kiểm tra nếu trong file `.py` / `.sql` không cài đặt.

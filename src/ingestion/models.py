@@ -74,12 +74,17 @@ class TradeEvent:
             - 'q': quantity string
             - 'T': trade time (epoch ms)
             - 'm': is_buyer_maker boolean
+
+        Missing fields are filled with sentinel values that the Data Quality
+        Gate always rejects (empty symbol, trade_id = -1, price/quantity = 0.0,
+        trade_time = 0). Parsing never raises for a missing key, and a missing
+        event time is never replaced by the processing-time clock.
         """
-        symbol = tick.get("s", "UNKNOWN").upper()
-        trade_id = int(tick.get("a", tick.get("t", 0)))
+        symbol = str(tick.get("s", "")).upper()
+        trade_id = int(tick.get("a", tick.get("t", -1)))
         price = float(tick.get("p", 0.0))
         quantity = float(tick.get("q", 0.0))
-        trade_time = int(tick.get("T", tick.get("E", int(time.time() * 1000))))
+        trade_time = int(tick.get("T", tick.get("E", 0)))
         is_buyer_maker = bool(tick.get("m", False))
 
         return cls(
@@ -107,7 +112,7 @@ class DLQEvent:
     """
     raw_payload: str
     error_reason: str
-    source_stream: str = "binance_websocket"
+    source_stream: str = "binance_ws"
     received_at: int = 0
 
     def __post_init__(self):

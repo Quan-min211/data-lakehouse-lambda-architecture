@@ -1,12 +1,19 @@
 # Kafka Topics Configuration
+# Tệp này được nạp bởi src/utils/config.py::get_kafka_topic_specs() và áp dụng trong
+# SpeedLayerStreamingJob._ensure_topic_exists() lúc Speed Layer khởi động:
+# mọi topic CHƯA tồn tại được tạo đúng partitions / replication_factor / retention.ms / cleanup.policy dưới đây.
+# Topic đã tồn tại KHÔNG bị sửa. Nếu một producer ghi trước khi Speed Layer chạy, broker vẫn có thể
+# tự tạo topic theo mặc định (KAFKA_NUM_PARTITIONS: 3, KAFKA_LOG_RETENTION_HOURS: 24).
 topics:
   - name: "crypto_trades_raw"
     partitions: 3
     replication_factor: 1
     retention_ms: 86400000 # 24 hours
     cleanup_policy: "delete"
+    description: "Luồng sự kiện giao dịch thô thời gian thực từ sàn Binance"
   - name: "crypto_trades_dlq"
-    partitions: 1
+    partitions: 3 # Đồng nhất với giá trị broker auto-create (đặc tả logic ban đầu: 1 partition)
     replication_factor: 1
-    retention_ms: 604800000 # 7 days
+    retention_ms: 86400000 # 24 hours (đặc tả logic ban đầu: 7 ngày / 604800000 ms)
     cleanup_policy: "delete"
+    description: "Dead Letter Queue chứa payload hỏng cú pháp / decode thất bại"

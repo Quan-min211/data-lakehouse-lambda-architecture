@@ -190,6 +190,114 @@ class TestRedisSpeedWriter(unittest.TestCase):
         self.assertEqual(commands[1][0], "speed:candle:BTCUSDT:latest")
         self.assertEqual(commands[0][2], 60)
 
+    def test_write_records_latest_key_picks_max_window_start(self):
+        fake_client = FakeRedisClient()
+        writer = RedisSpeedWriter(client=fake_client, ttl_seconds=60)
+        # 2 bản ghi cùng symbol nhưng thứ tự truyền vào là bản ghi mới trước, bản ghi cũ sau
+        r_newer = {
+            "symbol": "BTCUSDT",
+            "window_start": datetime(2026, 9, 4, 12, 1, 0, tzinfo=timezone.utc),
+            "window_end": datetime(2026, 9, 4, 12, 2, 0, tzinfo=timezone.utc),
+            "open_price": 60100.0,
+            "high_price": 60200.0,
+            "low_price": 60050.0,
+            "close_price": 60150.0,
+            "volume": 6.0,
+            "trade_count": 25,
+            "vwap": 60120.0,
+            "is_spike": 0,
+        }
+        r_older = {
+            "symbol": "BTCUSDT",
+            "window_start": datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc),
+            "window_end": datetime(2026, 9, 4, 12, 1, 0, tzinfo=timezone.utc),
+            "open_price": 60000.0,
+            "high_price": 60100.0,
+            "low_price": 59900.0,
+            "close_price": 60050.0,
+            "volume": 5.0,
+            "trade_count": 20,
+            "vwap": 60020.0,
+            "is_spike": 0,
+        }
+
+        # Gửi r_newer trước, r_older sau
+        written = writer.write_records([r_newer, r_older])
+        self.assertEqual(written, 2)
+        commands = fake_client.last_pipeline.commands
+        # commands: [set window 12:01, set window 12:00, set latest]
+        self.assertEqual(len(commands), 3)
+        latest_cmd = [c for c in commands if c[0] == "speed:candle:BTCUSDT:latest"][0]
+        # latest_cmd payload phải chứa thông tin của r_newer (12:01)
+        import json
+        payload = json.loads(latest_cmd[1])
+        self.assertEqual(payload["window_start"], "2026-09-04T12:01:00+00:00")
+        self.assertEqual(payload["close_price"], 60150.0)
+
+    def test_auto_reconnect_cooldown(self):
+        writer = RedisSpeedWriter(port=63799, reconnect_cooldown_seconds=30.0)
+        writer._available = False
+        import time
+        from unittest.mock import patch
+        writer._last_error_time = time.time() - 10.0  # Mới 10s trôi qua (< 30s)
+        self.assertIsNone(writer.get_client())
+
+        # Giả lập đã qua 35s (> 30s cooldown)
+        writer._last_error_time = time.time() - 35.0
+        with patch("redis.Redis", side_effect=Exception("Mock connection failure")):
+            self.assertIsNone(writer.get_client())
+        self.assertFalse(writer._available)
+        self.assertGreater(writer._last_error_time, time.time() - 2.0)
+
+
+class TestYamlConfigLoading(unittest.TestCase):
+    """configs/kafka/topics.yaml và configs/redis/redis.yaml phải được mã nạp thật."""
+
+    def test_topic_specs_loaded_from_yaml(self):
+        from src.utils.config import get_kafka_topic_specs
+
+        specs = {s["name"]: s for s in get_kafka_topic_specs()}
+        self.assertIn("crypto_trades_raw", specs)
+        self.assertIn("crypto_trades_dlq", specs)
+        self.assertEqual(int(specs["crypto_trades_raw"]["partitions"]), 3)
+
+    def test_redis_writer_prefix_comes_from_config(self):
+        from src.utils.config import get_redis_config
+
+        writer = RedisSpeedWriter(client=FakeRedisClient())
+        self.assertEqual(writer.key_prefix, get_redis_config().key_prefix)
+        self.assertEqual(writer.key_prefix, "speed:candle")
+
+    def test_ensure_topic_exists_creates_missing_topics_from_yaml(self):
+        from unittest import mock
+        from src.speed_layer.spark_streaming import SpeedLayerStreamingJob
+
+        created = []
+
+        class FakeAdmin:
+            def __init__(self, **kwargs):
+                pass
+
+            def list_topics(self):
+                return ["crypto_trades_raw"]
+
+            def create_topics(self, new_topics, validate_only=False):
+                created.extend(new_topics)
+
+            def close(self):
+                pass
+
+        job = SpeedLayerStreamingJob.__new__(SpeedLayerStreamingJob)  # không cần SparkSession
+        job.kafka_bootstrap = "kafka:9092"
+        job.topic = "crypto_trades_raw"
+        with mock.patch("kafka.admin.KafkaAdminClient", FakeAdmin), mock.patch("time.sleep"):
+            job._ensure_topic_exists()
+
+        self.assertEqual([t.name for t in created], ["crypto_trades_dlq"])
+        self.assertEqual(created[0].num_partitions, 3)
+        self.assertEqual(created[0].topic_configs["retention.ms"], "86400000")
+        self.assertEqual(created[0].topic_configs["cleanup.policy"], "delete")
+
 
 class TestKafkaSourceGuardrails(unittest.TestCase):
     """Kafka source must fail closed so retention loss is never silent."""

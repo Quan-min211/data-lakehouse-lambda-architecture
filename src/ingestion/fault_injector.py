@@ -52,7 +52,7 @@ class FaultInjector:
         self.pending_out_of_order: List[TradeEvent] = []
 
     def process_event(self, event: TradeEvent) -> List[TradeEvent]:
-        """Xử lý một sự kiện gốc và quyết định có chèn lỗi hay không.
+        """Xử lý một sự kiện gốc và quyết định có chèn lỗi hay không theo ngưỡng xác suất tích lũy.
 
         Args:
             event (TradeEvent): Sự kiện giao dịch sạch từ sàn.
@@ -63,8 +63,20 @@ class FaultInjector:
         results: List[TradeEvent] = []
         rand = random.random()
 
+        # Tính ngưỡng xác suất tích lũy (Cumulative Probability Thresholds)
+        # tránh hiện tượng dead branch khi dùng chung biến ngẫu nhiên rand
+        p1 = self.schema_invalid_rate if self.schema_invalid_rate > 0 else 0.0
+        p2 = self.late_data_rate if self.late_data_rate > 0 else 0.0
+        p3 = self.out_of_order_rate if self.out_of_order_rate > 0 else 0.0
+        p4 = self.duplicate_rate if self.duplicate_rate > 0 else 0.0
+
+        t1 = p1
+        t2 = t1 + p2
+        t3 = t2 + p3
+        t4 = t3 + p4
+
         # 1. Chèn lỗi Schema Invalid (Giá âm / Khối lượng 0)
-        if self.schema_invalid_rate > 0 and rand < self.schema_invalid_rate:
+        if p1 > 0 and rand < t1:
             corrupt_event = TradeEvent(
                 trade_id=event.trade_id,
                 symbol=event.symbol,
@@ -81,7 +93,7 @@ class FaultInjector:
             return results
 
         # 2. Chèn lỗi Late Data (Lùi thời gian giao dịch)
-        if self.late_data_rate > 0 and rand < self.late_data_rate:
+        if p2 > 0 and rand < t2:
             delay_ms = random.randint(self.late_min_seconds * 1000, self.late_max_seconds * 1000)
             late_event = TradeEvent(
                 trade_id=event.trade_id,
@@ -99,7 +111,7 @@ class FaultInjector:
             return results
 
         # 3. Chèn lỗi Out-of-Order (Giữ lại và phát sau)
-        if self.out_of_order_rate > 0 and rand < self.out_of_order_rate:
+        if p3 > 0 and rand < t3:
             ooo_event = TradeEvent(
                 trade_id=event.trade_id,
                 symbol=event.symbol,
@@ -119,7 +131,7 @@ class FaultInjector:
         results.append(event)
 
         # 4. Chèn lỗi Duplicate (Gửi kèm thêm 1 bản ghi trùng ID)
-        if self.duplicate_rate > 0 and rand < self.duplicate_rate:
+        if p4 > 0 and rand < t4:
             dup_event = TradeEvent(
                 trade_id=event.trade_id,
                 symbol=event.symbol,
@@ -140,3 +152,18 @@ class FaultInjector:
             results.append(released)
 
         return results
+
+    def drain_pending(self) -> List[TradeEvent]:
+        """Lấy ra toàn bộ sự kiện out-of-order còn tồn trong bộ đệm.
+
+        Gọi hàm này khi dừng luồng thu thập để các sự kiện đang bị giữ
+        vẫn được phát đi (muộn), thay vì mất hẳn cùng tiến trình.
+
+        Returns:
+            List[TradeEvent]: Các sự kiện còn tồn, theo thứ tự đã đưa vào bộ đệm.
+        """
+        drained = list(self.pending_out_of_order)
+        self.pending_out_of_order.clear()
+        if drained:
+            logger.info(f"Xả {len(drained)} sự kiện out-of-order còn tồn trong bộ đệm.")
+        return drained

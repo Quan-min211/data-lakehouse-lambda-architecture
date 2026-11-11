@@ -205,7 +205,11 @@ class AutoCorrectingQueryMerger:
         candles, duplicate_count = self._dedupe_prefer_batch(candles)
         source_breakdown["deduplicated"] = duplicate_count
         freshness_lag_seconds = max((end_time - watermark).total_seconds(), 0.0)
-        get_alert_manager().check_streaming_lag(symbol, freshness_lag_seconds)
+        alert_manager = get_alert_manager()
+        alert_manager.check_streaming_lag(symbol, freshness_lag_seconds)
+        for candle in candles:
+            if candle.is_spike == 1:
+                alert_manager.check_price_spike(symbol, candle.model_dump())
 
         return MarketDataResponse(
             symbol=symbol,

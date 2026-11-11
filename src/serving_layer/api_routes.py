@@ -167,7 +167,7 @@ async def get_latest_speed_candle(
 ):
     """Read the latest provisional Speed candle from Redis hot cache."""
     cfg = get_redis_config()
-    key = f"speed:candle:{symbol.upper()}:latest"
+    key = f"{cfg.key_prefix}:{symbol.upper()}:latest"
     try:
         import redis
         client = redis.Redis(

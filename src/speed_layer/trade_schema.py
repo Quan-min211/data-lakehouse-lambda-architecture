@@ -35,7 +35,7 @@ def get_trade_event_spark_schema():
             StringType, DoubleType, LongType, BooleanType,
         )
         _SCHEMA_CACHE = StructType([
-            StructField("trade_id",       StringType(),  False),
+            StructField("trade_id",       LongType(),    False),
             StructField("symbol",         StringType(),  False),
             StructField("price",          DoubleType(),  False),
             StructField("quantity",       DoubleType(),  False),

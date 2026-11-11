@@ -2,33 +2,73 @@
 
 > **Đề tài:** THIẾT KẾ VÀ TRIỂN KHAI HỆ THỐNG DATA LAKEHOUSE THEO KIẾN TRÚC LAMBDA HỖ TRỢ ĐỐI SOÁT DỮ LIỆU THỜI GIAN THỰC CHO THỊ TRƯỜNG TIỀN MÃ HÓA  
 > *(Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring)*  
-> **Đơn vị đào tạo:** Khoa Công Nghệ Thông Tin — Trường Đại học Sư phạm Kỹ thuật TP. Hồ Chí Minh (HCMUTE)  
-> **Chuyên ngành:** Kỹ thuật Dữ liệu (Data Engineering)  
+> **Cơ quan chủ quản:** Trường Đại học Sư phạm Kỹ thuật TP. Hồ Chí Minh (HCMUTE)  
+> **Đơn vị đào tạo:** Khoa Công Nghệ Thông Tin  
+> **Bộ môn quản lý:** BỘ MÔN KỸ THUẬT DỮ LIỆU (Data Engineering)  
+> **Loại đề tài:** Tiểu luận chuyên ngành (Định hướng tiếp nối Khóa luận tốt nghiệp)  
 > **Sinh viên thực hiện:**  
 > 1. Nguyễn Đặng Quốc Anh — MSSV: `23133004`  
 > 2. Phạm Minh Quân — MSSV: `23133060`  
 > **Giảng viên hướng dẫn:** ThS. Đoàn Minh Trí  
-> **Mục đích tài liệu:** Đề cương chi tiết phân rã đến cấp tiểu mục 3 chữ số (X.Y.Z), gắn kèm danh sách tệp nguồn trực tiếp (**[Các file code liên quan: ...]**) để phục vụ trích xuất đặc tả kỹ thuật (*Technical Specs*) và biên soạn bản thảo từng chương (*Drafts*).
+> **Mục đích tài liệu:** Đề cương chi tiết phân rã đến cấp tiểu mục 3 chữ số (X.Y.Z), tuân thủ chặt chẽ cấu trúc đóng cuốn chuẩn Mẫu 5 và Mẫu 4 của Khoa CNTT, gắn kèm danh sách tệp nguồn trực tiếp (**[Các file code liên quan: ...]**) để phục vụ trích xuất đặc tả kỹ thuật (*Technical Specs*) và biên soạn bản thảo từng chương (*Drafts*).
 
 ---
 
-## TỔNG QUAN CẤU TRÚC 5 CHƯƠNG
+## TỔNG QUAN CẤU TRÚC ĐÓNG CUỐN VÀ 5 CHƯƠNG NỘI DUNG
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        CẤU TRÚC TIỂU LUẬN CHUYÊN NGÀNH (5 CHƯƠNG)                      │
+│               CẤU TRÚC TIỂU LUẬN CHUYÊN NGÀNH THEO QUY CHUẨN MẪU 5 KHOA CNTT           │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ CHƯƠNG 1: TỔNG QUAN VÀ ĐẶT VẤN ĐỀ                                                      │
-│ CHƯƠNG 2: CƠ SỞ LÝ THUYẾT VÀ NỀN TẢNG CÔNG NGHỆ CỐT LÕI                                │
-│ CHƯƠNG 3: THIẾT KẾ KIẾN TRÚC HỆ THỐNG VÀ HIỆN THỰC HÓA PIPELINE                        │
-│ CHƯƠNG 4: TRIỂN KHAI THỰC NGHIỆM, ĐÁNH GIÁ HIỆU NĂNG VÀ KIỂM TOÁN ĐỐI SOÁT             │
-│ CHƯƠNG 5: KẾT LUẬN VÀ ĐỊNH HƯỚNG PHÁT TRIỂN                                            │
+│ CẤU TRÚC TIỀN ĐỀ (FRONT MATTER)                                                        │
+│   • Trang bìa chính & Trang bìa phụ (Bộ môn Kỹ thuật Dữ liệu)                           │
+│   • Phiếu nhận xét của GVHD & Phiếu nhận xét của GVPB (Mẫu 6)                           │
+│   • Lời cảm ơn                                                                         │
+│   • Đề cương chi tiết có chữ ký GVHD & SV (Mẫu 4, Kế hoạch 15 tuần)                    │
+│   • Mục lục, Danh mục hình vẽ, Danh mục bảng biểu, Danh mục viết tắt                    │
+│   • Tóm tắt tiểu luận (Abstract Tiếng Việt & Tiếng Anh)                                │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 5 CHƯƠNG NỘI DUNG CHÍNH:                                                               │
+│   CHƯƠNG 1: TỔNG QUAN VÀ ĐẶT VẤN ĐỀ (PHẦN MỞ ĐẦU)                                     │
+│   CHƯƠNG 2: CƠ SỞ LÝ THUYẾT VÀ NỀN TẢNG CÔNG NGHỆ CỐT LÕI                              │
+│   CHƯƠNG 3: THIẾT KẾ KIẾN TRÚC HỆ THỐNG VÀ HIỆN THỰC HÓA PIPELINE (SYSTEM DESIGN)      │
+│   CHƯƠNG 4: TRIỂN KHAI THỰC NGHIỆM, ĐÁNH GIÁ HIỆU NĂNG VÀ KIỂM TOÁN ĐỐI SOÁT           │
+│   CHƯƠNG 5: KẾT LUẬN VÀ ĐỊNH HƯỚNG PHÁT TRIỂN (CONCLUSION & FUTURE WORK)               │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ TÀI LIỆU THAM KHẢO & PHỤ LỤC (A, B, C, D, E)                                           │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-# CHƯƠNG 1: TỔNG QUAN VÀ ĐẶT VẤN ĐỀ
+# CẤU TRÚC TIỀN ĐỀ (FRONT MATTER — QUY CHUẨN ĐÓNG CUỐN MẪU 5)
+
+* **Trang bìa chính & Trang bìa phụ:** 
+  * Trình bày theo đúng biểu mẫu Mẫu 5 của Khoa Công nghệ Thông tin – HCMUTE.
+  * Thể hiện đầy đủ: Tên Trường, Tên Khoa, **BỘ MÔN KỸ THUẬT DỮ LIỆU**, Tên đề tài (Tiếng Việt và Tiếng Anh), Chuyên ngành Kỹ thuật Dữ liệu, Danh sách sinh viên thực hiện (kèm MSSV), Cán bộ hướng dẫn (ThS. Đoàn Minh Trí), Địa danh và Năm học 2026-2027.
+* **Phiếu nhận xét của Giáo viên hướng dẫn & Phiếu nhận xét của Giáo viên phản biện:**
+  * Soạn thảo và đóng cuốn theo biểu mẫu Mẫu 6 của Khoa CNTT.
+  * Bao gồm phần đánh giá tinh thần, thái độ làm việc, khối lượng và chất lượng kết quả đạt được, thang điểm chi tiết và chữ ký xác nhận của GVHD và GVPB.
+* **Lời cảm ơn:**
+  * Bày tỏ lòng biết ơn chân thành đến Ban Giám hiệu Trường ĐH Sư phạm Kỹ thuật TP.HCM, quý Thầy Cô Khoa CNTT, các Thầy Cô Bộ môn Kỹ thuật Dữ liệu đã truyền đạt kiến thức nền tảng.
+  * Đặc biệt tri ân sự định hướng học thuật và chỉ dẫn tận tình của ThS. Đoàn Minh Trí trong suốt quá trình triển khai đề tài.
+* **Đề cương chi tiết có chữ ký của GVHD và Sinh viên thực hiện:**
+  * Trình bày hoàn chỉnh theo Mẫu 4 của Khoa CNTT.
+  * Tích hợp **Bảng Kế hoạch thực hiện 15 tuần** chi tiết (Phân bổ công việc từ Tuần 1 khảo sát, Tuần 2-4 thiết kế hạ tầng, Tuần 5-8 hiện thực Ingestion/Speed/Batch, Tuần 9-11 Serving Layer & Dashboard, Tuần 12-14 chạy 4 Benchmark & Chaos Smoke Tests, đến Tuần 15 nghiệm thu đóng cuốn).
+* **Mục lục:**
+  * Phân cấp tự động tiêu đề đến cấp tiểu mục 3 chữ số (X.Y.Z) kèm số trang chính xác.
+* **Danh mục hình vẽ:**
+  * Bảng tra cứu danh sách toàn bộ các biểu đồ kiến trúc, sơ đồ UML (Use Case, Component, Class, Sequence, Deployment) và biểu đồ kết quả benchmark thực nghiệm.
+* **Danh mục bảng biểu:**
+  * Bảng tra cứu danh sách các bảng cấu hình phần cứng, bảng DDL thực thể dữ liệu, ma trận đối sánh, ma trận nhầm lẫn và bảng số liệu định lượng.
+* **Danh mục ký hiệu và chữ viết tắt:**
+  * Bảng giải nghĩa các thuật ngữ chuyên ngành sắp xếp theo thứ tự bảng chữ cái ABC (*ACID, API, CDC, CEX, DWH, HFT, JSON, JVM, K8s, MAE, MAPE, OCC, OHLCV, OLAP, OOM, REST, RMSE, RPS, SLA, UTC, VLDB, VWAP, WAP, WebSocket...*).
+* **Tóm tắt tiểu luận (Abstract Tiếng Việt & Tiếng Anh):**
+  * Tóm lược cô đọng: (1) Tính cấp thiết và vấn đề nghiên cứu trong giám sát thị trường crypto 24/7; (2) Hướng tiếp cận kết hợp kiến trúc Lambda với Apache Iceberg Lakehouse và ClickHouse; (3) Thuật toán đối soát tự động Auto-Correcting Query Merger; (4) Tóm tắt các kết quả thực nghiệm định lượng nổi bật (P50 = 50.92ms, F1 = 1.0, Speedup Compaction = 2.10x).
+
+---
+
+# CHƯƠNG 1: TỔNG QUAN VÀ ĐẶT VẤN ĐỀ (PHẦN MỞ ĐẦU)
 
 ### 1.1. Bối cảnh và Tính cấp thiết của đề tài
 * **1.1.1. Đặc thù giao dịch 24/7/365 và tính biến động cao của thị trường tiền mã hóa**
@@ -44,8 +84,8 @@
   * **[Các file code liên quan: src/serving_layer/query_merger.py, docs/md/caitan_lambda_architecture.md]**
 
 ### 1.2. Giới hạn của các tiếp cận truyền thống và Vấn đề nghiên cứu
-* **1.2.1. Giới hạn của kiến trúc Batch-only và Streaming-only**
-  * Mô tả: Phân tích độ trễ cao của Batch-only khiến mất cơ hội xử lý thời gian thực, và rủi ro trôi dạt trạng thái (State Drift) / sai số tích lũy của Streaming-only khi xử lý dữ liệu đến muộn.
+* **1.2.1. Phân tích, đánh giá các công trình và hướng tiếp cận có liên quan (Batch-only, Streaming-only, Kappa)**
+  * Mô tả: Phân tích tổng quan các công trình nghiên cứu và kiến trúc xử lý dữ liệu hiện có trong doanh nghiệp; đánh giá ưu nhược điểm, độ trễ và rủi ro trôi dạt trạng thái (State Drift) của Batch-only, Streaming-only, và kiến trúc Kappa nhằm đáp ứng đúng yêu cầu "Phân tích những công trình có liên quan" của Mẫu 4 và Mẫu 5.
   * **[Các file code liên quan: docs/co_so_ly_luan_chuong_2.md, references/references.bib]**
 
 * **1.2.2. Vấn đề tệp nhỏ (Small File Problem) trên Data Lake khi nạp streaming liên tục**
@@ -64,8 +104,8 @@
   * **[Các file code liên quan: AGENTS.md, report_materials/01_de_cuong_va_ke_hoach/de_cuong_chi_tiet_tieu_luan.md, SHORT_REPORT.md]**
 
 ### 1.3. Mục tiêu, Đối tượng và Phạm vi nghiên cứu
-* **1.3.1. Mục tiêu tổng quát và mục tiêu kỹ thuật cụ thể**
-  * Mô tả: Thiết kế và hiện thực hóa hệ thống Data Lakehouse theo kiến trúc Lambda hoàn chỉnh (Batch + Speed + Serving) kèm cơ chế tự động đối soát trên máy đơn 16GB RAM.
+* **1.3.1. Mục tiêu của đề tài và Kết quả dự kiến đạt được**
+  * Mô tả: Trình bày mục tiêu tổng quát, các mục tiêu kỹ thuật cụ thể và danh mục 8 kết quả/sản phẩm dự kiến đạt được (khớp mục 2 và mục 7 Phần Mở đầu của Mẫu 4).
   * **[Các file code liên quan: AGENTS.md, report_materials/01_de_cuong_va_ke_hoach/proposal_tlcn_lambda.md]**
 
 * **1.3.2. Đối tượng nghiên cứu và cấu trúc sự kiện thị trường**
@@ -207,7 +247,7 @@
   * **[Các file code liên quan: src/speed_layer/metrics_calculator.py, src/speed_layer/spike_detector.py, docs/presentation/giai_thich_thuat_toan_gbm.md]**
 
 * **3.1.3. Thiết kế kiến trúc tổng thể 5 phân hệ**
-  * Mô tả: Sơ đồ tương tác liên tầng: Ingestion $\rightarrow$ Speed Layer $\rightarrow$ Batch Layer $\rightarrow$ Serving Layer $\rightarrow$ Presentation Layer.
+  * Mô tả: Sơ đồ tương tác liên tầng: Ingestion $\rightarrow$ Speed Layer $\rightarrow$ Batch Layer $\rightarrow$ Serving Layer $\rightarrow$ Presentation Layer. **Bao gồm Biểu đồ Use Case tổng quát (UML Use Case Diagram) cho các tác nhân hệ thống và Biểu đồ Thành phần (UML Component Diagram) mô tả kiến trúc 5 phân hệ dữ liệu.**
   * **[Các file code liên quan: docs/md/sys-arch.md, docker-compose.yml, SHORT_REPORT.md]**
 
 ### 3.2. Hiện thực Phân hệ Thu thập Dữ liệu (Ingestion Layer) & Fault Injector
@@ -224,7 +264,7 @@
   * **[Các file code liên quan: src/ingestion/fault_injector.py, scripts/benchmarks/bench_fault.py]**
 
 * **3.2.4. Xây dựng Historical Backfill Client khắc phục lỗ hổng chuỗi (Sequence Gap Healing)**
-  * Mô tả: Lập trình REST backfill worker gọi Binance API truy xuất các trade bị mất khi phát hiện gián đoạn `trade_id`, áp dụng exponential backoff chống vi phạm Rate Limit (HTTP 429).
+  * Mô tả: Lập trình REST backfill worker gọi Binance API truy xuất các trade bị mất khi phát hiện gián đoạn `trade_id`, áp dụng exponential backoff chống vi phạm Rate Limit (HTTP 429). **Sử dụng Biểu đồ Lớp (UML Class Diagram) cho HistoricalBackfillClient và Biểu đồ Tuần tự (UML Sequence Diagram) thể hiện luồng phát hiện gap và kích hoạt worker bù đắp.**
   * **[Các file code liên quan: src/ingestion/historical_backfill.py, .agents/skills/crypto-lambda-lakehouse-reconciliation-audit/SKILL.md]**
 
 ### 3.3. Hiện thực Phân hệ Xử lý Tốc độ (Speed Layer)
@@ -241,7 +281,7 @@
   * **[Các file code liên quan: src/speed_layer/spike_detector.py, src/utils/alerting.py]**
 
 * **3.3.4. Ghi dữ liệu vi mô vào ClickHouse (`speed_agg`) và đồng bộ Redis Hot Cache**
-  * Mô tả: Cơ chế ghi streaming song song: Bulk write DataFrame vào ClickHouse bảng `speed_agg` với cờ trạng thái `Provisional`, và ghi bản ghi mới nhất vào Redis key-value với TTL 3600s.
+  * Mô tả: Cơ chế ghi streaming song song: Bulk write DataFrame vào ClickHouse bảng `speed_agg` với cờ trạng thái `Provisional`, và ghi bản ghi mới nhất vào Redis key-value với TTL 3600s. **Sử dụng Biểu đồ Lớp (UML Class Diagram) cho ClickHouseStreamingWriter/RedisSpeedWriter và Biểu đồ Tuần tự (UML Sequence Diagram) cho tiến trình ghi vi mô song song.**
   * **[Các file code liên quan: src/speed_layer/clickhouse_writer.py, src/speed_layer/redis_writer.py, configs/clickhouse/init.sql, configs/redis/redis.yaml]**
 
 ### 3.4. Hiện thực Phân hệ Lưu trữ Bất biến và Xử lý Lô (Batch Layer)
@@ -284,18 +324,15 @@
   * **[Các file code liên quan: src/serving_layer/api_routes.py, src/serving_layer/schemas.py, Dockerfile.serving]**
 
 * **3.6.2. Thuật toán Auto-Correcting Query Merger phân tách 3 trường hợp truy vấn theo Watermark**
-  * Mô tả: Lớp `AutoCorrectingQueryMerger` so sánh khoảng truy vấn $[T_{\text{start}}, T_{\text{end}}]$ với System Watermark $W$:
-    * Case 1 (Lịch sử): $T_{\text{end}} \le W \rightarrow$ Đọc 100% `batch_agg` (`Reconciled`)
-    * Case 2 (Thời gian thực): $T_{\text{start}} > W \rightarrow$ Đọc 100% `speed_agg` (`Provisional`)
-    * Case 3 (Lai ghép): $T_{\text{start}} \le W < T_{\text{end}} \rightarrow$ Cắt đôi cửa sổ: $[T_{\text{start}}, W]$ từ Batch và $(W, T_{\text{end}}]$ từ Speed.
+  * Mô tả: Lớp `AutoCorrectingQueryMerger` so sánh khoảng truy vấn $[T_{\text{start}}, T_{\text{end}}]$ với System Watermark $W$: Case 1 (Lịch sử: $T_{\text{end}} \le W$), Case 2 (Thời gian thực: $T_{\text{start}} > W$), Case 3 (Lai ghép: $T_{\text{start}} \le W < T_{\text{end}}$). **Sử dụng Biểu đồ Lớp (UML Class Diagram) cho AutoCorrectingQueryMerger và Biểu đồ Tuần tự (UML Sequence Diagram) thể hiện quy trình phân luồng và hợp nhất 3 trường hợp truy vấn.**
   * **[Các file code liên quan: src/serving_layer/query_merger.py, tests/test_query_merger.py]**
 
 * **3.6.3. Cơ chế khử trùng lặp ưu tiên Batch (Zero Double-Counting) và tính sai lệch đối soát $\Delta$**
   * Mô tả: Thuật toán `_dedupe_prefer_batch` bảo đảm không đếm trùng tại mốc biên $W$; tính toán trực tiếp sai số $\Delta = |\text{VWAP}_{\text{speed}} - \text{VWAP}_{\text{batch}}|$ và độ lệch khối lượng $\Delta V$.
   * **[Các file code liên quan: src/serving_layer/query_merger.py, src/serving_layer/clickhouse_client.py]**
 
-* **3.6.4. Module đọc và bộ đệm trạng thái mốc thời gian (Watermark Reader & Cache)**
-  * Mô tả: Lớp `WatermarkReader` truy vấn ClickHouse `system_watermark` có cơ chế cache bộ nhớ trong thời gian ngắn (TTL 2s) giảm thiểu latency truy vấn API.
+* **3.6.4. Module đọc và quản lý trạng thái mốc thời gian (Watermark Reader)**
+  * Mô tả: Lớp `WatermarkReader` truy vấn trực tiếp ClickHouse `lakehouse.system_watermark` xác định mốc Ground Truth mới nhất kèm cơ chế xử lý ngoại lệ an toàn (fallback Epoch 1970 UTC).
   * **[Các file code liên quan: src/serving_layer/watermark_reader.py, src/serving_layer/clickhouse_client.py]**
 
 ### 3.7. Hiện thực Giao diện Giám sát (Dashboard UI) và Cảnh báo Chủ động
@@ -313,7 +350,7 @@
 
 ### 3.8. Đóng gói Hệ thống và Quản lý Tài nguyên Cục bộ (Resource Budgeting)
 * **3.8.1. Thiết kế kiến trúc dịch vụ phân tán trên Docker Compose**
-  * Mô tả: File `docker-compose.yml` định nghĩa 11 container (Kafka KRaft, MinIO, Iceberg REST, Spark Master/Worker/Thrift, Speed Layer, Batch Pipeline, ClickHouse, Redis, FastAPI, Streamlit, Dagster) trên mạng ảo `lakehouse-net`.
+  * Mô tả: File `docker-compose.yml` định nghĩa 14 container trên mạng ảo `lakehouse-net`. **Sử dụng Biểu đồ Triển khai (UML Deployment Diagram) mô tả chi tiết 14 dịch vụ container, cổng giao tiếp mạng và gắn kết ổ đĩa volume trên mạng ảo `lakehouse-net`.**
   * **[Các file code liên quan: docker-compose.yml, .env.example, scripts/verify_services.ps1]**
 
 * **3.8.2. Chiến lược phân bổ ngân sách bộ nhớ (Memory Budget ~8GB trên máy 16GB RAM)**
@@ -486,3 +523,16 @@
 * **Phụ lục D: Bảng nhật ký và số liệu thực nghiệm gốc (Raw Benchmark Logs)**
   * **[Các file code liên quan: results/logs/bench_latency.csv, results/logs/bench_reprocess.csv, results/logs/bench_compaction.csv, results/logs/bench_fault_results.csv, results/logs/chaos_smoke_tests.csv]**
 
+* **Phụ lục E: Hướng dẫn cài đặt và Cấu trúc tổ chức đĩa CD nộp Khoa (theo quy chuẩn Mẫu 5)**
+  * Mô tả: Hướng dẫn chi tiết các bước thiết lập môi trường 1 lệnh (`docker compose up -d`), yêu cầu phần cứng/phần mềm tối thiểu, và đặc tả cấu trúc cây thư mục đĩa CD lưu trữ nộp về Bộ môn Kỹ thuật Dữ liệu / Khoa CNTT:
+    ```text
+    CD_ROM:\
+    ├── SETUP\          (Hướng dẫn cài đặt chi tiết và video/tài liệu demo)
+    ├── SOURCE\         (Toàn bộ mã nguồn dự án: src, configs, scripts, docker-compose.yml)
+    ├── THESIS\
+    │   ├── DOC\        (Bản mềm báo cáo định dạng Microsoft Word .docx)
+    │   └── PDF\        (Bản mềm báo cáo định dạng Adobe Acrobat .pdf)
+    ├── REF\            (Các bài báo khoa học, sách tham khảo, tài liệu BibTeX)
+    └── SOFT\           (Các phần mềm và công cụ cài đặt: Docker, Python, VS Code extensions)
+    ```
+  * **[Các file code liên quan: development.md, README.md, docker-compose.yml, requirements.txt]**

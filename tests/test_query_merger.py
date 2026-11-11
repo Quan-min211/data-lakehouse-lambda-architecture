@@ -161,6 +161,26 @@ class TestAutoCorrectingQueryMerger(unittest.TestCase):
             ch_client=self.ch_client,
         )
 
+    def test_spike_candle_raises_single_price_spike_alert(self):
+        """Nến is_spike = 1 phát đúng một cảnh báo PRICE_SPIKE dù bị truy vấn lặp lại."""
+        from unittest import mock
+        from src.utils.alerting import AlertManager
+
+        spike = dict(self.speed_candles[1], is_spike=1, high_price=62500.0, low_price=60200.0)
+        self.ch_client.set_mock_data("speed_agg", [self.speed_candles[0], spike, self.speed_candles[2]])
+        manager = AlertManager()
+        t_start = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
+        t_end = datetime(2026, 9, 4, 12, 2, 0, tzinfo=timezone.utc)
+
+        with mock.patch("src.serving_layer.query_merger.get_alert_manager", return_value=manager):
+            self.merger.merge_query("BTCUSDT", t_start, t_end)
+            self.merger.merge_query("BTCUSDT", t_start, t_end)
+
+        spike_alerts = [a for a in manager.get_recent_alerts() if a["alert_type"] == "PRICE_SPIKE"]
+        self.assertEqual(len(spike_alerts), 1)
+        # (62500 - 60200) / 60200 = 3.82% đỉnh–đáy < 6% -> WARNING
+        self.assertEqual(spike_alerts[0]["severity"], "WARNING")
+
     def test_case_1_history_query(self):
         """Case 1: T_end <= Watermark -> 100% dữ liệu từ Batch View (Reconciled)."""
         t_start = datetime(2026, 9, 4, 11, 58, 0, tzinfo=timezone.utc)

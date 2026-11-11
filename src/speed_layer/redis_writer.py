@@ -11,6 +11,7 @@ Connection failures are logged and do not fail the streaming micro-batch.
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -35,19 +36,23 @@ class RedisSpeedWriter:
         password: Optional[str] = None,
         ttl_seconds: Optional[int] = None,
         client: Any = None,
-        key_prefix: str = "speed:candle",
+        key_prefix: Optional[str] = None,
+        reconnect_cooldown_seconds: float = 30.0,
     ):
         cfg = get_redis_config()
         self.host = host or cfg.host
         self.port = port or cfg.port
         self.password = password if password is not None else cfg.password
+        # TTL và tiền tố: tham số > biến môi trường > configs/redis/redis.yaml
         self.ttl_seconds = ttl_seconds or cfg.ttl_seconds
-        self.key_prefix = key_prefix
+        self.key_prefix = (key_prefix or cfg.key_prefix).rstrip(":")
         self._client = client
         self._available = True
+        self._last_error_time = 0.0
+        self.reconnect_cooldown_seconds = reconnect_cooldown_seconds
 
     def get_client(self):
-        """Return a Redis client, or None when Redis is unavailable."""
+        """Return a Redis client, or None when Redis is unavailable (with Auto-Reconnect Cooldown)."""
         if self._client is not None:
             return self._client
         if redis is None:
@@ -55,7 +60,9 @@ class RedisSpeedWriter:
             self._available = False
             return None
         if not self._available:
-            return None
+            if time.time() - self._last_error_time < self.reconnect_cooldown_seconds:
+                return None
+            logger.info("Đang thử kết nối lại Redis sau chu kỳ cooldown 30s...")
         try:
             self._client = redis.Redis(
                 host=self.host,
@@ -66,10 +73,13 @@ class RedisSpeedWriter:
                 socket_timeout=2,
             )
             self._client.ping()
+            self._available = True
             return self._client
         except Exception as exc:
             logger.warning("Redis Speed cache unavailable at %s:%s: %s", self.host, self.port, exc)
             self._available = False
+            self._last_error_time = time.time()
+            self._client = None
             return None
 
     @staticmethod
@@ -121,19 +131,32 @@ class RedisSpeedWriter:
         written = 0
         try:
             pipe = client.pipeline()
+            latest_per_symbol: Dict[str, tuple[datetime, str]] = {}
             for record in records:
                 normalized = self.normalize_record(record)
                 window_start = self._to_datetime(record["window_start"])
-                key = self.make_key(normalized["symbol"], window_start)
+                sym = normalized["symbol"]
+                key = self.make_key(sym, window_start)
                 latest_key = f"{self.key_prefix}:{normalized['symbol']}:latest"
                 payload = json.dumps(normalized, separators=(",", ":"))
 
                 pipe.set(key, payload, ex=self.ttl_seconds)
-                pipe.set(latest_key, payload, ex=self.ttl_seconds)
                 written += 1
+
+                # Track latest candle by window_start for each symbol
+                if sym not in latest_per_symbol or window_start > latest_per_symbol[sym][0]:
+                    latest_per_symbol[sym] = (window_start, payload)
+
+            # Write the single latest candle per symbol to :latest key
+            for sym, (_w_start, payload) in latest_per_symbol.items():
+                latest_key = f"{self.key_prefix}:{sym}:latest"
+                pipe.set(latest_key, payload, ex=self.ttl_seconds)
             pipe.execute()
             logger.info("Cached %d Speed candles in Redis", written)
             return written
         except Exception as exc:
             logger.warning("Failed to write Speed candles to Redis: %s", exc)
+            self._available = False
+            self._last_error_time = time.time()
+            self._client = None
             return 0

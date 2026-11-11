@@ -8,7 +8,9 @@ Tu dong nhan dien moi truong Host (Windows/macOS) va Container (Linux) de fallba
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
+
+CONFIGS_DIR = Path(__file__).resolve().parents[2] / "configs"
 
 # ── Load .env tự động nếu tồn tại (host machine dev mode) ────────────────────────
 # override=False: không ghi đè biến đã có sẵn trong môi trường (Docker env)
@@ -19,6 +21,42 @@ try:
         load_dotenv(dotenv_path=_env_file, override=False)
 except ImportError:
     pass  # python-dotenv chua cai -- env vars phai set thu cong
+
+
+def load_yaml_config(relative_path: str) -> Dict[str, Any]:
+    """Đọc một tệp YAML trong thư mục configs/.
+
+    Args:
+        relative_path (str): Đường dẫn tương đối so với configs/, ví dụ "redis/redis.yaml".
+
+    Returns:
+        dict: Nội dung tệp, hoặc dict rỗng nếu tệp không tồn tại, PyYAML chưa
+            được cài, hay tệp không đọc được. Không bao giờ raise.
+    """
+    path = CONFIGS_DIR / relative_path
+    if not path.exists():
+        return {}
+    try:
+        import yaml
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+_REDIS_YAML = load_yaml_config("redis/redis.yaml").get("redis", {}) or {}
+
+
+def get_kafka_topic_specs() -> List[Dict[str, Any]]:
+    """Trả về danh sách đặc tả topic khai báo trong configs/kafka/topics.yaml.
+
+    Returns:
+        list[dict]: Mỗi phần tử có name, partitions, replication_factor,
+            retention_ms, cleanup_policy. Danh sách rỗng nếu không đọc được tệp.
+    """
+    topics = load_yaml_config("kafka/topics.yaml").get("topics", []) or []
+    return [t for t in topics if isinstance(t, dict) and t.get("name")]
 
 
 def _resolve_host(env_var: str, default_host: str) -> str:
@@ -76,11 +114,15 @@ class ClickHouseConfig:
 
 @dataclass
 class RedisConfig:
-    """Cau hinh ket noi Redis Speed Cache."""
+    """Cau hinh ket noi Redis Speed Cache.
+
+    Thu tu uu tien: bien moi truong > configs/redis/redis.yaml > gia tri mac dinh.
+    """
     host: str = _resolve_host("REDIS_HOST", "localhost")
     port: int = int(os.getenv("REDIS_PORT", "6379"))
     password: str = os.getenv("REDIS_PASSWORD", "")
-    ttl_seconds: int = int(os.getenv("REDIS_TTL_SECONDS", "3600"))
+    ttl_seconds: int = int(os.getenv("REDIS_TTL_SECONDS", str(_REDIS_YAML.get("ttl_seconds", 3600))))
+    key_prefix: str = os.getenv("REDIS_KEY_PREFIX", str(_REDIS_YAML.get("key_prefix", "speed:candle"))).rstrip(":")
 
 
 @dataclass

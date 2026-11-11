@@ -9,6 +9,7 @@ Tự động phát hiện và phát tín hiệu cảnh báo khi:
   2. Số lượng bản ghi bị cách ly (Quarantine Spike) tăng đột biến.
   3. Độ trễ luồng xử lý (Streaming Freshness Lag) vượt ngưỡng SLA (> 15 giây).
   4. Mất chuỗi Sequence ID liên tiếp.
+  5. Biến động giá bất thường trong nến OHLCV (Price Spike: is_spike == 1).
 """
 
 from __future__ import annotations
@@ -32,13 +33,15 @@ DEFAULT_DRIFT_THRESHOLD_PCT = float(os.getenv("ALERT_DRIFT_THRESHOLD_PCT", "5.0"
 DEFAULT_QUARANTINE_THRESHOLD = int(os.getenv("ALERT_QUARANTINE_THRESHOLD", "100"))
 DEFAULT_LAG_THRESHOLD_SECONDS = float(os.getenv("ALERT_LAG_THRESHOLD_SECONDS", "15.0"))
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
+# Số nến tối đa được ghi nhớ để khử trùng cảnh báo PRICE_SPIKE
+MAX_SPIKE_ALERT_KEYS = 5000
 
 
 @dataclass
 class AnomalyAlert:
     """Bản ghi cảnh báo bất thường hệ thống."""
     alert_id: str
-    alert_type: str  # VOLUME_DRIFT, QUARANTINE_SPIKE, STREAMING_LAG, SEQUENCE_GAP
+    alert_type: str  # VOLUME_DRIFT, QUARANTINE_SPIKE, STREAMING_LAG, SEQUENCE_GAP, PRICE_SPIKE
     severity: str    # WARNING, CRITICAL
     symbol: str
     message: str
@@ -55,6 +58,8 @@ class AlertManager:
     def __init__(self, max_history: int = 200):
         self._history: Deque[AnomalyAlert] = deque(maxlen=max_history)
         self._drift_streak: Dict[str, int] = {}
+        # Các nến (symbol, window_start) đã phát PRICE_SPIKE, giữ theo thứ tự chèn
+        self._spike_alerted: Dict[tuple, None] = {}
         self._webhook_url = ALERT_WEBHOOK_URL
 
     @classmethod
@@ -174,6 +179,74 @@ class AlertManager:
                 symbol=symbol,
                 message=f"Độ tươi dữ liệu (freshness lag = {lag_seconds:.1f}s) vượt ngưỡng SLA {threshold_seconds}s.",
                 metrics={"lag_seconds": lag_seconds, "threshold_seconds": threshold_seconds},
+            )
+        return None
+
+    def check_price_spike(
+        self,
+        symbol: str,
+        candle: Dict[str, Any],
+    ) -> Optional[AnomalyAlert]:
+        """Kiểm tra và phát cảnh báo bất thường biến động giá (Price Spike).
+
+        Kích hoạt khi candle có trường is_spike == 1 hoặc is_spike is True.
+        Mỗi cây nến (symbol, window_start) chỉ phát cảnh báo một lần, để các
+        truy vấn lặp lại của Dashboard không sinh cảnh báo trùng.
+
+        Args:
+            symbol (str): Cặp giao dịch.
+            candle (dict): Nến OHLCV có trường is_spike.
+
+        Returns:
+            Optional[AnomalyAlert]: Cảnh báo vừa phát, hoặc None nếu không phát.
+        """
+        is_spike_val = candle.get("is_spike")
+        if is_spike_val is True or is_spike_val == 1 or str(is_spike_val) == "1":
+            open_p = float(candle.get("open_price", candle.get("open", 0.0)))
+            close_p = float(candle.get("close_price", candle.get("close", 0.0)))
+            high_p = float(candle.get("high_price", candle.get("high", 0.0)))
+            low_p = float(candle.get("low_price", candle.get("low", 0.0)))
+            volume = float(candle.get("volume", 0.0))
+            window_start = str(candle.get("window_start", ""))
+
+            dedupe_key = (symbol.upper(), window_start)
+            with self._lock:
+                if dedupe_key in self._spike_alerted:
+                    return None
+                self._spike_alerted[dedupe_key] = None
+                if len(self._spike_alerted) > MAX_SPIKE_ALERT_KEYS:
+                    self._spike_alerted.pop(next(iter(self._spike_alerted)))
+
+            amplitude_pct = (
+                round(abs(close_p - open_p) / open_p * 100.0, 3)
+                if open_p > 0
+                else 0.0
+            )
+            range_pct = (
+                round((high_p - low_p) / low_p * 100.0, 3)
+                if low_p > 0
+                else 0.0
+            )
+
+            severity = "CRITICAL" if amplitude_pct >= 5.0 or range_pct >= 6.0 else "WARNING"
+            return self.trigger_alert(
+                alert_type="PRICE_SPIKE",
+                severity=severity,
+                symbol=symbol,
+                message=(
+                    f"Phát hiện biến động giá bất thường (Price Spike) cho {symbol}: "
+                    f"Biên độ Đóng–Mở = {amplitude_pct}%, Biên độ Đỉnh–Đáy = {range_pct}%."
+                ),
+                metrics={
+                    "window_start": window_start,
+                    "open_price": open_p,
+                    "close_price": close_p,
+                    "high_price": high_p,
+                    "low_price": low_p,
+                    "volume": volume,
+                    "amplitude_pct": amplitude_pct,
+                    "range_pct": range_pct,
+                },
             )
         return None
 

@@ -118,7 +118,7 @@ _configure_spark_python_path()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.utils.logger import setup_logger
-from src.utils.config import get_kafka_config, get_clickhouse_config  # noqa: F401
+from src.utils.config import get_kafka_config, get_clickhouse_config, get_kafka_topic_specs  # noqa: F401
 from src.speed_layer.window_aggregator import WindowAggregator
 from src.speed_layer.clickhouse_writer import ClickHouseSpeedWriter
 
@@ -301,22 +301,45 @@ class SpeedLayerStreamingJob:
         self.ch_writer = ClickHouseSpeedWriter()
 
     def _ensure_topic_exists(self) -> None:
-        """Kiem tra va tu dong tao Kafka topic neu chua ton tai."""
+        """Kiem tra va tu dong tao cac Kafka topic con thieu.
+
+        Dac ta topic (partitions, replication, retention.ms, cleanup.policy) lay tu
+        configs/kafka/topics.yaml. Topic dau vao cua job luon duoc bao dam ton tai;
+        neu YAML khong khai bao no, dung mac dinh 3 partitions, replication 1.
+        """
         try:
             from kafka.admin import KafkaAdminClient, NewTopic
-            from kafka.errors import TopicAlreadyExistsError
+
+            specs = {spec["name"]: spec for spec in get_kafka_topic_specs()}
+            specs.setdefault(self.topic, {"name": self.topic, "partitions": 3, "replication_factor": 1})
 
             admin = KafkaAdminClient(
                 bootstrap_servers=self.kafka_bootstrap,
                 client_id="speed_layer_admin",
                 request_timeout_ms=5000,
             )
-            existing = admin.list_topics()
-            if self.topic not in existing:
-                logger.info("Kafka topic '%s' chua ton tai. Dang tao moi...", self.topic)
-                new_topic = NewTopic(name=self.topic, num_partitions=3, replication_factor=1)
-                admin.create_topics(new_topics=[new_topic], validate_only=False)
-                logger.info("Da tao thanh cong Kafka topic '%s' (3 partitions)!", self.topic)
+            existing = set(admin.list_topics())
+            new_topics = []
+            for name, spec in specs.items():
+                if name in existing:
+                    continue
+                topic_configs = {}
+                if spec.get("retention_ms") is not None:
+                    topic_configs["retention.ms"] = str(spec["retention_ms"])
+                if spec.get("cleanup_policy"):
+                    topic_configs["cleanup.policy"] = str(spec["cleanup_policy"])
+                new_topics.append(NewTopic(
+                    name=name,
+                    num_partitions=int(spec.get("partitions", 3)),
+                    replication_factor=int(spec.get("replication_factor", 1)),
+                    topic_configs=topic_configs,
+                ))
+            if new_topics:
+                admin.create_topics(new_topics=new_topics, validate_only=False)
+                logger.info(
+                    "Da tao Kafka topic theo topics.yaml: %s",
+                    ", ".join(f"{t.name} ({t.num_partitions} partitions)" for t in new_topics),
+                )
                 import time
                 time.sleep(2)  # Cho metadata propagate tren cac broker
             admin.close()

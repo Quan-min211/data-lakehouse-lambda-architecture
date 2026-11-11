@@ -178,7 +178,7 @@ def generate_fallback_market_data(
         low_p = min(open_p, close_p) * (1 - abs(random.gauss(0, 0.002)))
         volume = round(random.uniform(2.0, 25.0), 4)
         vwap = round((open_p + high_p + low_p + close_p) / 4.0, 2)
-        is_spike = 1 if abs(close_p - open_p) / open_p >= 0.015 else 0
+        is_spike = 1 if abs(close_p - open_p) / open_p >= 0.015 or (high_p - low_p) / low_p >= 0.030 else 0
 
         # Phân loại trạng thái theo Watermark
         status = "Reconciled" if curr < wm else "Provisional"
@@ -332,10 +332,10 @@ def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
     """Tab nhật ký phát hiện biến động giá bất thường."""
     section_header(
         "Biến động bất thường",
-        "Nến có biên độ |close − open| / open vượt ngưỡng của SpikeDetector trong Speed Layer.",
+        "Nến có biên độ |close − open| / open hoặc biên độ đỉnh–đáy (high − low) / low vượt ngưỡng của SpikeDetector trong Speed Layer.",
         "alert",
     )
-    spike_candles = [c for c in candles if c.get("is_spike") == 1]
+    spike_candles = [c for c in candles if c.get("is_spike") == 1 or c.get("is_spike") is True]
     if not spike_candles:
         st.info("Không ghi nhận nến biến động bất thường trong khung thời gian đang xem.")
         return
@@ -343,18 +343,32 @@ def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
     spike_df["amplitude_pct"] = (
         (spike_df["close_price"] - spike_df["open_price"]) / spike_df["open_price"] * 100
     ).round(3)
+    spike_df["range_pct"] = (
+        (spike_df["high_price"] - spike_df["low_price"]) / spike_df["low_price"] * 100
+    ).round(3)
     st.dataframe(
         spike_df,
         use_container_width=True,
         hide_index=True,
-        column_order=["window_start", "open_price", "close_price", "high_price", "low_price", "amplitude_pct", "volume", "status"],
+        column_order=[
+            "window_start",
+            "open_price",
+            "close_price",
+            "high_price",
+            "low_price",
+            "amplitude_pct",
+            "range_pct",
+            "volume",
+            "status",
+        ],
         column_config={
             "window_start": st.column_config.DatetimeColumn("Thời điểm (UTC)", format="YYYY-MM-DD HH:mm"),
             "open_price": st.column_config.NumberColumn("Open", format="%.4f"),
             "close_price": st.column_config.NumberColumn("Close", format="%.4f"),
             "high_price": st.column_config.NumberColumn("High", format="%.4f"),
             "low_price": st.column_config.NumberColumn("Low", format="%.4f"),
-            "amplitude_pct": st.column_config.NumberColumn("Biên độ (%)", format="%.3f"),
+            "amplitude_pct": st.column_config.NumberColumn("Biên độ Đóng–Mở (%)", format="%.3f"),
+            "range_pct": st.column_config.NumberColumn("Biên độ Đỉnh–Đáy (%)", format="%.3f"),
             "volume": st.column_config.NumberColumn("Volume", format="%.4f"),
             "status": st.column_config.TextColumn("Trạng thái"),
         },

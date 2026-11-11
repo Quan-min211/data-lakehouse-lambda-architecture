@@ -1,14 +1,17 @@
 {
-  "": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CryptoTradeEvent",
-  "description": "Schema chuan hoa cho su kien giao dich tien ma hoa (Normalized Binance Trade Event)",
+  "description": "Schema chuan hoa cho su kien giao dich tien ma hoa (Normalized Binance Trade Event). Cac rang buoc khop voi Data Quality Gate trong src/data_quality/dq_checks.py.",
   "type": "object",
   "properties": {
     "trade_id": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "symbol": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Z0-9]+$"
     },
     "price": {
       "type": "number",
@@ -19,13 +22,15 @@
       "minimum": 1e-8
     },
     "trade_time": {
-      "type": "integer"
+      "type": "integer",
+      "exclusiveMinimum": 0
     },
     "is_buyer_maker": {
       "type": "boolean"
     },
     "ingestion_time": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "is_injected": {
       "type": "boolean",
@@ -35,6 +40,14 @@
       "type": [
         "string",
         "null"
+      ],
+      "enum": [
+        "duplicate",
+        "late_data",
+        "out_of_order",
+        "schema_invalid",
+        "negative_price",
+        null
       ]
     }
   },

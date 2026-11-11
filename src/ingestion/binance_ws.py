@@ -198,6 +198,10 @@ class BinanceWebSocketProducer:
                             f"✓ [AUTO-BACKFILL SUCCESS] Đã bù đắp {published} trades cho {symbol} (từ ID {from_id})."
                         )
                     return
+                logger.warning(
+                    f"Auto-backfill dừng cho {symbol} (từ ID {from_id}): Binance trả HTTP {resp.status_code}, "
+                    f"không thử lại. Khoảng thiếu sẽ do Batch Layer xử lý."
+                )
                 break
             except Exception as e:
                 if attempt == max_retries:
@@ -226,6 +230,11 @@ class BinanceWebSocketProducer:
                 retry_count = 0
             except KeyboardInterrupt:
                 logger.info("Nhận tín hiệu dừng từ người dùng.")
+                # Phát nốt các sự kiện out-of-order đang bị FaultInjector giữ lại
+                if self.producer:
+                    for evt in self.fault_injector.drain_pending():
+                        self.producer.send_trade(evt)
+                        self.total_events_published += 1
                 break
             except Exception as e:
                 retry_count += 1

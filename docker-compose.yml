@@ -270,6 +270,7 @@ services:
       - PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
     volumes:
       - ./src:/app/src
+      - ./configs:/app/configs:ro    # topics.yaml + redis.yaml duoc src/utils/config.py nap
       - speed-checkpoints:/app/checkpoints
     depends_on:
       kafka:
@@ -430,6 +431,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     volumes:
       - ./src:/app/src
+      - ./configs:/app/configs:ro    # redis.yaml (key_prefix cho /api/speed/latest)
     depends_on:
       clickhouse:
         condition: service_healthy

@@ -2,5 +2,5 @@
 redis:
   host: "localhost"
   port: 6379
-  ttl_seconds: 300 # 5 minutes TTL for speed views
-  key_prefix: "speed_view:"
+  ttl_seconds: 3600 # 1 hour TTL for speed views
+  key_prefix: "speed:candle"

@@ -24,7 +24,24 @@ class ResilientKafkaProducer:
         """Khởi tạo Producer với danh sách Kafka Brokers."""
         self.bootstrap_servers = bootstrap_servers or config.kafka.bootstrap_servers
         self._producer: Optional[KafkaProducer] = None
+        # Số bản ghi broker từ chối sau khi send() đã trả về (lỗi bất đồng bộ)
+        self.async_send_failures: int = 0
         self._connect()
+
+    def _on_send_error(self, topic: str, key: Optional[str]):
+        """Tạo errback ghi nhận lỗi gửi bất đồng bộ cho một bản ghi.
+
+        Args:
+            topic (str): Topic đích của bản ghi.
+            key (str, optional): Khóa phân vùng của bản ghi.
+
+        Returns:
+            Callable: Hàm errback gắn vào future của kafka-python.
+        """
+        def _errback(exc: Exception) -> None:
+            self.async_send_failures += 1
+            logger.error(f"Broker từ chối bản ghi (topic={topic}, key={key}): {exc}")
+        return _errback
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -59,7 +76,9 @@ class ResilientKafkaProducer:
             topic (str, optional): Tên topic (mặc định lấy từ config: crypto_trades_raw).
 
         Returns:
-            bool: True nếu gửi thành công, False nếu thất bại.
+            bool: True nếu bản ghi đã vào bộ đệm của producer, False nếu thất bại ngay.
+                Lỗi broker phát sinh sau đó được ghi nhận qua errback
+                (`async_send_failures`), không làm chặn luồng gọi.
         """
         if not self._producer:
             logger.error("Producer chưa sẵn sàng kết nối!")
@@ -68,11 +87,12 @@ class ResilientKafkaProducer:
         target_topic = topic or config.kafka.topic_raw
         try:
             # Key partition theo symbol (BTCUSDT, ETHUSDT) để cùng symbol luôn vào cùng 1 partition
-            self._producer.send(
+            future = self._producer.send(
                 topic=target_topic,
                 key=event.symbol,
                 value=event.to_dict()
             )
+            future.add_errback(self._on_send_error(target_topic, event.symbol))
             return True
         except KafkaError as ke:
             logger.error(f"Lỗi gửi tin tới topic {target_topic}: {ke}")
@@ -96,11 +116,12 @@ class ResilientKafkaProducer:
 
         target_topic = topic or config.kafka.topic_dlq
         try:
-            self._producer.send(
+            future = self._producer.send(
                 topic=target_topic,
                 key=dlq_event.source_stream,
                 value=dlq_event.to_dict()
             )
+            future.add_errback(self._on_send_error(target_topic, dlq_event.source_stream))
             logger.warning(f"Đã chuyển bản ghi lỗi vào DLQ ({target_topic}): {dlq_event.error_reason}")
             return True
         except Exception as ex:

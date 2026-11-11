@@ -192,10 +192,54 @@ def run_single_benchmark_iteration(
     }
 
 
+def align_csv_header(path: Path, fieldnames: List[str]) -> bool:
+    """Đồng bộ dòng tiêu đề của một tệp CSV đã có với danh sách cột hiện tại.
+
+    Nếu tiêu đề cũ khác `fieldnames`, tệp được ghi lại với tiêu đề mới. Mỗi dòng
+    cũ được ánh xạ theo số cột của nó: dòng có đúng số cột của tiêu đề cũ dùng
+    tiêu đề cũ, dòng có đúng số cột mới dùng tiêu đề mới; cột thiếu để trống.
+
+    Args:
+        path (Path): Tệp CSV cần kiểm tra.
+        fieldnames (List[str]): Thứ tự cột mà script hiện sinh ra.
+
+    Returns:
+        bool: True nếu tệp đã được ghi lại, False nếu không cần sửa.
+    """
+    if not path.exists():
+        return False
+    with path.open("r", newline="", encoding="utf-8") as fh:
+        rows = list(csv.reader(fh))
+    if not rows or rows[0] == fieldnames:
+        return False
+
+    old_header = rows[0]
+    aligned: List[Dict[str, str]] = []
+    for raw in rows[1:]:
+        if not raw:
+            continue
+        if len(raw) == len(fieldnames):
+            names = fieldnames
+        elif len(raw) == len(old_header):
+            names = old_header
+        else:
+            logger.warning("Bỏ qua dòng CSV có %d cột không khớp tiêu đề nào: %s", len(raw), raw[:2])
+            continue
+        aligned.append(dict(zip(names, raw)))
+
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore", restval="")
+        writer.writeheader()
+        writer.writerows(aligned)
+    logger.info("Đã đồng bộ tiêu đề CSV %s (%d dòng)", path, len(aligned))
+    return True
+
+
 def write_results_to_csv(results: List[Dict[str, Any]]) -> None:
     """Lưu kết quả chi tiết từng lượt chạy vào CSV."""
     RESULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
     fieldnames = list(results[0].keys())
+    align_csv_header(RAW_RESULTS_CSV, fieldnames)
     is_new = not RAW_RESULTS_CSV.exists()
     with RAW_RESULTS_CSV.open("a", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -337,7 +381,7 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=3, help="Số lượt kiểm thử độc lập (mặc định: 3)")
     parser.add_argument("--count", type=int, default=5000, help="Số lượng records mỗi lượt (mặc định: 5000)")
     parser.add_argument("--symbol", default="BTCUSDT", help="Symbol coin thử nghiệm (mặc định: BTCUSDT)")
-    parser.add_argument("--fault-rate", type=float, default=0.20, help="Tỷ lệ tiêm lỗi (mặc định: 0.20 = 20%)")
+    parser.add_argument("--fault-rate", type=float, default=0.20, help="Tỷ lệ tiêm lỗi (mặc định: 0.20 = 20%%)")
     parser.add_argument("--no-plot", action="store_true", help="Không vẽ biểu đồ")
     args = parser.parse_args()
 
