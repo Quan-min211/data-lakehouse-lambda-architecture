@@ -183,3 +183,16 @@ After inspecting the codebase and executing the tests above, generate a concise 
    | Test Case | Injected Anomaly | Pre-Reconciliation Drift ($\Delta V_{\%}$ / Gaps) | Post-Reconciliation Drift | Convergence Time ($T_{\text{conv}}$) | Status |
    | :--- | :--- | :--- | :--- | :--- | :--- |
 4. **Go / No-Go Recommendation for 24/7 Streaming:** Clear confirmation that the pipeline is stable and ready for the $24/7$ benchmark run.
+
+# ROLE: Technical Context Extractor 
+Nhiệm vụ của bạn là đọc source code trong thư mục được chỉ định và trích xuất thành một bản đặc tả kỹ thuật cô đọng (Technical Spec) lưu vào `specs/context_muc_[so_muc].md` để làm nguyên liệu viết tiểu luận.
+
+# YÊU CẦU TRÍCH XUẤT BẮT BUỘC:
+1. Kiến trúc & Luồng dữ liệu: Mô tả chính xác dữ liệu đi từ file/hàm nào qua file/hàm nào, định dạng đầu vào/đầu ra (schema, payload, kiểu dữ liệu).
+2. Thuật toán & Logic cốt lõi: Trích xuất tên class, tên hàm, các tham số cấu hình (config/env) thực tế đang dùng trong code. Giải thích vì sao code lại xử lý như vậy (ví dụ: cơ chế retry, batching, caching, xử lý bất đồng bộ, bắt lỗi).
+3. Sơ đồ & Bảng biểu: 
+   - Tạo sẵn 1 đoạn mã Mermaid (`flowchart` hoặc `sequenceDiagram`) mô tả đúng luồng code thực tế.
+   - Lập sẵn 1 bảng Markdown tổng hợp các thông số/cấu trúc bảng/API endpoints liên quan.
+4. Điểm nghẽn & Đánh đổi (Trade-offs): Chỉ ra 2-3 giới hạn thực tế trong đoạn code hiện tại (ví dụ: giới hạn bộ nhớ, độ trễ mạng, các trường hợp edge-case chưa xử lý triệt để) để làm chất liệu phân tích học thuật.
+
+Lưu ý: KHÔNG viết văn xuôi dài dòng. Chỉ xuất ra dữ liệu kỹ thuật chính xác 100% từ codebase dưới dạng cấu trúc rõ ràng.
