@@ -19,6 +19,7 @@ from typing import Any, Dict
 
 from dagster import (
     AssetIn,
+    DefaultScheduleStatus,
     Definitions,
     MetadataValue,
     Output,
@@ -74,7 +75,8 @@ def bronze_crypto_trades(context) -> Output[Dict[str, Any]]:
     kafka_read = read_kafka_records() if from_kafka else None
     records = kafka_read.records if kafka_read is not None else load_default_records(from_kafka=False)
 
-    write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "false").lower() == "true"
+    # Dong bo voi CLI (spark_batch_jobs.py): chap nhan ca "true" lan "1"
+    write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "").strip().lower() in {"true", "1"}
     iceberg_strict = os.getenv("BATCH_ICEBERG_STRICT", "false").lower() == "true"
     iceberg_result = (
         maybe_write_bronze_to_iceberg(records, batch_run_id, strict=iceberg_strict)
@@ -385,12 +387,16 @@ batch_pipeline_schedule = ScheduleDefinition(
     job=batch_lakehouse_pipeline_job,
     cron_schedule="*/15 * * * *",
     description="Run Batch Lakehouse Pipeline every 15 minutes.",
+    # Bat lich ngay khi nap code location; mac dinh Dagster de lich o trang thai STOPPED
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 compaction_schedule = ScheduleDefinition(
     job=iceberg_compaction_job,
     cron_schedule="0 */2 * * *",
     description="Run Iceberg compaction every 2 hours.",
+    # Bat lich ngay khi nap code location; mac dinh Dagster de lich o trang thai STOPPED
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 all_assets = [

@@ -7,8 +7,9 @@ cho Lambda Lakehouse Architecture.
 Tự động phát hiện và phát tín hiệu cảnh báo khi:
   1. Sai lệch khối lượng đối soát (Volume Drift ΔV%) vượt ngưỡng (> 5%).
   2. Số lượng bản ghi bị cách ly (Quarantine Spike) tăng đột biến.
-  3. Độ trễ luồng xử lý (Streaming Freshness Lag) vượt ngưỡng SLA (> 15 giây).
-  4. Mất chuỗi Sequence ID liên tiếp.
+  3. Độ trễ Watermark (Freshness Lag = T_end - W) vượt chu kỳ Batch:
+     WARNING khi > 900 giây (15 phút), CRITICAL khi >= 1800 giây (30 phút).
+  4. Mất chuỗi Sequence ID liên tiếp (sequence_gap_count > 0 trong reconciliation_audit_metrics).
   5. Biến động giá bất thường trong nến OHLCV (Price Spike: is_spike == 1).
 """
 
@@ -31,7 +32,16 @@ logger = setup_logger("alerting")
 # Ngưỡng mặc định có thể cấu hình qua biến môi trường
 DEFAULT_DRIFT_THRESHOLD_PCT = float(os.getenv("ALERT_DRIFT_THRESHOLD_PCT", "5.0"))
 DEFAULT_QUARANTINE_THRESHOLD = int(os.getenv("ALERT_QUARANTINE_THRESHOLD", "100"))
-DEFAULT_LAG_THRESHOLD_SECONDS = float(os.getenv("ALERT_LAG_THRESHOLD_SECONDS", "15.0"))
+# Do tre Watermark: Batch nang W moi 15 phut, nen lag duoi 900 s la binh thuong.
+# Ten bien cu ALERT_LAG_THRESHOLD_SECONDS van duoc chap nhan cho nguong WARNING.
+DEFAULT_LAG_WARNING_SECONDS = float(
+    os.getenv("ALERT_LAG_WARNING_SECONDS", os.getenv("ALERT_LAG_THRESHOLD_SECONDS", "900.0"))
+)
+DEFAULT_LAG_CRITICAL_SECONDS = float(os.getenv("ALERT_LAG_CRITICAL_SECONDS", "1800.0"))
+# Ty le hut chuoi (%) tu do canh bao SEQUENCE_GAP chuyen tu WARNING sang CRITICAL
+DEFAULT_GAP_CRITICAL_PCT = float(os.getenv("ALERT_GAP_CRITICAL_PCT", "1.0"))
+# Giu ten cu de tuong thich nguoc voi ma goi
+DEFAULT_LAG_THRESHOLD_SECONDS = DEFAULT_LAG_WARNING_SECONDS
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
 # Số nến tối đa được ghi nhớ để khử trùng cảnh báo PRICE_SPIKE
 MAX_SPIKE_ALERT_KEYS = 5000
@@ -60,6 +70,10 @@ class AlertManager:
         self._drift_streak: Dict[str, int] = {}
         # Các nến (symbol, window_start) đã phát PRICE_SPIKE, giữ theo thứ tự chèn
         self._spike_alerted: Dict[tuple, None] = {}
+        # Cac batch_run_id da phat QUARANTINE_SPIKE (moi lo chi canh bao mot lan)
+        self._quarantine_alerted: Dict[str, None] = {}
+        # Cac (run_id, symbol) da phat SEQUENCE_GAP
+        self._gap_alerted: Dict[tuple, None] = {}
         self._webhook_url = ALERT_WEBHOOK_URL
 
     @classmethod
@@ -152,35 +166,119 @@ class AlertManager:
         quarantined_count: int,
         total_count: int,
         threshold: int = DEFAULT_QUARANTINE_THRESHOLD,
+        batch_run_id: Optional[str] = None,
     ) -> Optional[AnomalyAlert]:
-        """Kiểm tra tỷ lệ cách ly bản ghi lỗi tăng vọt."""
-        if quarantined_count >= threshold:
-            rejection_pct = round(quarantined_count / max(total_count, 1) * 100.0, 2)
-            return self.trigger_alert(
-                alert_type="QUARANTINE_SPIKE",
-                severity="CRITICAL",
-                symbol="GLOBAL",
-                message=f"Số lượng bản ghi bị cách ly ({quarantined_count}) tăng đột biến ({rejection_pct}% tổng số).",
-                metrics={"quarantined_count": quarantined_count, "total_count": total_count, "rejection_pct": rejection_pct},
-            )
-        return None
+        """Kiểm tra số bản ghi bị cách ly của một lô Batch tăng vọt.
+
+        Args:
+            quarantined_count: Số bản ghi bị cách ly trong lô.
+            total_count: Tổng số bản ghi của lô (cách ly + hợp lệ).
+            threshold: Ngưỡng số bản ghi cách ly kích hoạt cảnh báo.
+            batch_run_id: Mã lô; nếu có, mỗi lô chỉ phát cảnh báo một lần
+                (Dashboard gọi lặp lại mỗi chu kỳ làm mới).
+
+        Returns:
+            Optional[AnomalyAlert]: Cảnh báo vừa phát, hoặc None.
+        """
+        if quarantined_count < threshold:
+            return None
+        if batch_run_id:
+            with self._lock:
+                if batch_run_id in self._quarantine_alerted:
+                    return None
+                self._quarantine_alerted[batch_run_id] = None
+                if len(self._quarantine_alerted) > MAX_SPIKE_ALERT_KEYS:
+                    self._quarantine_alerted.pop(next(iter(self._quarantine_alerted)))
+        rejection_pct = round(quarantined_count / max(total_count, 1) * 100.0, 2)
+        return self.trigger_alert(
+            alert_type="QUARANTINE_SPIKE",
+            severity="CRITICAL",
+            symbol="GLOBAL",
+            message=f"Số lượng bản ghi bị cách ly ({quarantined_count}) tăng đột biến ({rejection_pct}% tổng số).",
+            metrics={
+                "quarantined_count": quarantined_count,
+                "total_count": total_count,
+                "rejection_pct": rejection_pct,
+                "batch_run_id": batch_run_id or "",
+            },
+        )
+
+    def check_sequence_gap(
+        self,
+        symbol: str,
+        sequence_gap_count: int,
+        sequence_gap_rate: float = 0.0,
+        run_id: Optional[str] = None,
+        critical_pct: float = DEFAULT_GAP_CRITICAL_PCT,
+    ) -> Optional[AnomalyAlert]:
+        """Cảnh báo mất chuỗi trade_id (Sequence Gap) từ bảng kiểm toán đối soát.
+
+        Args:
+            symbol: Cặp giao dịch.
+            sequence_gap_count: Tổng số trade_id bị thiếu (sequence_gap_count) của lô.
+            sequence_gap_rate: Tỷ lệ hụt chuỗi R_gap (%) lớn nhất của lô.
+            run_id: Mã lô kiểm toán; mỗi (run_id, symbol) chỉ cảnh báo một lần.
+            critical_pct: R_gap (%) từ đó cảnh báo là CRITICAL.
+
+        Returns:
+            Optional[AnomalyAlert]: Cảnh báo vừa phát, hoặc None nếu không có khoảng hở.
+        """
+        if sequence_gap_count <= 0:
+            return None
+        if run_id:
+            key = (run_id, symbol.upper())
+            with self._lock:
+                if key in self._gap_alerted:
+                    return None
+                self._gap_alerted[key] = None
+                if len(self._gap_alerted) > MAX_SPIKE_ALERT_KEYS:
+                    self._gap_alerted.pop(next(iter(self._gap_alerted)))
+        severity = "CRITICAL" if sequence_gap_rate >= critical_pct else "WARNING"
+        return self.trigger_alert(
+            alert_type="SEQUENCE_GAP",
+            severity=severity,
+            symbol=symbol,
+            message=(
+                f"Phát hiện {sequence_gap_count} trade_id bị thiếu trong chuỗi "
+                f"(R_gap = {sequence_gap_rate:.4f}%)."
+            ),
+            metrics={
+                "sequence_gap_count": sequence_gap_count,
+                "sequence_gap_rate": sequence_gap_rate,
+                "critical_pct": critical_pct,
+                "run_id": run_id or "",
+            },
+        )
 
     def check_streaming_lag(
         self,
         symbol: str,
         lag_seconds: float,
-        threshold_seconds: float = DEFAULT_LAG_THRESHOLD_SECONDS,
+        threshold_seconds: float = DEFAULT_LAG_WARNING_SECONDS,
+        critical_seconds: float = DEFAULT_LAG_CRITICAL_SECONDS,
     ) -> Optional[AnomalyAlert]:
-        """Kiểm tra độ trễ luồng xử lý streaming."""
-        if lag_seconds > threshold_seconds:
-            return self.trigger_alert(
-                alert_type="STREAMING_LAG",
-                severity="WARNING" if lag_seconds < 60.0 else "CRITICAL",
-                symbol=symbol,
-                message=f"Độ tươi dữ liệu (freshness lag = {lag_seconds:.1f}s) vượt ngưỡng SLA {threshold_seconds}s.",
-                metrics={"lag_seconds": lag_seconds, "threshold_seconds": threshold_seconds},
-            )
-        return None
+        """Kiểm tra độ trễ Watermark (freshness lag = T_end - W).
+
+        WARNING khi lag > threshold_seconds (mặc định 900 s = một chu kỳ Batch),
+        CRITICAL khi lag >= critical_seconds (mặc định 1800 s = lỡ hai chu kỳ).
+        """
+        if lag_seconds <= threshold_seconds:
+            return None
+        severity = "CRITICAL" if lag_seconds >= critical_seconds else "WARNING"
+        return self.trigger_alert(
+            alert_type="STREAMING_LAG",
+            severity=severity,
+            symbol=symbol,
+            message=(
+                f"Độ trễ Watermark (freshness lag = {lag_seconds:.1f}s) vượt ngưỡng "
+                f"{threshold_seconds:.0f}s (CRITICAL từ {critical_seconds:.0f}s)."
+            ),
+            metrics={
+                "lag_seconds": lag_seconds,
+                "threshold_seconds": threshold_seconds,
+                "critical_seconds": critical_seconds,
+            },
+        )
 
     def check_price_spike(
         self,

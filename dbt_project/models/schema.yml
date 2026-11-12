@@ -13,6 +13,11 @@ models:
 
   - name: silver_cleaned_trades
     description: "Validated and deduplicated TradeEvent records. Partitioned by trade_date (daily)."
+    tests:
+      # trade_id cua Binance chi duy nhat trong tung symbol, nen kiem tra unique tren khoa
+      # ghep (symbol, trade_id) - dung khoa khu trung cua row_number() va dq_checks.py
+      - unique:
+          column_name: "concat(symbol, ':', cast(trade_id as string))"
     columns:
       - name: trade_id
         tests:

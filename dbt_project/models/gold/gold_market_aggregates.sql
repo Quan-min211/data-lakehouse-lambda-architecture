@@ -4,6 +4,7 @@ with bucketed as (
     select
         symbol,
         window(trade_time_ts, '1 minute') as trade_window,
+        trade_id,
         price,
         quantity,
         trade_time
@@ -15,10 +16,11 @@ aggregated as (
         symbol,
         trade_window.start as window_start,
         trade_window.end as window_end,
-        min(named_struct('trade_time', trade_time, 'price', price)).price as open_price,
+        -- Trùng mili-giây thì phá thế hòa theo trade_id (giống sort (trade_time, trade_id) của Python)
+        min(named_struct('trade_time', trade_time, 'trade_id', trade_id, 'price', price)).price as open_price,
         max(price) as high_price,
         min(price) as low_price,
-        max(named_struct('trade_time', trade_time, 'price', price)).price as close_price,
+        max(named_struct('trade_time', trade_time, 'trade_id', trade_id, 'price', price)).price as close_price,
         sum(quantity) as volume,
         count(*) as trade_count,
         sum(price * quantity) / sum(quantity) as vwap

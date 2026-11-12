@@ -5,13 +5,15 @@ TRÁI TIM CỦA KIẾN TRÚC LAMBDA NÂNG CẤP:
 Auto-Correcting Query Merger (Bộ Ghép Nối Dữ Liệu Tự Động Sửa Sai).
 
 Thuật toán tự động phân luồng truy vấn theo mốc System Watermark (W):
-- CASE 1 (History):   T_end <= W  --> 100% Batch View (Reconciled)
-- CASE 2 (Realtime):  T_start > W --> 100% Speed View (Provisional)
-- CASE 3 (Hybrid):    T_start <= W < T_end --> Cắt đôi cửa sổ:
-                      * [T_start, W]  lấy từ Batch View (Reconciled)
-                      * (W, T_end]    lấy từ Speed View (Provisional)
-                      * Ghép nối bảo đảm ZERO DOUBLE-COUNTING!
-                      * Tính sai số hiệu chỉnh: delta = |VWAP_speed - VWAP_batch|
+Mọi khoảng đều nửa mở theo window_start: window_start >= start AND window_start < end.
+- CASE 1 (History):   T_end <= W  --> 100% Batch View [T_start, T_end) (Reconciled)
+- CASE 2 (Realtime):  T_start >= W --> 100% Speed View [T_start, T_end) (Provisional)
+- CASE 3 (Hybrid):    T_start < W < T_end --> Cắt đôi cửa sổ tại W:
+                      * [T_start, W)  lấy từ batch_agg (Reconciled)
+                      * [W, T_end)    lấy từ speed_agg (Provisional)
+                      * Hai khoảng nửa mở không giao nhau -> ZERO DOUBLE-COUNTING
+                      * Truy vấn thứ ba speed_agg trên [T_start, W) để tính
+                        delta = |VWAP_speed - VWAP_batch| tại window_start chung muộn nhất
 """
 
 from datetime import datetime, timezone
@@ -133,7 +135,7 @@ class AutoCorrectingQueryMerger:
             source_breakdown["batch"] = len(raw_batch)
 
         # ---------------------------------------------------------------------
-        # CASE 2: TOÀN BỘ LÀ DỮ LIỆU THỜI GIAN THỰC (T_start > Watermark)
+        # CASE 2: TOÀN BỘ LÀ DỮ LIỆU THỜI GIAN THỰC (T_start >= Watermark)
         # ---------------------------------------------------------------------
         elif start_time >= watermark:
             query_case = QueryCase.CASE_2_REALTIME
@@ -153,7 +155,7 @@ class AutoCorrectingQueryMerger:
             source_breakdown["speed"] = len(raw_speed)
 
         # ---------------------------------------------------------------------
-        # CASE 3: GIAO THOA LAI (T_start <= Watermark < T_end)
+        # CASE 3: GIAO THOA LAI (T_start < Watermark < T_end)
         # ---------------------------------------------------------------------
         else:
             query_case = QueryCase.CASE_3_HYBRID

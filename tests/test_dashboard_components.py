@@ -112,6 +112,73 @@ class TestDashboardComponents(unittest.TestCase):
         self.assertGreater(len(records), 0)
 
 
+class TestUiBackendSync(unittest.TestCase):
+    """Kiểm thử bản vá đồng bộ Dashboard / AlertManager với Backend."""
+
+    def test_dq_empty_table_is_live_and_clean(self):
+        """Kết nối được nhưng bảng rỗng -> (rỗng, True), không đổ dữ liệu mẫu."""
+        from unittest import mock
+        fake_client = mock.MagicMock()
+        fake_client.query.return_value = mock.MagicMock(column_names=["batch_run_id"], result_rows=[])
+        fake_module = mock.MagicMock(get_client=mock.MagicMock(return_value=fake_client))
+        with mock.patch.dict("sys.modules", {"clickhouse_connect": fake_module}):
+            records, is_live = fetch_quarantine_data_from_clickhouse(
+                host="ch", port=8123, user="u", password="p", database="lakehouse"
+            )
+        self.assertTrue(is_live)
+        self.assertEqual(records, [])
+        kwargs = fake_module.get_client.call_args.kwargs
+        self.assertEqual(kwargs["username"], "u")
+        self.assertEqual(kwargs["password"], "p")
+        self.assertEqual(kwargs["database"], "lakehouse")
+
+    def test_market_4xx_does_not_fall_back_to_demo(self):
+        """Lỗi tham số 4xx -> data_source = error; lỗi 5xx -> demo."""
+        from unittest import mock
+        from dashboard.app import fetch_api_data
+        now = datetime.now(timezone.utc)
+        resp_400 = mock.MagicMock(status_code=400)
+        resp_400.json.return_value = {"detail": "bad range"}
+        with mock.patch("dashboard.app.requests.get", return_value=resp_400):
+            payload = fetch_api_data("http://x", "BTCUSDT", now - timedelta(minutes=5), now)
+        self.assertEqual(payload["data_source"], "error")
+        self.assertEqual(payload["candles"], [])
+        with mock.patch("dashboard.app.requests.get", return_value=mock.MagicMock(status_code=503)):
+            payload = fetch_api_data("http://x", "BTCUSDT", now - timedelta(minutes=5), now)
+        self.assertEqual(payload["data_source"], "demo")
+
+    def test_watermark_lag_thresholds(self):
+        """Lag <= 900 s im lặng; > 900 s WARNING; >= 1800 s CRITICAL."""
+        from src.utils.alerting import AlertManager
+        manager = AlertManager()
+        self.assertIsNone(manager.check_streaming_lag("BTCUSDT", 120.0))
+        self.assertIsNone(manager.check_streaming_lag("BTCUSDT", 900.0))
+        self.assertEqual(manager.check_streaming_lag("BTCUSDT", 901.0).severity, "WARNING")
+        self.assertEqual(manager.check_streaming_lag("BTCUSDT", 1800.0).severity, "CRITICAL")
+
+    def test_quarantine_spike_alerts_once_per_batch_run(self):
+        """Mỗi batch_run_id chỉ phát QUARANTINE_SPIKE một lần."""
+        from src.utils.alerting import AlertManager
+        manager = AlertManager()
+        self.assertIsNone(manager.check_quarantine_spike(10, 1000, threshold=100, batch_run_id="b1"))
+        first = manager.check_quarantine_spike(150, 1000, threshold=100, batch_run_id="b1")
+        self.assertIsNotNone(first)
+        self.assertEqual(first.metrics["rejection_pct"], 15.0)
+        self.assertIsNone(manager.check_quarantine_spike(150, 1000, threshold=100, batch_run_id="b1"))
+        self.assertIsNotNone(manager.check_quarantine_spike(150, 1000, threshold=100, batch_run_id="b2"))
+
+    def test_sequence_gap_alert(self):
+        """gap = 0 im lặng; gap > 0 phát một lần mỗi (run_id, symbol); R_gap >= 1% là CRITICAL."""
+        from src.utils.alerting import AlertManager
+        manager = AlertManager()
+        self.assertIsNone(manager.check_sequence_gap("BTCUSDT", 0, 0.0, run_id="r1"))
+        warn = manager.check_sequence_gap("BTCUSDT", 5, 0.2, run_id="r1")
+        self.assertEqual(warn.alert_type, "SEQUENCE_GAP")
+        self.assertEqual(warn.severity, "WARNING")
+        self.assertIsNone(manager.check_sequence_gap("BTCUSDT", 5, 0.2, run_id="r1"))
+        self.assertEqual(manager.check_sequence_gap("ETHUSDT", 50, 2.5, run_id="r1").severity, "CRITICAL")
+
+
 if __name__ == "__main__":
     unittest.main()
 

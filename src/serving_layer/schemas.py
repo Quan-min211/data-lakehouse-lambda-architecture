@@ -24,9 +24,9 @@ class CandleStatus(str, Enum):
 
 class QueryCase(int, Enum):
     """3 kịch bản phân luồng của Auto-Correcting Query Merger."""
-    CASE_1_HISTORY = 1     # T_end <= Watermark (100% Batch View)
-    CASE_2_REALTIME = 2    # T_start > Watermark (100% Speed View)
-    CASE_3_HYBRID = 3      # T_start <= Watermark < T_end (Cắt ghép Batch + Speed không trùng lặp)
+    CASE_1_HISTORY = 1     # T_end <= W (100% batch_agg trên [T_start, T_end))
+    CASE_2_REALTIME = 2    # T_start >= W (100% speed_agg trên [T_start, T_end))
+    CASE_3_HYBRID = 3      # T_start < W < T_end: batch_agg [T_start, W) + speed_agg [W, T_end), không giao nhau
 
 
 class CandleData(BaseModel):

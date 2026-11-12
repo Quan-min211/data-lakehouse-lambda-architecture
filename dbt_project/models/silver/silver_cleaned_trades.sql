@@ -7,14 +7,23 @@
 with valid_records as (
     select
         *,
-        -- Deduplicate: giữ bản ghi mới nhất theo (symbol, trade_id)
+        -- Deduplicate giống clean_and_deduplicate() của Python: bản ingestion_time
+        -- mới nhất thắng (thiếu thì lấy trade_time); hòa thì giữ bản đến trước
         row_number() over (
             partition by symbol, trade_id
-            order by ingestion_time desc, bronze_written_at desc
+            order by coalesce(ingestion_time, trade_time) desc, bronze_written_at asc
         ) as dedupe_rank
     from {{ ref('bronze_crypto_trades') }}
     where trade_id is not null
+      and trade_id >= 0
       and symbol is not null
+      and trim(symbol) != ''
+      and not isnan(price)
+      and not isnan(quantity)
+      -- Spark SQL không có hàm isinf(); so trị tuyệt đối với vô cực để chặn cả +inf
+      -- và -inf, đồng bộ với math.isfinite() của dq_checks.py
+      and abs(price) != cast('Infinity' as double)
+      and abs(quantity) != cast('Infinity' as double)
       and price > 0
       and quantity > 0
       and trade_time > 0

@@ -282,17 +282,35 @@ class CompactionJob:
             elapsed = time.time() - t_start
             stats_after = self.get_file_stats("AFTER_SORT")
 
+            # Dong bo voi run_bin_packing_compaction: ho tro ten cot Iceberg 1.5.x
+            # (*_data_files_count) va fallback ve ten cot cu.
+            rewritten = _result_count(
+                result,
+                "rewritten_data_files_count",
+                "rewritten_files_count",
+            )
+            added = _result_count(
+                result,
+                "added_data_files_count",
+                "added_files_count",
+            )
+            rewritten_bytes = int(
+                result.asDict(recursive=True).get("rewritten_bytes_count") or 0
+            )
+
             logger.info(
                 f"✓ Sort Compaction hoàn tất: "
-                f"rewritten={result['rewritten_files_count']} files | "
+                f"rewritten={rewritten} files → {added} files | "
+                f"rewritten_bytes={rewritten_bytes} | "
                 f"{elapsed:.1f}s"
             )
 
             return {
                 "strategy":           "sort",
                 "sort_order":         sort_order,
-                "rewritten_files":    int(result["rewritten_files_count"]),
-                "added_files":        int(result["added_files_count"]),
+                "rewritten_files":    rewritten,
+                "added_files":        added,
+                "rewritten_bytes":    rewritten_bytes,
                 "elapsed_s":          round(elapsed, 2),
                 "files_before":       stats_before.get("file_count"),
                 "files_after":        stats_after.get("file_count"),
@@ -378,8 +396,10 @@ class CompactionJob:
             """).collect()[0]
 
             elapsed = time.time() - t_start
-            deleted_data  = int(result.get("deleted_data_files_count", 0))
-            deleted_manifests = int(result.get("deleted_manifest_files_count", 0))
+            # PySpark Row khong co .get(): chuyen sang dict truoc khi truy xuat
+            row_dict = result.asDict(recursive=True)
+            deleted_data      = int(row_dict.get("deleted_data_files_count") or 0)
+            deleted_manifests = int(row_dict.get("deleted_manifest_files_count") or 0)
 
             logger.info(
                 f"✓ Expire Snapshots hoàn tất: "

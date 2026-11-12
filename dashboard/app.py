@@ -75,7 +75,13 @@ def fetch_api_data(
     start_time: datetime,
     end_time: datetime
 ) -> Dict[str, Any]:
-    """Gọi Serving Layer FastAPI GET /api/market."""
+    """Gọi Serving Layer FastAPI GET /api/market.
+
+    - 200: dữ liệu thật (data_source = "live").
+    - 4xx: lỗi tham số truy vấn -> KHÔNG chuyển sang demo, trả payload rỗng
+      với data_source = "error" để giao diện báo lỗi.
+    - 5xx hoặc lỗi kết nối mạng: chuyển sang dữ liệu demo (data_source = "demo").
+    """
     endpoint = f"{api_url.rstrip('/')}/api/market"
     params = {
         "symbol": symbol,
@@ -88,10 +94,25 @@ def fetch_api_data(
             payload = resp.json()
             payload["data_source"] = "live"
             return payload
+        if 400 <= resp.status_code < 500:
+            try:
+                detail = resp.json().get("detail", resp.text)
+            except ValueError:
+                detail = resp.text
+            return {
+                "symbol": symbol,
+                "query_case": None,
+                "overall_status": None,
+                "reconciliation_delta": None,
+                "candles_count": 0,
+                "candles": [],
+                "data_source": "error",
+                "error": f"HTTP {resp.status_code}: {detail}",
+            }
     except Exception:
         pass
 
-    # Fallback dữ liệu mô phỏng an toàn nếu FastAPI server chưa bật
+    # Fallback dữ liệu mô phỏng khi FastAPI không kết nối được hoặc lỗi máy chủ (5xx)
     payload = generate_fallback_market_data(symbol, start_time, end_time)
     payload["data_source"] = "demo"
     return payload
@@ -128,6 +149,18 @@ def fetch_latest_speed_candle(api_url: str, symbol: str) -> Optional[Dict[str, A
         resp = requests.get(endpoint, params={"symbol": symbol}, timeout=3)
         if resp.status_code == 200:
             return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def fetch_system_alerts(api_url: str, limit: int = 50) -> Optional[List[Dict[str, Any]]]:
+    """Gọi Serving Layer FastAPI GET /api/system/alerts (None nếu không gọi được)."""
+    endpoint = f"{api_url.rstrip('/')}/api/system/alerts"
+    try:
+        resp = requests.get(endpoint, params={"limit": limit}, timeout=3)
+        if resp.status_code == 200:
+            return resp.json().get("alerts", [])
     except Exception:
         pass
     return None
@@ -178,7 +211,8 @@ def generate_fallback_market_data(
         low_p = min(open_p, close_p) * (1 - abs(random.gauss(0, 0.002)))
         volume = round(random.uniform(2.0, 25.0), 4)
         vwap = round((open_p + high_p + low_p + close_p) / 4.0, 2)
-        is_spike = 1 if abs(close_p - open_p) / open_p >= 0.015 or (high_p - low_p) / low_p >= 0.030 else 0
+        # Cùng ngưỡng với SpikeDetector: spike_threshold = 0.02, volatility_threshold = 0.03
+        is_spike = 1 if abs(close_p - open_p) / open_p >= 0.02 or (high_p - low_p) / low_p >= 0.03 else 0
 
         # Phân loại trạng thái theo Watermark
         status = "Reconciled" if curr < wm else "Provisional"
@@ -213,7 +247,7 @@ def generate_fallback_market_data(
         delta = None
     else:
         q_case = 3
-        q_desc = "Case 3 (Hybrid): Ghép nối tự động Batch [T_start, W] + Speed (W, T_end]"
+        q_desc = "Case 3 (Hybrid): Ghép nối tự động Batch [T_start, W) + Speed [W, T_end)"
         overall_status = "Partially Reconciled"
         delta = round(random.uniform(2.5, 12.0), 2)
 
@@ -282,11 +316,13 @@ def render_sidebar() -> Dict[str, Any]:
 
 def render_topbar(market_data: Dict[str, Any], system_status: Optional[Dict[str, Any]], now_utc: datetime) -> None:
     """Thanh trên cùng: tên sản phẩm, nguồn dữ liệu, tình trạng API và đồng hồ UTC."""
-    is_live = market_data.get("data_source") == "live"
-    source_chip = (
-        chip("Live · Serving API", COLORS["reconciled"]) if is_live
-        else chip("Demo data · API offline", COLORS["provisional"])
-    )
+    data_source = market_data.get("data_source")
+    if data_source == "live":
+        source_chip = chip("Live · Serving API", COLORS["reconciled"])
+    elif data_source == "error":
+        source_chip = chip("API error · tham số không hợp lệ", COLORS["danger"])
+    else:
+        source_chip = chip("Demo data · API offline", COLORS["provisional"])
     if system_status:
         ok = str(system_status.get("status", "")).lower() == "ok"
         health_chip = chip("Systems nominal" if ok else "Degraded", COLORS["reconciled"] if ok else COLORS["provisional"])
@@ -322,6 +358,8 @@ def build_demo_reconciliation(candles: List[Dict[str, Any]]) -> List[Dict[str, A
             "batch_volume": c["volume"],
             "speed_volume": c["volume"] + 0.1,
             "volume_delta": 0.1,
+            "volume_drift_pct": round(0.1 / c["volume"] * 100, 4) if c["volume"] else None,
+            "reconciliation_status": "RECONCILED_AND_HEALED" if c["status"] == "Reconciled" else "PROVISIONAL_ONLY",
             "is_reconciled": (c["status"] == "Reconciled"),
         }
         for c in candles[-10:]
@@ -340,9 +378,15 @@ def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
         st.info("Không ghi nhận nến biến động bất thường trong khung thời gian đang xem.")
         return
     spike_df = pd.DataFrame(spike_candles)
+    # |close − open| / open: cùng công thức với SpikeDetector và AlertManager.check_price_spike();
+    # chiều tăng/giảm tách riêng sang cột direction.
     spike_df["amplitude_pct"] = (
-        (spike_df["close_price"] - spike_df["open_price"]) / spike_df["open_price"] * 100
+        (spike_df["close_price"] - spike_df["open_price"]).abs() / spike_df["open_price"] * 100
     ).round(3)
+    spike_df["direction"] = [
+        "▲ tăng" if c >= o else "▼ giảm"
+        for o, c in zip(spike_df["open_price"], spike_df["close_price"])
+    ]
     spike_df["range_pct"] = (
         (spike_df["high_price"] - spike_df["low_price"]) / spike_df["low_price"] * 100
     ).round(3)
@@ -357,6 +401,7 @@ def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
             "high_price",
             "low_price",
             "amplitude_pct",
+            "direction",
             "range_pct",
             "volume",
             "status",
@@ -367,7 +412,8 @@ def render_spike_tab(candles: List[Dict[str, Any]]) -> None:
             "close_price": st.column_config.NumberColumn("Close", format="%.4f"),
             "high_price": st.column_config.NumberColumn("High", format="%.4f"),
             "low_price": st.column_config.NumberColumn("Low", format="%.4f"),
-            "amplitude_pct": st.column_config.NumberColumn("Biên độ Đóng–Mở (%)", format="%.3f"),
+            "amplitude_pct": st.column_config.NumberColumn("Biên độ |Đóng–Mở| (%)", format="%.3f"),
+            "direction": st.column_config.TextColumn("Chiều"),
             "range_pct": st.column_config.NumberColumn("Biên độ Đỉnh–Đáy (%)", format="%.3f"),
             "volume": st.column_config.NumberColumn("Volume", format="%.4f"),
             "status": st.column_config.TextColumn("Trạng thái"),
@@ -379,17 +425,19 @@ def render_architecture_tab() -> None:
     """Tab mô tả cơ chế định tuyến của Auto-Correcting Query Merger."""
     section_header(
         "Cơ chế định tuyến truy vấn",
-        "Query Merger chia khoảng truy vấn [T_start, T_end] tại mốc Watermark W do Batch Layer "
+        "Query Merger chia khoảng truy vấn nửa mở [T_start, T_end) tại mốc Watermark W do Batch Layer "
         "công bố, đảm bảo mỗi cửa sổ 1 phút chỉ được lấy từ đúng một nguồn.",
         "merge",
     )
     cases = [
         ("Case 1 · History", "T_end ≤ W", COLORS["reconciled"], "Reconciled",
          "Toàn bộ dữ liệu đọc từ <code>lakehouse.batch_agg</code> (FINAL). Đây là ground truth sau DQ gate và dedup."),
-        ("Case 2 · Realtime", "T_start > W", COLORS["provisional"], "Provisional",
+        ("Case 2 · Realtime", "T_start ≥ W", COLORS["provisional"], "Provisional",
          "Toàn bộ dữ liệu đọc từ <code>lakehouse.speed_agg</code> do Spark Structured Streaming ghi mỗi micro-batch."),
-        ("Case 3 · Hybrid", "T_start ≤ W < T_end", COLORS["hybrid"], "Partially Reconciled",
-         "<code>[T_start, W]</code> từ Batch view, <code>(W, T_end]</code> từ Speed view. Cửa sổ trùng tại biên ưu tiên Batch — không double-count."),
+        ("Case 3 · Hybrid", "T_start < W < T_end", COLORS["hybrid"], "Partially Reconciled",
+         "<code>[T_start, W)</code> từ <code>batch_agg</code>, <code>[W, T_end)</code> từ <code>speed_agg</code>: "
+         "hai khoảng nửa mở không giao nhau nên không double-count. Truy vấn thứ ba vào "
+         "<code>speed_agg</code> trên <code>[T_start, W)</code> tính |VWAP speed − VWAP batch| tại biên."),
     ]
     cols = st.columns(3)
     for col, (title, cond, color, label, body) in zip(cols, cases):
@@ -422,10 +470,13 @@ def main() -> None:
     watermark_info = fetch_watermark(api_base_url)
     system_status = fetch_system_status(api_base_url)
     latest_speed = fetch_latest_speed_candle(api_base_url, selected_symbol)
+    system_alerts = fetch_system_alerts(api_base_url)
     candles = market_data.get("candles", [])
 
     # 1. Top bar + header giá + dải trạng thái Lambda
     render_topbar(market_data, system_status, now_utc)
+    if market_data.get("data_source") == "error":
+        st.error(f"Serving API từ chối truy vấn: {market_data.get('error', '')}")
     render_metrics_cards(market_data, watermark_info)
     render_watermark_status_bar(watermark_info, market_data)
 
@@ -475,12 +526,11 @@ def main() -> None:
             render_benchmark_images()
 
     with tab_dq:
-        ch_host = os.getenv("CLICKHOUSE_HOST", "localhost")
-        ch_port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
-        render_dq_quarantine_panel(clickhouse_host=ch_host, clickhouse_port=ch_port)
+        # Thông tin kết nối (host/port/user/password/database) lấy từ biến môi trường CLICKHOUSE_*
+        render_dq_quarantine_panel()
 
     with tab_system:
-        render_system_status_panel(system_status, latest_speed=latest_speed)
+        render_system_status_panel(system_status, latest_speed=latest_speed, alerts=system_alerts)
         source_breakdown = market_data.get("source_breakdown", {})
         if source_breakdown:
             with st.expander("Query source breakdown (raw)"):

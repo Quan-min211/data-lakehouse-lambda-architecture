@@ -39,6 +39,12 @@ def render_reconciliation_table(report_items: List[Dict[str, Any]]) -> None:
     mean_delta = f"{deltas.abs().mean():,.4f}" if not deltas.empty else "--"
     max_delta = f"{deltas.abs().max():,.4f}" if not deltas.empty else "--"
     coverage = reconciled / total * 100 if total else 0.0
+    status_counts = (
+        df["reconciliation_status"].value_counts().to_dict()
+        if "reconciliation_status" in df.columns else {}
+    )
+    matched = int(status_counts.get("MATCHED", 0))
+    healed = int(status_counts.get("RECONCILED_AND_HEALED", 0))
 
     def cell(label: str, value: str, note: str, color: str = COLORS["text"]) -> str:
         return (
@@ -50,7 +56,8 @@ def render_reconciliation_table(report_items: List[Dict[str, Any]]) -> None:
     render_html(
         '<div class="lh-grid" style="grid-template-columns: repeat(4, 1fr);">'
         + cell("Cửa sổ so sánh", f"{total}", "Số nến trong khung")
-        + cell("Đã đối soát", f"{reconciled}", f"{coverage:.1f}% coverage", COLORS["reconciled"])
+        + cell("Đã đối soát", f"{reconciled}",
+               f"{coverage:.1f}% coverage · {matched} MATCHED · {healed} HEALED", COLORS["reconciled"])
         + cell("Δ VWAP trung bình", mean_delta, "USDT")
         + cell("Δ VWAP lớn nhất", max_delta, "USDT")
         + "</div>"
@@ -62,8 +69,9 @@ def render_reconciliation_table(report_items: List[Dict[str, Any]]) -> None:
         hide_index=True,
         column_order=[
             c for c in [
-                "window_start", "window_end", "batch_vwap", "speed_vwap", "vwap_delta",
-                "batch_volume", "speed_volume", "volume_delta", "is_reconciled",
+                "window_start", "window_end", "reconciliation_status", "batch_vwap", "speed_vwap",
+                "vwap_delta", "batch_volume", "speed_volume", "volume_delta", "volume_drift_pct",
+                "is_reconciled",
             ] if c in df.columns
         ],
         column_config={
@@ -75,6 +83,12 @@ def render_reconciliation_table(report_items: List[Dict[str, Any]]) -> None:
             "batch_volume": st.column_config.NumberColumn("Vol batch", format="%.4f"),
             "speed_volume": st.column_config.NumberColumn("Vol speed", format="%.4f"),
             "volume_delta": st.column_config.NumberColumn("Δ Vol", format="%.4f"),
+            "volume_drift_pct": st.column_config.NumberColumn("ΔV (%)", format="%.4f"),
+            "reconciliation_status": st.column_config.TextColumn(
+                "Trạng thái đối soát",
+                help="MATCHED · RECONCILED_AND_HEALED · BATCH_ONLY · PROVISIONAL_ONLY "
+                     "(src/utils/reconciliation.py: |ΔVWAP| < 1e-4 và ΔV% < 1e-4 thì MATCHED)",
+            ),
             "is_reconciled": st.column_config.CheckboxColumn("Đã chốt"),
         },
     )

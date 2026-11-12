@@ -32,8 +32,20 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 
 > [!NOTE]
 > **Phân nhóm tài nguyên thực tế:**
-> * **Nhóm dịch vụ thường trực 24/7 (Services 1, 2, 4, 5, 6, 7, 8, 9, 10):** Tổng `mem_limit` = $1.0 + 0.75 + 0.5 + 1.5 + 0.375 + 2.0 + 0.5 + 0.5 + 1.0 \approx \mathbf{8.125\text{ GB}}$, hoàn toàn tương thích và an toàn trên phần cứng 16 GB RAM.
-> * **Nhóm dịch vụ thực thi theo phiên (Batch/Thrift):** Tiến trình `batch-pipeline` (3GB) hoặc cụm `spark-thrift` được kích hoạt theo lịch biểu của Dagster hoặc lệnh kiểm thử riêng biệt khi cần tái xử lý hoặc chạy mô hình dbt.
+> * **Nhóm dịch vụ thường trực 24/7 (Services 1, 2, 4, 5, 6, 7, 8, 9, 10):** Tổng `mem_limit` = $1024 + 768 + 512 + 1500 + 384 + 2048 + 512 + 512 + 1024 = \mathbf{8\,284	ext{ MiB}} pprox 8{,}09	ext{ GiB}$ (cách làm tròn cũ $pprox 8.125$ GB coi `1500m` là 1,5 GiB).
+> * **Nhóm dịch vụ thực thi theo phiên:** `batch-pipeline` 3072 + `spark-master` 768 + `spark-worker` 4096 + `spark-thrift` 6144 = **14 080 MiB** (≈ 13,75 GiB); `minio-setup` không đặt `mem_limit` và thoát ngay sau khi tạo bucket.
+> * **Tổng trần `mem_limit` của cả 14 dịch vụ:** **22 364 MiB** (≈ 21,84 GiB) > 16 GB. `mem_limit` là trần cgroup, không phải lượng đặt trước, nên hai nhóm chỉ an toàn khi không cùng chạy ở mức trần.
+> * **Ràng buộc kéo theo (kiểm toán 2026-11-12):** `dagster` khai báo `depends_on: spark-thrift (service_started)`, nên `docker compose up -d dagster` khởi động cả `spark-thrift` (6g, `--driver-memory 4g`), `iceberg-rest`, `minio`, `minio-setup`. Nhóm "24/7" khi có Dagster thực tế là 8 284 + 6 144 = **14 428 MiB**. `docker compose up -d` không chỉ định dịch vụ sẽ khởi động cả 14 dịch vụ (kể cả `batch-pipeline` chạy một lần).
+
+### 1.2. Thông Số Vận Hành Kiểm Toán Từ `docker-compose.yml` và `Dockerfile.*` (2026-11-12)
+* **`restart`:** chỉ `speed-layer` là `unless-stopped`; `batch-pipeline` là `"no"` (chú thích trong compose ghi `on-failure` nhưng giá trị thật là `"no"`); 12 dịch vụ còn lại không khai báo (mặc định `no`).
+* **`healthcheck` (4 dịch vụ):** `kafka` — `kafka-topics.sh --bootstrap-server localhost:9092 --list` (30s/10s/5 lần/start 30s); `minio` — `curl -f http://localhost:9000/minio/health/live` (30s/10s/5/20s); `clickhouse` — `wget --spider -q http://localhost:8123/ping` (30s/10s/5/20s); `redis` — `redis-cli ping` (20s/5s/3).
+* **`depends_on`:** `service_healthy` — `minio-setup`, `iceberg-rest` → `minio`; `speed-layer` → `kafka`, `clickhouse`, `redis`; `batch-pipeline` → `minio`, `clickhouse`; `fastapi` → `clickhouse`, `redis`; `dagster` → `clickhouse`. `service_started` — `batch-pipeline` → `iceberg-rest`; `dagster` → `spark-thrift`. Dạng rút gọn (tương đương `service_started`) — `spark-worker` → `spark-master`; `spark-thrift` → `iceberg-rest`, `minio-setup`; `streamlit` → `fastapi`. **Không có** `service_completed_successfully`.
+* **Giới hạn bên trong tiến trình:** Redis `--maxmemory 256mb --maxmemory-policy allkeys-lru --save ""` (không lưu RDB/AOF) trong container 384m; Spark Worker `-m 3g -c 2` (`SPARK_WORKER_MEMORY=3g`) trong container 4g; Spark Thrift `--master local[*] --driver-memory 4g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC` trong container 6g; Batch `SPARK_DRIVER_MEMORY = SPARK_EXECUTOR_MEMORY = 768m`, `local[2]`, `shuffle.partitions = 2` trong container 3g; Speed Layer `local[2]`, `shuffle.partitions = 4`, không đặt `spark.driver.memory` (mặc định Spark 1g), RocksDB state store bật trên Linux, trong container 2g. ClickHouse không có tệp cấu hình bộ nhớ riêng (không có `users.xml`), chỉ có `ulimits nofile 262144`. Compose không đặt giới hạn CPU.
+* **Base image:** `apache/spark:3.5.9-scala2.12-java17-python3-r-ubuntu` cho `Dockerfile.speed`, `Dockerfile.batch`, `Dockerfile.spark-thrift` (dùng chung cho `spark-master`, `spark-worker`, `spark-thrift`); `python:3.10-slim` cho `Dockerfile.serving`, `Dockerfile.dashboard`, `Dockerfile.dagster` (Dagster cài thêm `default-jre-headless`, `curl` và `pip install -r requirements.txt`).
+* **JAR:** chỉ `Dockerfile.spark-thrift` tải sẵn vào `/opt/spark/jars/` bằng `wget` bốn JAR `iceberg-spark-runtime-3.5_2.12:1.5.2`, `iceberg-aws-bundle:1.5.2`, `hadoop-aws:3.3.4`, `aws-java-sdk-bundle:1.12.262`. Speed Layer tải `spark-sql-kafka-0-10_2.12:3.5.1` qua `spark.jars.packages` lúc khởi động (không có volume Ivy); Batch tải bốn gói Iceberg/S3 qua `spark.jars.packages` với volume `spark-ivy-cache:/root/.ivy2`. `configs/spark/spark-defaults.conf` không được container nào nạp.
+* **Windows host:** `spark_streaming._configure_windows_hadoop()` tìm `hadoop/bin/winutils.exe` (thư mục chỉ có `README.txt`), đặt `HADOOP_HOME` và `PATH`; nếu không có thì cảnh báo và trỏ `HADOOP_HOME` tới thư mục giả `%TEMP%\hadoop_fake`. RocksDB bị tắt trên Windows. Không có xử lý riêng cho `NativeIO$Windows.access0` (`hadoop.dll`). Giải pháp chính: chạy mọi tiến trình Spark trong container Linux; Batch trên host chạy Python thuần, không gọi Spark.
+* **Bản sửa 2026-11-12:** `streamlit` khai báo tường minh `CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE`; `Dockerfile.serving` bỏ dòng `COPY requirements.txt` không dùng và ghim `pydantic==2.6.4`. Năm Dockerfile cài gói bằng pip ghim cùng phiên bản `clickhouse-connect==0.7.0`, `redis==5.0.0`, `kafka-python==2.0.2`, `python-dotenv==1.0.0`, `pyyaml==6.0.0`; `Dockerfile.dagster` vẫn dùng `requirements.txt` với ràng buộc `>=`.
 
 ---
 
@@ -75,9 +87,12 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
      * Định dạng lưu trữ: Apache Parquet (Snappy compression, Format-Version: 2).
      * Phân vùng (*Partitioning*): `days(trade_time_ts)` (Partition theo ngày UTC).
      * Kích thước tệp mục tiêu (*Target file size*): `134,217,728 bytes` (128 MB).
-     * Thuộc tính bảng: `write.distribution-mode = 'hash'`, `history.expire.max-snapshot-age-ms = '604800000'` (7 ngày).
-  2. **Silver View / Table (dbt):** `silver_cleaned_trades` (Dữ liệu đã chuẩn hóa, lọc sạch, khử trùng theo `trade_id`, phân vùng theo `trade_date`).
-  3. **Gold View / Table (dbt):** `gold_market_aggregates` (Tổng hợp nến 1 phút OHLCV & VWAP phục vụ đối soát).
+     * Thuộc tính bảng: `write.distribution-mode = 'hash'`, `history.expire.max-snapshot-age-ms = '604800000'` (7 ngày), `write.metadata.metrics.default = 'truncate(16)'`, `write.parquet.compression-codec = 'snappy'`, `format-version = '2'`.
+     * Nguồn định nghĩa: hằng số `BRONZE_CREATE_DDL` trong [src/batch_layer/iceberg_utils.py](file:///src/batch_layer/iceberg_utils.py) (tệp được thực thi); `configs/iceberg/tables.yaml` đã được đồng bộ 2026-11-12 (`transform: days` trên `trade_time_ts` + khối `properties`; trước đó ghi sai `day(trade_time)`). YAML chỉ là tài liệu cấu hình, không được mã nạp.
+     * **Nội dung ghi (bất biến):** cả CLI `spark_batch_jobs.py` (`run_batch_pipeline()`) lẫn asset Dagster `bronze_crypto_trades` đều ghi **toàn bộ `raw_records` trước khi lọc DQ** (gồm cả bản ghi lỗi và bản trùng) qua `write_bronze_to_iceberg()`; sau đó `clean_and_deduplicate()` mới tách `rejected_records` → `dq_quarantine` và `clean_records` → Gold. (Trước bản sửa 2026-11-12, CLI ghi `clean_records` vào Bronze, lệch với Dagster.)
+     * **Điều kiện ghi:** cờ `--write-iceberg`, hoặc biến môi trường `BATCH_WRITE_ICEBERG = true | 1` (đặt sẵn trong `Dockerfile.batch` cùng `BATCH_ICEBERG_STRICT=true`). Không bật thì tầng lô vẫn chạy đầy đủ Silver → Gold → ClickHouse nhưng không ghi Bronze.
+  2. **Silver View / Table (dbt):** `silver_cleaned_trades` (Dữ liệu đã chuẩn hóa, lọc sạch, khử trùng theo `trade_id`, phân vùng theo `trade_date`). Từ 2026-11-12 bộ lọc khớp `dq_checks.py`: `trade_id >= 0`, `trim(symbol) != ''`, `not isnan(price/quantity)`; `abs(price/quantity) != cast('Infinity' as double)` (chặn `±inf`, tương đương `math.isfinite()`; Spark SQL không có `isinf`); dedupe sắp `coalesce(ingestion_time, trade_time) desc, bronze_written_at asc` (hòa thì giữ bản đến trước). `schema.yml` có test `unique` trên `concat(symbol, ':', trade_id)` (khóa ghép vì `trade_id` mock lặp giữa các symbol).
+  3. **Gold View / Table (dbt):** `gold_market_aggregates` (Tổng hợp nến 1 phút OHLCV & VWAP phục vụ đối soát). Open/close dùng `min/max(named_struct(trade_time, trade_id, price))`: trùng mili-giây thì phá thế hòa theo `trade_id`, giống Python.
 
 ### 2.4. ClickHouse OLAP Database & Tables ([configs/clickhouse/init.sql](file:///configs/clickhouse/init.sql))
 * **Tên Database:** `lakehouse`
@@ -102,7 +117,9 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
      * Engine: `MergeTree()`
      * Partition key: `toYYYYMM(quarantined_at)`
      * Order by: `(batch_run_id, quarantined_at)`
-     * Các cột: `batch_run_id`, `trade_id`, `symbol`, `price`, `quantity`, `trade_time`, `dq_error`, `raw_record`, `quarantined_at`.
+     * Các cột: `batch_run_id`, `trade_id`, `symbol`, `price`, `quantity`, `trade_time`, `dq_error`, `raw_record` (đều `String` để giữ nguyên giá trị sai kiểu), `quarantined_at` (`DateTime64(3, 'UTC') DEFAULT now64(3)`).
+     * Nguồn DDL: `ClickHouseBatchSync.DDL_INIT_QUARANTINE` ([src/batch_layer/clickhouse_sync.py](file:///src/batch_layer/clickhouse_sync.py)) và — từ 2026-11-12 — câu lệnh `CREATE TABLE IF NOT EXISTS lakehouse.dq_quarantine` tương đương 100% trong `configs/clickhouse/init.sql` (trước đó bảng chỉ được tạo lúc chạy bởi `initialize_tables()`).
+     * Ghi bởi `ClickHouseBatchSync.insert_quarantine_records(rejected, batch_run_id)`; chỉ chứa bản ghi vi phạm luật DQ, **không** chứa bản ghi trùng lặp.
   5. **`lakehouse.reconciliation_audit_metrics` (Audit & Telemetry Table):**
      * Engine: `ReplacingMergeTree(created_at)`
      * Partition key: `toYYYYMMDD(window_start)`
@@ -137,15 +154,22 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 | **Speed Layer** | `REDIS_TTL_SECONDS` | `3600` (1 giờ) | Thời gian tồn tại của nến tạm thời trong Redis (`redis.yaml` đã đồng bộ `3600`, nhưng không được mã nạp). |
 | **Speed Layer** | `reconnect_cooldown_seconds` | `30.0` giây | Thời gian chờ trước khi `RedisSpeedWriter` tự thử kết nối lại sau lỗi Redis. |
 | **Alerting** | `PRICE_SPIKE` severity | `CRITICAL` nếu Đóng–Mở $\ge 5\%$ hoặc Đỉnh–Đáy $\ge 6\%$; ngược lại `WARNING` | Quy tắc trong `AlertManager.check_price_spike()` khi `is_spike == 1`; được `AutoCorrectingQueryMerger.merge_query()` gọi cho mọi nến trả về, mỗi `(symbol, window_start)` chỉ phát một lần (ghi nhớ tối đa `MAX_SPIKE_ALERT_KEYS = 5000` nến). |
-| **Alerting** | `ALERT_DRIFT_THRESHOLD_PCT` / `ALERT_QUARANTINE_THRESHOLD` / `ALERT_LAG_THRESHOLD_SECONDS` | `5.0` / `100` / `15.0` | Ngưỡng cảnh báo độ lệch khối lượng (%), số bản ghi cách ly và độ trễ dữ liệu (giây). |
+| **Alerting** | `ALERT_DRIFT_THRESHOLD_PCT` / `ALERT_QUARANTINE_THRESHOLD` / `ALERT_LAG_WARNING_SECONDS` / `ALERT_LAG_CRITICAL_SECONDS` | `5.0` / `100` / `900` / `1800` | Ngưỡng cảnh báo độ lệch khối lượng (%), số bản ghi cách ly mỗi lô, và độ trễ Watermark `T_end − W` (giây): `WARNING` khi > 900 s (một chu kỳ Batch 15 phút), `CRITICAL` khi ≥ 1800 s. Tên cũ `ALERT_LAG_THRESHOLD_SECONDS` vẫn được nhận cho ngưỡng WARNING (trước 2026-11-12: 15 s, gây cảnh báo `CRITICAL` ở gần như mọi lần làm mới). |
 | **Batch Layer** | `write.target-file-size-bytes` | `134217728` | Kích thước file Parquet chuẩn khi ghi và khi chạy Compaction (128 MB). |
 | **Batch Layer** | `history.expire.max-snapshot-age-ms`| `604800000` | Tuổi thọ tối đa của snapshot cũ trước khi dọn rác (7 ngày). |
+| **Batch Layer** | `BATCH_WRITE_ICEBERG` / `BATCH_ICEBERG_STRICT` | `false` (host) / `true` (`Dockerfile.batch`) | `BATCH_WRITE_ICEBERG = true \| 1` đặt giá trị mặc định cho cờ `--write-iceberg` của `spark_batch_jobs.py` (bổ sung 2026-11-12). Asset Dagster `bronze_crypto_trades` dùng cùng quy tắc `true \| 1`. Bronze nhận `raw_records` trước DQ. |
+| **Dagster** | `default_status` của `batch_pipeline_schedule` / `compaction_schedule` | `DefaultScheduleStatus.RUNNING` | Lịch `*/15 * * * *` và `0 */2 * * *` tự chạy khi container khởi động (trước 2026-11-12 mặc định STOPPED, phải bật tay trên UI). |
+| **Compaction** | `rewrite_data_files` (`CompactionJob.run_bin_packing_compaction()`) | `strategy = binpack`, `target-file-size-bytes = 134217728` (128 MB), `min-file-size-bytes = 67108864` (64 MB), `max-concurrent-file-group-rewrites = 2` | Hằng số `TARGET_FILE_SIZE_BYTES`, `MIN_FILE_SIZE_BYTES`, `MAX_CONCURRENT_WRITES` trong [src/batch_layer/compaction.py](file:///src/batch_layer/compaction.py). Đọc kết quả qua `_result_count()`: ưu tiên tên cột Iceberg 1.5.x `rewritten_data_files_count` / `added_data_files_count`, dự phòng `rewritten_files_count` / `added_files_count`. |
+| **Compaction** | `CompactionJob.run_sort_compaction()` | `strategy = sort`, `sort_order = 'symbol ASC, trade_time_ts ASC'`, target 128 MB | Tùy chọn (`with_sort = False` mặc định). Từ 2026-11-12 đọc kết quả cùng cơ chế `_result_count()` với bin-packing và trả thêm `rewritten_bytes` (`rewritten_bytes_count`, mặc định 0 nếu không có). |
+| **Maintenance** | `run_table_maintenance()` ([src/batch_layer/maintenance.py](file:///src/batch_layer/maintenance.py)) | `target_file_size_mb = 128`, `expire_older_than_days = 7`, `retain_last_n_snapshots = 3`, `orphan_older_than_days = 3`, `rewrite_manifests = True`, `with_sort = False` | Trình tự: [0] bin-packing (→ [0b] sort nếu bật) → [1] `expire_old_snapshots(older_than_days=7, retain_last_n=3)` → [2] `remove_orphan_files(older_than_days=3)` → [3] `rewrite_manifests()`. Mỗi bước lỗi được ghi `{"skipped": True, "reason": ...}` và không chặn bước sau. Dagster gọi qua asset `iceberg_small_files_compaction`, lịch `0 */2 * * *`. |
+| **Maintenance** | Kết quả `expire_old_snapshots()` | `deleted_data_files`, `deleted_manifest_files` | Đọc từ `Row.asDict()` của thủ tục `expire_snapshots` (`deleted_data_files_count`, `deleted_manifest_files_count`). Trước bản sửa 2026-11-12, mã gọi `.get()` trực tiếp trên `Row` → `AttributeError` → bước bị báo nhầm `skipped`. |
 | **Fault Injector** | `late_min_seconds` / `late_max_seconds` | `60` / `300` | Khoảng thời gian làm lùi `trade_time` khi tiêm lỗi đến muộn (1 - 5 phút). |
 | **Fault Injector** | Ngưỡng cộng dồn $t_1..t_4$ | $t_1 = s$, $t_2 = s + l$, $t_3 = s + l + o$, $t_4 = s + l + o + d$ | Một số ngẫu nhiên $u$ cho mỗi sự kiện; xác suất thực tế của mỗi loại lỗi bằng đúng tham số cấu hình khi $s + l + o + d \le 1$. |
 | **Fault Injector** | Tỷ lệ trong `bench_fault.py` (`fault_rate = 0.20`) | `schema_invalid` 4%, `late_data` 5%, `out_of_order` 4%, `duplicate` 7% | Cộng thêm `negative_price` 2% sinh trước khi qua `FaultInjector`. |
 | **Speed Layer** | Kiểu `trade_id` trong Spark schema | `LongType()` | Khớp với hợp đồng dữ liệu (`integer`); so sánh tie-break theo số nguyên. |
 | **Batch Layer** | `BATCH_WATERMARK_LATENESS_SECONDS` | `60` giây | Chỉ áp dụng khi Batch đọc Kafka theo từng đợt: $W = \lfloor \max(\text{trade\_time}) - 60\text{s} \rfloor_{\text{phút}}$. Đọc file (tập đầy đủ) thì $W = \max(\text{window\_end})$. |
-| **Batch Layer** | Quy tắc ghi Watermark | Đơn điệu tăng | `ClickHouseBatchSync.update_watermark()` chỉ ghi khi ứng viên lớn hơn mốc hiện tại (`get_current_watermark()`). |
+| **Batch Layer** | Quy tắc ghi Watermark | Đơn điệu tăng | `ClickHouseBatchSync.update_watermark()` chỉ ghi khi ứng viên lớn hơn mốc hiện tại (`get_current_watermark()`); ứng viên $\le$ mốc hiện tại bị bỏ qua (trả `False`, log "Giu nguyen ..."). Ứng viên do `compute_watermark_candidate()` tính: chế độ Kafka lùi `BATCH_WATERMARK_LATENESS_SECONDS = 60` giây rồi làm tròn xuống phút; chế độ đọc file dùng `max(window_end)`. |
+| **Batch Layer** | Thứ tự ghi ClickHouse (`run_batch_pipeline()`) | `insert_quarantine_records` → `insert_batch_aggregates` → `update_watermark` → `sync_reconciliation_audit` | Đều thuộc lớp `ClickHouseBatchSync`; offset Kafka chỉ commit khi `get_client()` khả dụng. |
 | **Batch Layer** | `BATCH_SILVER_STORE_DIR` | `datasets/processed/silver_store` | Kho Silver tích lũy (JSONL, phân vùng `symbol/ngày/giờ`) dùng để tính lại cửa sổ bị ảnh hưởng ở chế độ Kafka. |
 | **Batch Layer** | Thời điểm commit offset Kafka | Sau khi ghi ClickHouse | Ngữ nghĩa *at-least-once*; offset lưu ở `results/logs/batch_kafka_offsets.json` (ghi nguyên tử bằng `os.replace`). |
 | **Batch Layer** | `BATCH_FROM_KAFKA` / `BATCH_CONSUME_KAFKA` | `false` | Hai tên được chấp nhận như nhau ở CLI và Dagster. Không có bản ghi Kafka mới thì chu kỳ bỏ qua, **không** fallback sang `datasets/mock`. |
@@ -159,15 +183,22 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 > Khối mã đi kèm xử lý ngoại lệ `try...except` và trả về giá trị dự phòng (*fallback*) an toàn `1970-01-01 00:00:00 UTC` khi chưa có dữ liệu hoặc mất kết nối. **Mã nguồn thực tế không sử dụng bộ đệm (In-memory Cache TTL 2s)** để đảm bảo Serving API luôn phản ánh chính xác 100% mốc Watermark mới nhất mà không bị trễ cache.
 
 ### 3.1. Danh Mục Mã Lỗi Phân Loại Dữ Liệu Rác (Quarantine Error Codes)
-Được chuẩn hóa trong [src/data_quality/dq_checks.py](file:///src/data_quality/dq_checks.py) và [src/data_quality/quarantine.py](file:///src/data_quality/quarantine.py):
-1. **`price_non_positive`**: Bản ghi có mức giá khớp lệnh $\le 0$ (Ví dụ: giá âm do Fault Injector tiêm hoặc lỗi hệ thống sàn).
-2. **`quantity_non_positive`**: Khối lượng giao dịch $\le 0$.
-3. **`trade_id_negative`**: Mã định danh giao dịch `trade_id` $< 0$.
-4. **`symbol_empty`**: Tên cặp tiền giao dịch bị rỗng hoặc không xác định.
-5. **`trade_time_non_positive`**: Dấu thời gian giao dịch $\le 0$.
-6. **`missing required fields: <danh_sách>`**: Bản ghi thiếu một trong các trường bắt buộc (`trade_id`, `symbol`, `price`, `quantity`, `trade_time`).
-7. **`price_not_finite`** / **`quantity_not_finite`** *(bổ sung 2026-11-12)*: Giá hoặc khối lượng là `NaN` / `±inf`. Được kiểm tra trước các luật dấu vì `NaN <= 0` cho kết quả `False` và `json.loads` của Python chấp nhận `NaN`, `Infinity`.
-8. **`ERR_DUPLICATE_TRADE_ID`**: Bản ghi bị trùng lặp khóa tự nhiên `(symbol, trade_id)` (Bản ghi đến sau có cùng hoặc nhỏ hơn `ingestion_time` sẽ bị loại bỏ). **Lưu ý thượng tôn mã nguồn:** mã này *không* xuất hiện trong code; bản trùng không vào `dq_quarantine` mà chỉ được đếm vào `duplicates_removed`. Ở chế độ Kafka, bản trùng với lần chạy trước được đếm riêng (`cross_run_duplicates`).
+Giá trị cột `dq_error` do [src/data_quality/dq_checks.py](file:///src/data_quality/dq_checks.py) sinh ra (đã đối chiếu mã 2026-11-12). Hàm `clean_and_deduplicate()` chạy hai bước: `normalize_trade_record()` (kiểm tra trường bắt buộc + ép kiểu) rồi `validate_trade_record()` (luật ngữ nghĩa, trả mã lỗi đầu tiên vi phạm theo đúng thứ tự dưới đây).
+
+**a) Lỗi chuẩn hóa — `dq_error` là thông điệp ngoại lệ (`str(exc)`), bản ghi lưu nguyên dạng thô:**
+1. **`missing required fields: <danh_sách>`**: thiếu hoặc rỗng (`None`, `""`) một trong `trade_id`, `symbol`, `price`, `quantity`, `trade_time`; danh sách nối bằng `", "` (ví dụ `missing required fields: price, quantity`).
+2. **Thông điệp lỗi ép kiểu của Python**: trường không chuyển được sang kiểu chuẩn, ví dụ `invalid literal for int() with base 10: 'abc'` (`trade_id`, `trade_time`, `ingestion_time`) hoặc `could not convert string to float: 'abc'` (`price`, `quantity`). Đây không phải mã cố định mà là văn bản ngoại lệ gốc.
+
+**b) Lỗi ngữ nghĩa — mã cố định, kiểm tra theo thứ tự:**
+3. **`trade_id_negative`**: `trade_id` $< 0$.
+4. **`symbol_empty`**: `symbol` rỗng sau khi chuẩn hóa.
+5. **`price_not_finite`**: giá là `NaN` / `±inf`.
+6. **`quantity_not_finite`**: khối lượng là `NaN` / `±inf`. (Hai mã `*_not_finite` được kiểm tra trước các luật dấu vì `NaN <= 0` cho kết quả `False` và `json.loads` chấp nhận `NaN`, `Infinity`.)
+7. **`price_non_positive`**: giá $\le 0$ (ví dụ giá âm do Fault Injector tiêm).
+8. **`quantity_non_positive`**: khối lượng $\le 0$.
+9. **`trade_time_non_positive`**: dấu thời gian $\le 0$.
+
+**c) Bản ghi trùng lặp — KHÔNG phải mã lỗi quarantine:** trùng khóa tự nhiên `(symbol, trade_id)` được khử tại bước deduplication trong `clean_and_deduplicate()` (giữ bản có `ingestion_time` lớn hơn; bản đến sau có `ingestion_time` bằng hoặc nhỏ hơn bị bỏ). Bản trùng **không** được đẩy vào `dq_quarantine`, chỉ được đếm vào `QualityReport.duplicates_removed`. Ở chế độ Kafka, bản trùng với lần chạy trước được `SilverTradeStore` đếm riêng (`cross_run_duplicates`). Mã `ERR_DUPLICATE_TRADE_ID` trong các bản đặc tả cũ **không tồn tại** trong mã nguồn.
 
 ### 3.2. Ghi chú Thực tế Triển khai Mã nguồn (Code-Verified Ground Truth)
 1. **Cấu hình Kafka Topic & Producer (`src/ingestion/kafka_producer.py`):**
@@ -179,6 +210,32 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
    - Hàm vẫn rút một số ngẫu nhiên duy nhất $u \in [0, 1)$ cho mỗi sự kiện, nhưng so sánh với **ngưỡng cộng dồn** $t_1 = s$, $t_2 = s + l$, $t_3 = s + l + o$, $t_4 = s + l + o + d$ (với $s, l, o, d$ lần lượt là `schema_invalid_rate`, `late_data_rate`, `out_of_order_rate`, `duplicate_rate`). Mỗi loại lỗi chiếm một đoạn rời nhau $[t_{k-1}, t_k)$ nên xác suất thực tế bằng đúng tham số cấu hình (điều kiện $s + l + o + d \le 1$).
    - Với `fault_rate = 0.20` trong `bench_fault.py`: `schema_invalid` **4%**, `late_data` **5%**, `out_of_order` **4%**, `duplicate` **7%** (tổng 20% số sự kiện đi qua `FaultInjector`), cộng thêm `negative_price` **2%** được sinh trước bước tiêm lỗi.
    - **Lịch sử:** Trước bản sửa, các ngưỡng không cộng dồn khiến tỷ lệ thực tế chỉ còn 4% / 1% / 0% / 2%; các đợt chạy `bm_fault_20261027_*` được đo với phiên bản lỗi này và không còn dùng làm số liệu chính thức.
+4. **Tầng Lô — bản sửa 2026-11-12 (Mục 3.4):**
+   - `run_batch_pipeline()` ([src/batch_layer/spark_batch_jobs.py](file:///src/batch_layer/spark_batch_jobs.py)) ghi `raw_records` vào Bronze **trước** khi gọi `clean_and_deduplicate()`, thống nhất với asset Dagster `bronze_crypto_trades`.
+   - `argparse` của `spark_batch_jobs.py`: `--write-iceberg` có `default = (BATCH_WRITE_ICEBERG ∈ {"true", "1"})`.
+   - `Dockerfile.batch` bổ sung `COPY configs/ ./configs/`.
+   - `CompactionJob.expire_old_snapshots()` chuyển `Row` → `dict` bằng `asDict()` trước khi `.get()`; `CompactionJob.run_sort_compaction()` dùng `_result_count()` như `run_bin_packing_compaction()`.
+   - `configs/clickhouse/init.sql` có thêm DDL `lakehouse.dq_quarantine`; `configs/iceberg/tables.yaml` khớp `BRONZE_CREATE_DDL`.
+   - Kiểm thử: `tests/test_data_quality.py`, `tests/test_dagster_pipeline.py`, `tests/test_batch_layer.py` — 31/31 PASS (chạy bằng `unittest`).
+5. **Tầng Phục vụ — kiểm toán Mục 3.6 (`src/serving_layer/`):**
+   - **8 route FastAPI** (`api_routes.py`): `GET /`, `/health`, `/api/system/status`, `/api/speed/latest`, `/api/watermark`, `/api/market`, `/api/reconciliation`, `/api/system/alerts`. Không có tiền tố `/api/v1/...`. Chỉ `/api/speed/latest` đọc Redis; Query Merger chỉ đọc ClickHouse.
+   - **Định tuyến `AutoCorrectingQueryMerger.merge_query()`** (khoảng nửa mở theo `window_start`, SQL `window_start >= start AND window_start < end`, đọc `FINAL`):
+     * Trường hợp 1: `end <= W` → `batch_agg` trên `[start, end)`, `Reconciled`, `reconciliation_delta = 0.0` (quy ước, không đo).
+     * Trường hợp 2: `start >= W` → `speed_agg` trên `[start, end)`, `Provisional`, `reconciliation_delta = None`.
+     * Trường hợp 3: `start < W < end` → `batch_agg` trên `[start, W)` + `speed_agg` trên `[W, end)`; nếu phần batch khác rỗng, thêm truy vấn thứ ba `speed_agg` trên `[start, W)` để tính `|VWAP_speed − VWAP_batch|` (làm tròn 4) tại `window_start` chung muộn nhất. `overall_status = Partially Reconciled`. Ba truy vấn chạy tuần tự (tổng 4 lượt khứ hồi kể cả đọc W).
+   - Docstring `query_merger.py` và chú thích `QueryCase` ghi `T_start > W` / `[T_start, W] + (W, T_end]` — lệch code; luận văn theo code.
+   - `WatermarkReader.get_watermark()`: `SELECT max(watermark_time), count() … WHERE layer = {layer:String}`, không cache; fallback `1970-01-01 00:00:00 UTC` khi lỗi kết nối/truy vấn, thiếu thư viện hoặc `count() = 0`.
+   - Kiểm thử: `tests/test_query_merger.py` — 17/17 PASS (`unittest`).
+6. **Dashboard & Alerting — bản đồng bộ UI/Backend 2026-11-12 (Mục 3.7):**
+   - **Nguồn dữ liệu:** `app.py` gọi HTTP tới `/api/market`, `/api/watermark`, `/api/system/status`, `/api/speed/latest`, `/api/system/alerts` và (thẻ Đối soát) `/api/reconciliation`. Thẻ Data quality truy vấn ClickHouse trực tiếp với `CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE` lấy từ biến môi trường.
+   - **Làm mới:** công tắc mặc định tắt; thanh trượt 3–30 s, mặc định 5 s; cơ chế `time.sleep(refresh_rate)` + `st.rerun()`. Sidebar: 10 cặp `TOP_COINS` (mặc định `BTCUSDT`), preset `15m/30m/1H/3H/6H` (mặc định `1H`), URL Serving API.
+   - **Dự phòng `/api/market`:** 200 → `live`; 4xx → `data_source = error`, không có nến, hiện `st.error` (không sang demo); 5xx hoặc lỗi mạng → `demo`. Dữ liệu demo gắn spike theo `|close − open|/open ≥ 0.02` hoặc `(high − low)/low ≥ 0.03` (khớp `SpikeDetector`).
+   - **DQ panel:** kết nối được + bảng rỗng → hiển thị **0 bản ghi lỗi (100% dữ liệu sạch)**; chỉ khi không kết nối được mới dùng 30 bản ghi mẫu, kèm nhãn **"Chế độ Demo/Offline"**.
+   - **Bảng đối soát:** thêm cột `reconciliation_status` và `volume_drift_pct`; ô tóm tắt đếm `MATCHED` / `RECONCILED_AND_HEALED`. Dải trạng thái: Case 1 hiển thị Δ = `N/A` – "Dữ liệu Lịch sử Chuẩn tắc (100% Batch - Không phát sinh đối soát)" thay cho "Khớp hoàn toàn".
+   - **Thẻ Biến động:** biên độ Đóng–Mở hiển thị theo giá trị tuyệt đối `|close − open|/open × 100`, chiều tăng/giảm ở cột riêng (▲/▼).
+   - **Thẻ Kiến trúc:** Case 1 `T_end ≤ W`, Case 2 `T_start ≥ W`, Case 3 `T_start < W < T_end` → `[T_start, W)` trên `batch_agg` + `[W, T_end)` trên `speed_agg`.
+   - **Cảnh báo:** `STREAMING_LAG` (Watermark Lag) WARNING > 900 s, CRITICAL ≥ 1800 s. `check_quarantine_spike()` được gọi trong `GET /api/system/alerts` cho lô Batch mới nhất (`count()` của `dq_quarantine` theo `batch_run_id`; tổng = cách ly + `sum(batch_count)` của `reconciliation_audit_metrics`), mỗi `batch_run_id` chỉ cảnh báo một lần. Thẻ Hệ thống hiển thị bảng cảnh báo từ `/api/system/alerts` cùng số đếm theo loại (Price Spike, Volume Drift, Watermark Lag, Quarantine Spike) và số `CRITICAL`. `SEQUENCE_GAP` vẫn chưa có hàm kiểm tra.
+   - Kiểm thử: `tests/test_dashboard_components.py` (9, thêm 4 ca `TestUiBackendSync`) + `tests/test_query_merger.py` (17) — 26/26 PASS.
 
 ---
 
@@ -271,7 +328,8 @@ Toàn bộ hệ thống gồm **14 dịch vụ** được định nghĩa trong [
 * **Tệp log gốc:** [results/logs/bench_compaction.csv](file:///results/logs/bench_compaction.csv).
 * **Chế độ kiểm thử:** `mode = real` (Đo đạc trực tiếp trên bảng vật lý Iceberg qua REST Catalog và MinIO S3, loại trừ các dòng giả lập `simulated = True`).
 
-* **Đợt chính thức:** 2026-11-11 19:02 UTC, chạy trong container `batch-pipeline`: `prepare_small_files.py --chunk-size 25 --max-records 1000 --repeat 2` rồi `bench_compaction.py --runs 20` (20 lần đọc trước và 20 lần đọc sau compaction, lọc `symbol = BTCUSDT`). Chiến lược `binpack`, `target = 128 MB`, `min_size = 64 MB`.
+* **Đợt chính thức:** 2026-11-11 19:02 UTC, chạy trong container `batch-pipeline`: `prepare_small_files.py --chunk-size 25 --max-records 1000 --repeat 2` rồi `bench_compaction.py --runs 20` (20 lần đọc trước và 20 lần đọc sau compaction, lọc `symbol = BTCUSDT`). Benchmark gọi `CompactionJob.run_bin_packing_compaction()` với tham số mặc định: `rewrite_data_files` chiến lược `binpack`, `target-file-size-bytes = 128 MB`, `min-file-size-bytes = 64 MB`, `max-concurrent-file-group-rewrites = 2`. Benchmark **không** chạy `expire_snapshots` / `remove_orphan_files` (các bước này thuộc `run_table_maintenance()`, `retain_last = 3`, ngưỡng tệp mồ côi 3 ngày) nên bản sửa `expire_old_snapshots()` 2026-11-12 không ảnh hưởng số liệu dưới đây.
+* **Đối chiếu lại CSV (2026-11-12):** các giá trị trong bảng dưới khớp với 40 dòng `mode = real`, `ts = 2026-11-11T19:02:03` của `bench_compaction.csv` (trung bình 2,219.963 / 1,226.086 ms; trung vị bỏ lần đầu 1,821.844 / 1,206.371 ms; độ lệch chuẩn 1,553.065 / 55.479 ms; `speedup_ratio = 1.811`; `compaction_duration_s = 17.54`). Hai cột "tổng dung lượng" và "kích thước file trung bình" lấy từ nhật ký `get_file_stats()`, không có trong CSV.
 
 #### Bảng Kết Quả Đợt Chính Thức (2026-11-11, `runs = 20`):
 

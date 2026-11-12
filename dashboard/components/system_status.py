@@ -6,7 +6,7 @@ Streamlit component for FastAPI /api/system/status readiness output.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
@@ -51,11 +51,97 @@ def _service_cell(name: str, role: str, status: str, icon_name: str) -> str:
     )
 
 
+ALERT_TYPE_LABELS = {
+    "PRICE_SPIKE": "Price Spike",
+    "VOLUME_DRIFT": "Volume Drift",
+    "STREAMING_LAG": "Watermark Lag",
+    "QUARANTINE_SPIKE": "Quarantine Spike",
+    "SEQUENCE_GAP": "Sequence Gap",
+}
+
+
+def render_alerts_panel(alerts: Optional[List[Dict[str, Any]]]) -> None:
+    """Hiển thị danh sách cảnh báo chủ động từ GET /api/system/alerts.
+
+    Args:
+        alerts: Danh sách AnomalyAlert (dạng dict) hoặc None nếu API không trả lời.
+    """
+    section_header(
+        "Cảnh báo chủ động",
+        "Cảnh báo do AlertManager của Serving API phát ra: Price Spike, Volume Drift (ΔV% > 5%), "
+        "Watermark Lag (> 900 s WARNING, ≥ 1800 s CRITICAL), Quarantine Spike và Sequence Gap.",
+        "alert",
+    )
+    if alerts is None:
+        st.warning("Không đọc được /api/system/alerts từ Serving API.")
+        return
+    if not alerts:
+        st.success("Không có cảnh báo nào đang hoạt động.")
+        return
+
+    counts = {key: 0 for key in ALERT_TYPE_LABELS}
+    critical = 0
+    for alert in alerts:
+        a_type = str(alert.get("alert_type", ""))
+        if a_type in counts:
+            counts[a_type] += 1
+        if str(alert.get("severity", "")).upper() == "CRITICAL":
+            critical += 1
+
+    def count_cell(label: str, value: int, color: str) -> str:
+        return (
+            f'<div class="lh-cell"><div class="lh-cell-label">{label}</div>'
+            f'<div class="lh-cell-value" style="color:{color}">{value}</div></div>'
+        )
+
+    render_html(
+        '<div class="lh-grid" style="grid-template-columns: repeat(6, 1fr);">'
+        + "".join(
+            count_cell(ALERT_TYPE_LABELS[key], counts[key],
+                       COLORS["provisional"] if counts[key] else COLORS["text_muted"])
+            for key in ALERT_TYPE_LABELS
+        )
+        + count_cell("CRITICAL", critical, COLORS["danger"] if critical else COLORS["text_muted"])
+        + "</div>"
+    )
+
+    rows = [
+        {
+            "timestamp": a.get("timestamp"),
+            "severity": a.get("severity"),
+            "alert_type": ALERT_TYPE_LABELS.get(a.get("alert_type"), a.get("alert_type")),
+            "symbol": a.get("symbol"),
+            "message": a.get("message"),
+        }
+        for a in alerts
+    ]
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "timestamp": st.column_config.TextColumn("Thời điểm (UTC)"),
+            "severity": st.column_config.TextColumn("Mức"),
+            "alert_type": st.column_config.TextColumn("Loại"),
+            "symbol": st.column_config.TextColumn("Cặp"),
+            "message": st.column_config.TextColumn("Nội dung"),
+        },
+    )
+
+
 def render_system_status_panel(
     status: Optional[Dict[str, Any]],
     latest_speed: Optional[Dict[str, Any]] = None,
+    alerts: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
-    """Render system readiness/freshness summary."""
+    """Render system readiness/freshness summary và danh sách cảnh báo chủ động.
+
+    Args:
+        status: Payload /api/system/status.
+        latest_speed: Payload /api/speed/latest.
+        alerts: Danh sách cảnh báo từ /api/system/alerts (None nếu không gọi được).
+    """
+    render_alerts_panel(alerts)
     section_header(
         "Tình trạng hệ thống",
         "Trạng thái kết nối của các thành phần phục vụ truy vấn và độ tươi của Batch watermark.",

@@ -214,3 +214,74 @@ class ClickHouseQueryClient:
         except Exception as e:
             logger.error(f"Lỗi khi query bảng {table}: {e}")
             return []
+
+    def get_latest_quarantine_stats(self) -> Optional[Dict[str, Any]]:
+        """Thong ke cach ly cua lo Batch moi nhat, phuc vu canh bao QUARANTINE_SPIKE.
+
+        Returns:
+            dict gom batch_run_id, quarantined_count va total_count
+            (= so ban ghi cach ly + tong batch_count cua lo trong
+            reconciliation_audit_metrics), hoac None neu khong co du lieu / loi.
+        """
+        if not self._IDENT_RE.match(self.database):
+            return None
+        client = self.get_client()
+        if client is None:
+            return None
+        try:
+            with self._query_lock:
+                res = client.query(
+                    f"SELECT batch_run_id, count() FROM {self.database}.dq_quarantine "
+                    "GROUP BY batch_run_id ORDER BY max(quarantined_at) DESC LIMIT 1"
+                )
+                if not res.result_rows:
+                    return None
+                batch_run_id, quarantined = res.result_rows[0][0], int(res.result_rows[0][1])
+                valid_res = client.query(
+                    f"SELECT sum(batch_count) FROM {self.database}.reconciliation_audit_metrics FINAL "
+                    "WHERE run_id = {run_id:String}",
+                    parameters={"run_id": batch_run_id},
+                )
+            valid = int(valid_res.result_rows[0][0] or 0) if valid_res.result_rows else 0
+            return {
+                "batch_run_id": str(batch_run_id),
+                "quarantined_count": quarantined,
+                "total_count": quarantined + valid,
+            }
+        except Exception as e:
+            logger.warning(f"Khong doc duoc thong ke dq_quarantine: {e}")
+            return None
+
+    def get_latest_sequence_gap_stats(self) -> List[Dict[str, Any]]:
+        """Khoang ho chuoi trade_id theo symbol cua lo kiem toan moi nhat.
+
+        Returns:
+            Danh sach {run_id, symbol, sequence_gap_count, sequence_gap_rate} cho cac
+            symbol co sequence_gap_count > 0; danh sach rong neu khong co hoac loi.
+        """
+        if not self._IDENT_RE.match(self.database):
+            return []
+        client = self.get_client()
+        if client is None:
+            return []
+        table = f"{self.database}.reconciliation_audit_metrics"
+        try:
+            with self._query_lock:
+                res = client.query(
+                    f"SELECT symbol, sum(sequence_gap_count), max(sequence_gap_rate), any(run_id) "
+                    f"FROM {table} FINAL "
+                    f"WHERE run_id = (SELECT argMax(run_id, created_at) FROM {table}) "
+                    "GROUP BY symbol HAVING sum(sequence_gap_count) > 0"
+                )
+            return [
+                {
+                    "symbol": str(row[0]),
+                    "sequence_gap_count": int(row[1]),
+                    "sequence_gap_rate": float(row[2]),
+                    "run_id": str(row[3]),
+                }
+                for row in res.result_rows
+            ]
+        except Exception as e:
+            logger.warning(f"Khong doc duoc sequence_gap tu reconciliation_audit_metrics: {e}")
+            return []

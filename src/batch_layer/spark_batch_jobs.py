@@ -449,7 +449,7 @@ def write_bronze_to_iceberg(
     (strict=True). Dieu nay dam bao nguoi dung biet ro rang Iceberg ghi that bai.
 
     Args:
-        records:      Danh sach TradeEvent records da clean.
+        records:      Danh sach TradeEvent records tho (truoc khi loc DQ).
         batch_run_id: ID cua batch job hien tai.
         strict:       Neu True, raise RuntimeError thay vi tra ve None khi that bai.
 
@@ -641,7 +641,7 @@ def run_batch_pipeline(
         input_path:     Path to JSON/CSV file or directory. None = load default datasets.
         batch_run_id:   Optional deterministic ID for this run.
         sync_clickhouse: If True, push Gold candles and watermark to ClickHouse.
-        write_iceberg:  If True, append clean Bronze records to Iceberg table.
+        write_iceberg:  If True, append raw (pre-DQ) records to the immutable Iceberg Bronze table.
         iceberg_strict: If True (and write_iceberg=True), raise RuntimeError on Iceberg
                         failure instead of silently skipping. Use this in Docker pipelines.
         from_kafka:     If True, consume new TradeEvent records directly from Kafka first.
@@ -662,6 +662,14 @@ def run_batch_pipeline(
     else:
         raw_records = load_default_records(from_kafka=False)
 
+    # Bronze bat bien: ghi TOAN BO raw_records (truoc khi loc DQ) giong het
+    # asset bronze_crypto_trades trong dagster_project/repository.py.
+    iceberg_result = (
+        write_bronze_to_iceberg(raw_records, batch_run_id, strict=iceberg_strict)
+        if write_iceberg else None
+    )
+
+    # Silver: DQ + dedup. rejected_records -> dq_quarantine, clean_records -> Gold.
     clean_records, rejected_records, quality = clean_and_deduplicate(raw_records)
     cross_run_duplicates = 0
     if incremental:
@@ -669,11 +677,6 @@ def run_batch_pipeline(
     else:
         candles = aggregate_gold_candles(clean_records)
     watermark = compute_watermark_candidate(clean_records, candles, incremental=incremental)
-
-    iceberg_result = (
-        write_bronze_to_iceberg(clean_records, batch_run_id, strict=iceberg_strict)
-        if write_iceberg else None
-    )
 
     clickhouse_rows = 0
     quarantine_rows = 0
@@ -780,9 +783,12 @@ def main() -> None:
                         help="Optional deterministic batch run id")
     parser.add_argument("--no-clickhouse", action="store_true",
                         help="Skip ClickHouse sync")
+    env_write_iceberg = os.getenv("BATCH_WRITE_ICEBERG", "").strip().lower() in {"true", "1"}
     parser.add_argument("--write-iceberg", action="store_true",
+                        default=env_write_iceberg,
                         help=(
-                            "Append clean Bronze records to Iceberg Bronze table. "
+                            "Append raw (pre-DQ) records to Iceberg Bronze table. "
+                            "Mac dinh bat neu BATCH_WRITE_ICEBERG=true|1. "
                             "Yeu cau: docker compose up -d minio iceberg-rest"
                         ))
     parser.add_argument("--iceberg-strict", action="store_true",

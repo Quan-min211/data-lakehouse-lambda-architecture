@@ -57,5 +57,23 @@ CREATE TABLE IF NOT EXISTS lakehouse.system_watermark
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (layer);
 
+-- 4. DQ QUARANTINE: Ban ghi bi DataQualityChecker loai bo (khop voi
+--    ClickHouseBatchSync.DDL_INIT_QUARANTINE trong src/batch_layer/clickhouse_sync.py)
+CREATE TABLE IF NOT EXISTS lakehouse.dq_quarantine
+(
+    batch_run_id    String,
+    trade_id        String,
+    symbol          String,
+    price           String,
+    quantity        String,
+    trade_time      String,
+    dq_error        String,
+    raw_record      String,
+    quarantined_at  DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(quarantined_at)
+ORDER BY (batch_run_id, quarantined_at);
+
 -- Seed initial watermark
 INSERT INTO lakehouse.system_watermark (layer, watermark_time) VALUES ('batch_layer', toDateTime64('1970-01-01 00:00:00.000', 3, 'UTC'));

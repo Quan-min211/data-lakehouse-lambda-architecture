@@ -110,12 +110,18 @@ def render_watermark_status_bar(
     """
     overall_status = market_data.get("overall_status", "Provisional")
     query_case = market_data.get("query_case", 1)
+    try:
+        query_case = int(query_case) if query_case is not None else None
+    except (TypeError, ValueError):
+        query_case = None
     candles = market_data.get("candles", []) or []
     delta = market_data.get("reconciliation_delta")
 
     # 1. Serving route + split bar
     case_names = {1: "Batch view", 2: "Speed view", 3: "Hybrid merge"}
     case_name = case_names.get(query_case, "Unknown")
+    case_label = f"Case {query_case}" if query_case else "Case --"
+    status_badge = get_badge_html(overall_status) if overall_status else ""
     batch_n, speed_n = _source_split(candles)
     total = max(batch_n + speed_n, 1)
     batch_pct = batch_n / total * 100
@@ -137,8 +143,13 @@ def render_watermark_status_bar(
     else:
         lag_str, lag_color = "--", COLORS["text_muted"]
 
-    # 3. Reconciliation delta
-    if delta is None:
+    # 3. Reconciliation delta. Case 1 dat delta = 0.0 theo quy uoc (khong co phep do
+    # nao), nen khong duoc hien thi nhu "khop hoan toan".
+    if query_case == 1:
+        delta_str = "N/A"
+        delta_note = "Dữ liệu Lịch sử Chuẩn tắc (100% Batch - Không phát sinh đối soát)"
+        delta_color = COLORS["reconciled"]
+    elif delta is None:
         delta_str, delta_note, delta_color = "--", "Chưa có vùng giao thoa", COLORS["text_muted"]
     elif float(delta) == 0.0:
         delta_str, delta_note, delta_color = "0.0000", "Khớp hoàn toàn tại biên W", COLORS["reconciled"]
@@ -151,8 +162,8 @@ def render_watermark_status_bar(
         <div class="lh-cell">
         <div class="lh-cell-label">{icon("merge", 13)}Serving route</div>
         <div style="display:flex;align-items:center;gap:10px;">
-        <span class="lh-cell-value" style="font-family:var(--sans);font-weight:600;">Case {query_case} · {case_name}</span>
-        {get_badge_html(overall_status)}
+        <span class="lh-cell-value" style="font-family:var(--sans);font-weight:600;">{case_label} · {case_name}</span>
+        {status_badge}
         </div>
         {split_bar}
         <div class="lh-cell-note"><span class="lh-num">{batch_n}</span> nến batch · <span class="lh-num">{speed_n}</span> nến speed</div>

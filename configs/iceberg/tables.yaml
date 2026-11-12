@@ -1,4 +1,5 @@
 # Apache Iceberg Table Configuration
+# Dong bo voi BRONZE_CREATE_DDL trong src/batch_layer/iceberg_utils.py
 catalog:
   type: "rest"
   uri: "http://iceberg-rest:8181"
@@ -8,6 +9,15 @@ tables:
   bronze_trades:
     namespace: "bronze"
     table_name: "crypto_trades"
+    full_name: "iceberg_catalog.bronze.crypto_trades"
     partition_spec:
-      - field: "trade_time"
-        transform: "day"
+      - field: "trade_time_ts"
+        transform: "days"          # PARTITIONED BY (days(trade_time_ts))
+    properties:
+      write.format.default: "parquet"
+      write.parquet.compression-codec: "snappy"
+      write.target-file-size-bytes: "134217728"          # 128 MB
+      write.distribution-mode: "hash"
+      history.expire.max-snapshot-age-ms: "604800000"   # 7 ngay
+      write.metadata.metrics.default: "truncate(16)"
+      format-version: "2"

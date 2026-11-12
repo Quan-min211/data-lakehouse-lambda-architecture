@@ -3,7 +3,8 @@ dq_panel.py
 ===========
 Component quan ly va giam sat chat luong du lieu (Data Quality & Quarantine Panel):
 - Truy van truc tiep tu ClickHouse table 'lakehouse.dq_quarantine'
-- Fallback du lieu mau khi ClickHouse offline hoac chua co ban ghi cach ly
+- Fallback du lieu mau CHI khi khong ket noi duoc ClickHouse (Che do Demo/Offline);
+  ket noi duoc nhung bang rong -> hien thi 0 ban ghi loi (100% du lieu sach)
 - Bieu do Donut / Pie Chart phan bo cac loai vi pham DQ Gate
 - Bieu do Bar Chart so luong vi pham theo cap Coin
 - Bang danh sach ban ghi bi cach ly kem bo loc da chieu (Error type, Symbol, Search)
@@ -70,20 +71,36 @@ def _generate_fallback_quarantine_records() -> List[Dict[str, Any]]:
 
 # ── CLICKHOUSE QUERY HELPER ───────────────────────────────────────────────────
 def fetch_quarantine_data_from_clickhouse(
-    host: str = "localhost",
-    port: int = 8123,
-    database: str = "lakehouse",
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    database: Optional[str] = None,
     limit: int = 1000,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """Truy van danh sach ban ghi bi cach ly tu ClickHouse table lakehouse.dq_quarantine.
 
+    Thong tin ket noi khong truyen vao se lay tu bien moi truong CLICKHOUSE_HOST,
+    CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DATABASE
+    (container Streamlit khong co thu muc src/ nen khong dung get_clickhouse_config()).
+
     Returns:
-        Tuple of (records_list, is_live_connected).
+        Tuple (records_list, is_live_connected):
+          - (ban ghi that, True) khi ket noi duoc, ke ca danh sach RONG (du lieu sach).
+          - (ban ghi mau, False) chi khi khong ket noi / truy van that bai.
     """
+    host = host or os.getenv("CLICKHOUSE_HOST", "localhost")
+    port = int(port or os.getenv("CLICKHOUSE_PORT", "8123"))
+    database = database or os.getenv("CLICKHOUSE_DATABASE", os.getenv("CLICKHOUSE_DB", "lakehouse"))
+    user = user if user is not None else os.getenv("CLICKHOUSE_USER", "default")
+    password = password if password is not None else os.getenv("CLICKHOUSE_PASSWORD", "")
+    if not database.replace("_", "").isalnum():
+        return _generate_fallback_quarantine_records(), False
     try:
         import clickhouse_connect
         client = clickhouse_connect.get_client(
-            host=host, port=port, database=database, connect_timeout=3
+            host=host, port=port, username=user, password=password,
+            database=database, connect_timeout=3,
         )
         query = f"""
         SELECT
@@ -104,9 +121,8 @@ def fetch_quarantine_data_from_clickhouse(
         cols = res.column_names
         rows = [dict(zip(cols, row)) for row in res.result_rows]
 
-        if rows:
-            return rows, True
-        return _generate_fallback_quarantine_records(), False
+        # Ket noi thanh cong: tra ve dung du lieu that, ke ca khi bang rong
+        return rows, True
     except Exception:
         # Fallback sang tap mau khi khong ket noi duoc
         return _generate_fallback_quarantine_records(), False
@@ -114,9 +130,9 @@ def fetch_quarantine_data_from_clickhouse(
 
 # ── MAIN COMPONENT RENDER ─────────────────────────────────────────────────────
 def render_dq_quarantine_panel(
-    clickhouse_host: str = "localhost",
-    clickhouse_port: int = 8123,
-    clickhouse_db: str = "lakehouse",
+    clickhouse_host: Optional[str] = None,
+    clickhouse_port: Optional[int] = None,
+    clickhouse_db: Optional[str] = None,
 ) -> None:
     """Render Tab Data Quality & Quarantine tren Streamlit Dashboard."""
     section_header(
@@ -131,10 +147,20 @@ def render_dq_quarantine_panel(
     )
 
     if not is_live:
-        st.info("Đang hiển thị dữ liệu mẫu: ClickHouse không khả dụng hoặc chưa có bản ghi bị cách ly.")
+        st.warning(
+            "Chế độ Demo/Offline: không kết nối được ClickHouse, các bản ghi dưới đây là "
+            "dữ liệu mẫu minh họa, không phải dữ liệu thật của hệ thống."
+        )
 
     if not records:
-        st.success("Không có bản ghi nào bị cách ly trong kỳ quan sát.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(label="Bản ghi bị cách ly", value="0")
+        with col2:
+            st.metric(label="Tỷ lệ dữ liệu sạch", value="100%")
+        st.success(
+            "0 bản ghi lỗi (100% dữ liệu sạch): bảng lakehouse.dq_quarantine đang rỗng."
+        )
         return
 
     df = pd.DataFrame(records)

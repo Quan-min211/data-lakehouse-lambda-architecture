@@ -454,7 +454,12 @@ services:
       - "8501:8501"    # Dashboard  →  http://localhost:8501
     environment:
       - FASTAPI_URL=http://fastapi:8000
+      # Tab Data quality (dq_panel.py) truy van truc tiep lakehouse.dq_quarantine
       - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-lakehouse}
       - REDIS_HOST=redis
     volumes:
       - ./dashboard:/app/dashboard

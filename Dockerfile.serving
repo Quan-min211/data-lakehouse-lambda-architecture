@@ -2,9 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Danh sach goi ghim phien ban rieng cho Serving Layer (khong dung requirements.txt vi
+# tep do chua ca stack pyspark/dbt/dagster). Cung phien ban voi Dockerfile.speed,
+# Dockerfile.batch, Dockerfile.dashboard. Ghim pydantic vi ma dung API Pydantic 2 (model_dump).
 RUN pip install --no-cache-dir \
     fastapi==0.110.0 \
+    pydantic==2.6.4 \
     uvicorn==0.27.0 \
     clickhouse-connect==0.7.0 \
     redis==5.0.0 \

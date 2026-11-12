@@ -280,11 +280,29 @@ async def get_system_alerts(limit: int = Query(50, ge=1, le=200, description="S�
     """
     Truy vấn danh sách cảnh báo bất thường chủ động (Proactive Anomaly Alerts):
     - Volume Drift Anomaly (> 5%)
-    - Quarantine Spike Anomaly
-    - Streaming Lag SLA Anomaly
+    - Quarantine Spike Anomaly (lo Batch moi nhat >= ALERT_QUARANTINE_THRESHOLD ban ghi)
+    - Watermark Lag Anomaly (> 900 s WARNING, >= 1800 s CRITICAL)
+    - Price Spike (is_spike = 1)
+    - Sequence Gap (sequence_gap_count > 0 trong lo kiem toan moi nhat)
     """
     from src.utils.alerting import get_alert_manager
     manager = get_alert_manager()
+    # Kiem tra so ban ghi cach ly cua lo Batch moi nhat (moi lo chi canh bao mot lan)
+    stats = _ch_client.get_latest_quarantine_stats()
+    if stats:
+        manager.check_quarantine_spike(
+            quarantined_count=stats["quarantined_count"],
+            total_count=stats["total_count"],
+            batch_run_id=stats["batch_run_id"],
+        )
+    # Kiem tra khoang ho chuoi trade_id cua lo kiem toan moi nhat (moi (run_id, symbol) mot lan)
+    for gap in _ch_client.get_latest_sequence_gap_stats():
+        manager.check_sequence_gap(
+            symbol=gap["symbol"],
+            sequence_gap_count=gap["sequence_gap_count"],
+            sequence_gap_rate=gap["sequence_gap_rate"],
+            run_id=gap["run_id"],
+        )
     alerts = manager.get_recent_alerts(limit=limit)
     return {
         "status": "ok",
