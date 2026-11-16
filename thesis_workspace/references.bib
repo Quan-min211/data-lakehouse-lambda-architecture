@@ -1,71 +1,197 @@
-@book{marz2015bigdata,
-  title     = {Big Data: Principles and Best Practices of Scalable Real-Time Data Systems},
-  author    = {Marz, Nathan and Warren, James},
-  year      = {2015},
-  publisher = {Manning Publications},
-  isbn      = {9781617290343}
-}
+% Danh muc tai lieu tham khao (22 muc, xep A-Z theo ho tac gia thu nhat / ten to chuc).
+% Thu tu va so [n] khop voi specs/00_global_constants.md, PHAN 6 (cap nhat 2026-11-16).
 
-@inproceedings{armbrust2021lakehouse,
-  title        = {Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics},
-  author       = {Armbrust, Michael and Ghodsi, Ali and Xin, Reynold and Zaharia, Matei},
-  booktitle    = {Proceedings of the 11th Conference on Innovative Data Systems Research (CIDR)},
-  year         = {2021},
-  organization = {CIDR}
+@inproceedings{abadi2008columnstores,
+  title     = {Column-Stores vs. Row-Stores: How Different Are They Really?},
+  author    = {Abadi, Daniel J. and Madden, Samuel R. and Hachem, Nabil},
+  booktitle = {Proceedings of the 2008 ACM SIGMOD International Conference on Management of Data},
+  pages     = {967--980},
+  year      = {2008},
+  address   = {Vancouver, Canada},
+  doi       = {10.1145/1376616.1376712}
 }
 
 @article{akidau2015dataflow,
-  title     = {The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing},
-  author    = {Akidau, Tyler and Bradshaw, Robert and Chambers, Craig and Chernyak, Slava and Fern{\'a}ndez-Moctezuma, Rafael J. and Lax, Reuven and McVeety, Ellen and Mills, Daniel and Perry, Frances and Schmidt, Eric and Sam Ramasamy},
-  journal   = {Proceedings of the VLDB Endowment},
-  volume    = {8},
-  number    = {12},
-  pages     = {1792--1803},
-  year      = {2015},
-  publisher = {VLDB Endowment}
+  title   = {The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing},
+  author  = {Akidau, Tyler and Bradshaw, Robert and Chambers, Craig and Chernyak, Slava and Fern{\'a}ndez-Moctezuma, Rafael J. and Lax, Reuven and McVeety, Sam and Mills, Daniel and Perry, Frances and Schmidt, Eric and Whittle, Sam},
+  journal = {Proceedings of the VLDB Endowment},
+  volume  = {8},
+  number  = {12},
+  pages   = {1792--1803},
+  year    = {2015}
+}
+
+@misc{hudi_docs,
+  title        = {Apache Hudi Documentation: Overview},
+  author       = {{Apache Hudi Community}},
+  howpublished = {\url{https://hudi.apache.org/docs/overview}},
+  note         = {Truy cap ngay 16/11/2026}
+}
+
+@misc{iceberg2024spec,
+  title        = {Apache Iceberg Table Format Specification v2},
+  author       = {{Apache Iceberg Community}},
+  year         = {2024},
+  howpublished = {\url{https://iceberg.apache.org/spec/}}
+}
+
+@misc{iceberg_spark_procedures,
+  title        = {Spark Procedures, Apache Iceberg Documentation 1.5.2},
+  author       = {{Apache Iceberg Community}},
+  howpublished = {\url{https://iceberg.apache.org/docs/1.5.2/spark-procedures/}},
+  note         = {Truy cap ngay 16/11/2026}
+}
+
+@misc{spark_ss_guide,
+  title        = {Structured Streaming Programming Guide, Apache Spark Documentation 3.5},
+  author       = {{Apache Spark Community}},
+  howpublished = {\url{https://spark.apache.org/docs/3.5.0/structured-streaming-programming-guide.html}},
+  note         = {Truy cap ngay 16/11/2026}
+}
+
+@article{armbrust2020delta,
+  title   = {Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores},
+  author  = {Armbrust, Michael and Das, Tathagata and Sun, Liwen and Yavuz, Burak and Zhu, Shixiong and Murthy, Mukul and others},
+  journal = {Proceedings of the VLDB Endowment},
+  volume  = {13},
+  number  = {12},
+  pages   = {3411--3424},
+  year    = {2020},
+  doi     = {10.14778/3415478.3415560}
+}
+
+@inproceedings{armbrust2018structured,
+  title     = {Structured Streaming: A Declarative API for Real-Time Applications in Apache Spark},
+  author    = {Armbrust, Michael and Das, Tathagata and Torres, Joseph and Yavuz, Burak and Zhu, Shixiong and Xin, Reynold and Ghodsi, Ali and Stoica, Ion and Zaharia, Matei},
+  booktitle = {Proceedings of the 2018 International Conference on Management of Data (SIGMOD)},
+  pages     = {601--613},
+  year      = {2018},
+  address   = {Houston, TX, USA},
+  doi       = {10.1145/3183713.3190664}
+}
+
+@inproceedings{armbrust2021lakehouse,
+  title     = {Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics},
+  author    = {Armbrust, Michael and Ghodsi, Ali and Xin, Reynold and Zaharia, Matei},
+  booktitle = {Proceedings of the 11th Conference on Innovative Data Systems Research (CIDR)},
+  pages     = {1--8},
+  year      = {2021}
+}
+
+@article{basiri2016chaos,
+  title   = {Chaos Engineering},
+  author  = {Basiri, Ali and Behnam, Niosha and de Rooij, Ruud and Hochstein, Lorin and Kosewski, Luke and Reynolds, Justin and Rosenthal, Casey},
+  journal = {IEEE Software},
+  volume  = {33},
+  number  = {3},
+  pages   = {35--41},
+  year    = {2016},
+  doi     = {10.1109/MS.2016.60}
+}
+
+@misc{clickhouse2024doc,
+  title        = {ClickHouse: Fast Open-Source OLAP Database Management System Documentation},
+  author       = {{ClickHouse Inc.}},
+  year         = {2024},
+  howpublished = {\url{https://clickhouse.com/docs/}}
+}
+
+@misc{databricks_medallion,
+  title        = {What is the medallion lakehouse architecture?},
+  author       = {{Databricks Inc.}},
+  howpublished = {\url{https://docs.databricks.com/aws/en/lakehouse/medallion}},
+  note         = {Truy cap ngay 16/11/2026}
+}
+
+@book{kimball2013toolkit,
+  title     = {The Data Warehouse Toolkit: The Definitive Guide to Dimensional Modeling},
+  author    = {Kimball, Ralph and Ross, Margy},
+  edition   = {3rd},
+  publisher = {John Wiley \& Sons},
+  address   = {Indianapolis, IN},
+  year      = {2013},
+  isbn      = {9781118530801}
 }
 
 @book{kleppmann2017ddia,
   title     = {Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems},
   author    = {Kleppmann, Martin},
-  year      = {2017},
   publisher = {O'Reilly Media},
+  address   = {Sebastopol, CA},
+  year      = {2017},
   isbn      = {9781449373320}
 }
 
+@misc{kreps2014questioning,
+  title        = {Questioning the Lambda Architecture},
+  author       = {Kreps, Jay},
+  howpublished = {O'Reilly Radar, \url{https://www.oreilly.com/radar/questioning-the-lambda-architecture/}},
+  year         = {2014},
+  month        = jul,
+  note         = {Truy cap ngay 16/11/2026}
+}
+
 @inproceedings{kreps2011kafka,
-  title        = {Kafka: A Distributed Messaging System for Log Processing},
-  author       = {Kreps, Jay and Narkhede, Neha and Rao, Jun},
-  booktitle    = {Proceedings of 6th International Workshop on Networking Meets Databases (NetDB)},
-  pages        = {1--7},
-  year         = {2011},
-  organization = {ACM}
+  title     = {Kafka: A Distributed Messaging System for Log Processing},
+  author    = {Kreps, Jay and Narkhede, Neha and Rao, Jun},
+  booktitle = {Proceedings of the 6th International Workshop on Networking Meets Databases (NetDB)},
+  pages     = {1--7},
+  year      = {2011},
+  address   = {Athens, Greece}
+}
+
+@book{marz2015bigdata,
+  title     = {Big Data: Principles and Best Practices of Scalable Real-Time Data Systems},
+  author    = {Marz, Nathan and Warren, James},
+  publisher = {Manning Publications},
+  address   = {Shelter Island, NY},
+  year      = {2015},
+  isbn      = {9781617290343}
+}
+
+@article{peffers2007dsrm,
+  title   = {A Design Science Research Methodology for Information Systems Research},
+  author  = {Peffers, Ken and Tuunanen, Tuure and Rothenberger, Marcus A. and Chatterjee, Samir},
+  journal = {Journal of Management Information Systems},
+  volume  = {24},
+  number  = {3},
+  pages   = {45--77},
+  year    = {2007},
+  doi     = {10.2753/MIS0742-1222240302}
+}
+
+@misc{redis_eviction,
+  title        = {Key eviction, Redis Documentation},
+  author       = {{Redis Ltd.}},
+  howpublished = {\url{https://redis.io/docs/latest/develop/reference/eviction/}},
+  note         = {Truy cap ngay 16/11/2026}
+}
+
+@article{schulze2024clickhouse,
+  title   = {ClickHouse - Lightning Fast Analytics for Everyone},
+  author  = {Schulze, Robert and Schreiber, Tom and Yatsishin, Ilya and Dahimene, Ryadh and Milovidov, Alexey},
+  journal = {Proceedings of the VLDB Endowment},
+  volume  = {17},
+  number  = {12},
+  pages   = {3731--3744},
+  year    = {2024},
+  doi     = {10.14778/3685800.3685802}
+}
+
+@misc{jsonschema2020,
+  title        = {JSON Schema: A Media Type for Describing JSON Documents},
+  author       = {Wright, Austin and Andrews, Henry and Hutton, Ben and Dennis, Greg},
+  howpublished = {IETF Internet-Draft draft-bhutton-json-schema-01, \url{https://json-schema.org/draft/2020-12/json-schema-core}},
+  year         = {2022},
+  month        = jun
 }
 
 @article{zaharia2016spark,
-  title     = {Apache Spark: A Unified Engine for Big Data Processing},
-  author    = {Zaharia, Matei and Xin, Reynold S. and Wendell, Patrick and Das, Tathagata and Armbrust, Michael and Dave, Ankur and Meng, Xiangrui and Rosen, Josh and Venkataraman, Shivaram and Franklin, Michael J. and others},
-  journal   = {Communications of the ACM},
-  volume    = {59},
-  number    = {11},
-  pages     = {56--65},
-  year      = {2016},
-  publisher = {ACM New York, NY, USA}
+  title   = {Apache Spark: A Unified Engine for Big Data Processing},
+  author  = {Zaharia, Matei and Xin, Reynold S. and Wendell, Patrick and Das, Tathagata and Armbrust, Michael and Dave, Ankur and Meng, Xiangrui and Rosen, Josh and Venkataraman, Shivaram and Franklin, Michael J. and Ghodsi, Ali and Gonzalez, Joseph and Shenker, Scott and Stoica, Ion},
+  journal = {Communications of the ACM},
+  volume  = {59},
+  number  = {11},
+  pages   = {56--65},
+  year    = {2016}
 }
-
-@misc{iceberg2024spec,
-  title        = {Apache Iceberg: The Open Table Format for Analytic Datasets},
-  author       = {{Apache Software Foundation}},
-  howpublished = {\url{https://iceberg.apache.org/spec/}},
-  year         = {2024},
-  note         = {Accessed: 2026-11-11}
-}
-
-@misc{clickhouse2024doc,
-  title        = {ClickHouse: Fast Open-Source OLAP Database Management System},
-  author       = {{ClickHouse Inc.}},
-  howpublished = {\url{https://clickhouse.com/docs/}},
-  year         = {2024},
-  note         = {Accessed: 2026-11-11}
-}
-

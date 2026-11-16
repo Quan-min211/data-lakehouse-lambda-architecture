@@ -242,6 +242,9 @@ Giá trị cột `dq_error` do [src/data_quality/dq_checks.py](file:///src/data_
 ## PHẦN 4: TOÀN BỘ SỐ LIỆU THỰC NGHIỆM ĐO ĐẠC BẤT BIẾN (RESULTS/LOGS)
 
 ### 4.1. Benchmark 1: Độ Trễ Truy Vấn Phân Tích (Query Latency — RQ1)
+
+> [!WARNING]
+> **Hiệu chỉnh 2026-11-16 (đối chiếu `bench_latency.py` và `query_merger.py`):** watermark giả lập W = T_now − 24h, nên Q3 `[T_now − 30m, T_now)` nằm hoàn toàn sau W và được Query Merger xử lý theo **Trường hợp 2** (chỉ `speed_agg`), không phải Trường hợp 3. Q2 cũng là Trường hợp 2, Q1 là Trường hợp 1. Mỗi lượt `lambda` chỉ gửi **một** truy vấn ClickHouse (watermark giả lập không cần khứ hồi); Trường hợp 3 chưa từng được đo. Các câu "Q3 cắt ngang watermark" và "Ở Q3, lambda phải gửi ba truy vấn" bên dưới và ở Phần 5 là **sai**. Đợt 2026-11-12 (1 080 dòng, watermark 2026-10-22) bị loại vì phần lớn truy vấn trả về 0 nến.
 * **Tệp log gốc:** [results/logs/bench_latency.csv](file:///results/logs/bench_latency.csv) (Tổng cộng **2,205 lượt truy vấn** qua 4 đợt; đợt chính thức 2026-11-11 có 540 lượt = 2 symbol × 3 kịch bản × 3 chiến lược × 30 lần) và [results/logs/bench_latency_summary.csv](file:///results/logs/bench_latency_summary.csv).
 * **Mốc thời gian:** $T_{\text{now}}$ là `MAX(window_start)` của `batch_agg` (đợt 2026-11-11: `2026-10-17 09:59 UTC`), không phải giờ hệ thống; watermark giả lập = $T_{\text{now}} - 24\text{h}$.
 * **Phương pháp phân vị:** nội suy tuyến tính (mặc định numpy). Lưu ý `bench_latency_summary.csv` dùng phương pháp hạng dưới của `_percentile()` nên lệch vài phần trăm mili-giây so với các bảng dưới đây.
@@ -399,6 +402,9 @@ Giá trị cột `dq_error` do [src/data_quality/dq_checks.py](file:///src/data_
 ---
 
 ### 4.5. Kết Quả Kiểm Toán Giao Thức Hỗn Loạn (Chaos Smoke Test Protocol)
+
+> [!WARNING]
+> **Hiệu chỉnh 2026-11-16 (đối chiếu lịch sử git của `run_chaos_smoke_tests.py`):** phiên bản đầu (commit `c4ea6f2`) cộng hằng số cố định vào T_conv (+0.12 s TC1, +0.25 s TC2, +0.18 s TC3, +0.08 s TC4); commit `19e554c` (2026-11-08) đã bỏ. Vì vậy T_conv của 5 đợt tháng 10 **không phải số đo**. **Đợt chính thức là 2026-11-08 13:45 UTC**: TC1 R_gap 25% → 0%, ΔV 23,58% → 0%, T_conv 0,0035 s; TC2 ΔV 21,15% → 0%, 0,0094 s; TC3 R_dup 50% → 0%, 0,0123 s; TC4 5 000/5 000 sự kiện, 0,0618 s. Qua 6 đợt: ΔV trước đối soát TC1 23,41% – 25,90%, TC2 19,70% – 22,18% (khối lượng sinh ngẫu nhiên không theo hạt giống). TC4 đặt `max_offsets = 20000` > 5 000 sự kiện nên chỉ có một đợt; không chạy Spark. Các kịch bản chạy trong một tiến trình Python với ClickHouse giả lập. Khoảng T_conv "0.0035s – 0.252s" ở Mục 4.2 trộn số đo thật với số có hằng số cộng thêm.
 * **Tệp log gốc:** [results/logs/chaos_smoke_tests.csv](file:///results/logs/chaos_smoke_tests.csv).
 * **Kết quả tổng quát:** Đạt trạng thái **PASS 100% (4/4 Test Cases)**, được cấp quyền sẵn sàng vận hành liên tục 24/7 (*Readiness Gate Decision: GO*).
 
@@ -417,23 +423,41 @@ Giá trị cột `dq_error` do [src/data_quality/dq_checks.py](file:///src/data_
 
 | Câu Hỏi Nghiên Cứu | Nội Dung Khẳng Định Học Thuật | Số Liệu Minh Chứng Cốt Lõi | Tệp Dữ Liệu Nguồn |
 | :--- | :--- | :--- | :--- |
-| **RQ1: Latency Overhead** | Query Merger của kiến trúc Lambda trả về kết quả hợp nhất Batch + Speed theo watermark mà **không làm tăng đáng kể** độ trễ so với truy vấn trực tiếp một bảng ClickHouse. (Không khẳng định Lambda nhanh hơn Batch-only.) | • Đợt 2026-11-11 (BTCUSDT, 90 mẫu/chiến lược): P50 `lambda` **62.84 ms**, `batch_only` 60.12 ms, `speed_only` 58.94 ms; chênh lệch 2–4 ms, nằm trong biên dao động giữa các đợt.<br>• P99 `lambda` **131.32 ms**; Q3 `lambda` gửi 3 truy vấn thay vì 1.<br>• Ưu thế ở đợt 2026-10-23 (P50 50.92 ms) **không tái lập**. | [bench_latency.csv](file:///results/logs/bench_latency.csv) |
+| **RQ1: Latency Overhead** | Query Merger của kiến trúc Lambda trả về kết quả hợp nhất Batch + Speed theo watermark mà **không làm tăng đáng kể** độ trễ so với truy vấn trực tiếp một bảng ClickHouse. (Không khẳng định Lambda nhanh hơn Batch-only.) | • Đợt 2026-11-11 (BTCUSDT, 90 mẫu/chiến lược): P50 `lambda` **62.84 ms**, `batch_only` 60.12 ms, `speed_only` 58.94 ms; chênh lệch 2–4 ms, nằm trong biên dao động giữa các đợt.<br>• P99 `lambda` **131.32 ms**; mọi truy vấn `lambda` trong benchmark chỉ gửi 1 truy vấn ClickHouse (Q3 rơi vào Trường hợp 2, xem hiệu chỉnh ở Mục 4.1).<br>• Ưu thế ở đợt 2026-10-23 (P50 50.92 ms) **không tái lập**. | [bench_latency.csv](file:///results/logs/bench_latency.csv) |
 | **RQ2: Reprocessing Accuracy** | Speed View tức thời chấp nhận sai số để đổi lấy độ trễ thấp, và chu kỳ Batch đưa các cửa sổ về giá trị đối soát (sai số 0). | • Sai số thực của luồng (kịch bản hỗn loạn TC1–TC2): $\Delta V_{\%} \approx 19.70\% - 25.65\%$ trước đối soát, $0.00\%$ sau đối soát, $T_{\text{conv}} \le 0.252\text{s}$.<br>• Benchmark 2 (2026-11-11): MAPE VWAP 0.0937% (BTC) / 0.1020% (ETH). **Lưu ý:** Speed View ở benchmark này được sinh từ Batch View cộng nhiễu mô phỏng, nên MAPE phản ánh tham số nhiễu (kỳ vọng ≈ 0.096%), không phải sai số thực của Spark. | [bench_reprocess_summary.csv](file:///results/logs/bench_reprocess_summary.csv)<br>[chaos_smoke_tests.csv](file:///results/logs/chaos_smoke_tests.csv) |
 | **RQ3: Compaction Efficiency** | Compaction bin-pack trên Apache Iceberg giảm mạnh số tệp nhỏ và làm độ trễ đọc phân tích nhanh hơn, ổn định hơn. | • Đợt 2026-11-11 (`runs = 20`): số file Parquet **118 → 10 (−91.5%)**, kích thước trung bình **0.97 → 10.60 MB**, thời gian nén 17.54 s.<br>• Độ trễ đọc ở trạng thái nóng: trung vị **1,821.8 → 1,206.4 ms (≈ 1.51×)**; độ lệch chuẩn 1,553 → 55.5 ms.<br>• Hệ số 1.81× (CSV) và ~2.1× (các đợt cũ `runs = 2`) bao gồm lần đọc lạnh nên bị thổi phồng. | [bench_compaction.csv](file:///results/logs/bench_compaction.csv) |
 ---
 
 ## PHẦN 6: DANH MỤC TÀI LIỆU THAM KHẢO CHUẨN HÓA (XẾP THEO THỨ TỰ TỪ ĐIỂN A-Z)
 
-> **Quy tắc bắt buộc (Mẫu 5 - HCMUTE):** Đánh số thứ tự theo thứ tự từ điển (A-Z) của tên tác giả. Mọi trích dẫn trong Chương 1 đến Chương 5 phải dùng đúng mã số `[1]` đến `[8]` dưới đây:
+> **Quy tắc bắt buộc (Mẫu 5 - HCMUTE):** Đánh số theo thứ tự từ điển (A-Z) của họ tác giả thứ nhất; tài liệu của tổ chức xếp theo tên tổ chức. Mọi trích dẫn trong Chương 1 đến Chương 5 phải dùng đúng mã số `[1]` đến `[22]` dưới đây.
+>
+> **Kiểu trích dẫn (số thứ tự, kiểu IEEE):** đặt `[n]` ngay sau ý được trích, trước dấu chấm câu. Khi trích một phần cụ thể của sách hoặc tài liệu dài, ghi kèm vị trí: `[14, Ch. 12]`, `[17, Ch. 1]`. Nhiều nguồn cho cùng một ý: `[3], [9]`. Tài liệu trực tuyến ghi URL và ngày truy cập. Khẳng định lấy từ mã nguồn hoặc nhật ký thực nghiệm của đề tài không trích `[n]` mà ghi đường dẫn tệp trong câu hoặc trong dòng *Nguồn* của bảng, hình.
+>
+> **Lịch sử:** Ngày 2026-11-16 danh mục được mở rộng từ 8 lên 22 tài liệu để phục vụ Chương 2. Ánh xạ số cũ → số mới: [1]→[2], [2]→[4], [3]→[9], [4]→[11], [5]→[14], [6]→[16], [7]→[17], [8]→[22]. Chương 1 và Chương 3 (`.md`, `.docx`) đã được đánh số lại theo ánh xạ này. Thông tin xuất bản của 14 tài liệu mới được kiểm tra trên web cùng ngày.
 
-1. `[1]` Akidau T., Bradshaw R., Chambers C., Chernyak S., Fernández-Moctezuma R. J., Lax R., McVeety S., Mills D., Perry F., Schmidt E., Whittle S., *The Dataflow Model: A practical approach to balancing correctness, latency, and cost in massive-scale, unbounded, out-of-order data processing*, Proceedings of the VLDB Endowment, Vol. 8 (12), 2015, pp. 1792 - 1803.
-2. `[2]` Apache Iceberg Community, *Apache Iceberg Table Format Specification v2*, Apache Software Foundation, 2024.
-3. `[3]` Armbrust M., Ghodsi A., Xin R., Zaharia M., *Lakehouse: A new generation of open platforms that unify data warehousing and advanced analytics*, Proceedings of the 11th Annual Conference on Innovative Data Systems Research (CIDR 2021), Virtual Event, Jan. 11-15, 2021, pp. 1 - 8.
-4. `[4]` ClickHouse Inc., *ClickHouse: Fast Open-Source OLAP Database Management System Documentation*, ClickHouse Official Technical Reference, 2024.
-5. `[5]` Kleppmann M., *Designing Data-Intensive Applications: The big ideas behind reliable, scalable, and maintainable systems*, 1st Edition, O'Reilly Media, Sebastopol, CA, 2017.
-6. `[6]` Kreps J., Narkhede N., Rao J., *Kafka: A distributed messaging system for log processing*, Proceedings of the 6th International Workshop on Networking Meets Databases (NetDB), Athens, Greece, Jun. 12, 2011, pp. 1 - 7.
-7. `[7]` Marz N., Warren J., *Big Data: Principles and best practices of scalable realtime data systems*, 1st Edition, Manning Publications, Shelter Island, NY, 2015.
-8. `[8]` Zaharia M., Xin R. S., Wendell P., Das T., Armbrust M., Dave A., Meng X., Rosen J., Venkataraman S., Franklin M. J., Ghodsi A., Gonzalez J., Shenker S., Stoica I., *Apache Spark: A unified engine for big data processing*, Communications of the ACM, Vol. 59 (11), 2016, pp. 56 - 65.
+1. `[1]` Abadi D. J., Madden S. R., Hachem N., *Column-stores vs. row-stores: How different are they really?*, Proceedings of the 2008 ACM SIGMOD International Conference on Management of Data, Vancouver, Canada, 2008, pp. 967 - 980, doi: 10.1145/1376616.1376712.
+2. `[2]` Akidau T., Bradshaw R., Chambers C., Chernyak S., Fernández-Moctezuma R. J., Lax R., McVeety S., Mills D., Perry F., Schmidt E., Whittle S., *The Dataflow Model: A practical approach to balancing correctness, latency, and cost in massive-scale, unbounded, out-of-order data processing*, Proceedings of the VLDB Endowment, Vol. 8 (12), 2015, pp. 1792 - 1803.
+3. `[3]` Apache Hudi Community, *Apache Hudi Documentation: Overview*, Apache Software Foundation, URL: https://hudi.apache.org/docs/overview, truy cập ngày 16/11/2026.
+4. `[4]` Apache Iceberg Community, *Apache Iceberg Table Format Specification v2*, Apache Software Foundation, 2024, URL: https://iceberg.apache.org/spec/.
+5. `[5]` Apache Iceberg Community, *Spark Procedures*, Apache Iceberg Documentation 1.5.2, Apache Software Foundation, URL: https://iceberg.apache.org/docs/1.5.2/spark-procedures/, truy cập ngày 16/11/2026.
+6. `[6]` Apache Spark Community, *Structured Streaming Programming Guide*, Apache Spark Documentation 3.5, Apache Software Foundation, URL: https://spark.apache.org/docs/3.5.0/structured-streaming-programming-guide.html, truy cập ngày 16/11/2026.
+7. `[7]` Armbrust M., Das T., Sun L., Yavuz B., Zhu S., Murthy M., et al., *Delta Lake: High-performance ACID table storage over cloud object stores*, Proceedings of the VLDB Endowment, Vol. 13 (12), 2020, pp. 3411 - 3424, doi: 10.14778/3415478.3415560.
+8. `[8]` Armbrust M., Das T., Torres J., Yavuz B., Zhu S., Xin R., Ghodsi A., Stoica I., Zaharia M., *Structured Streaming: A declarative API for real-time applications in Apache Spark*, Proceedings of the 2018 International Conference on Management of Data (SIGMOD), Houston, TX, USA, 2018, pp. 601 - 613, doi: 10.1145/3183713.3190664.
+9. `[9]` Armbrust M., Ghodsi A., Xin R., Zaharia M., *Lakehouse: A new generation of open platforms that unify data warehousing and advanced analytics*, Proceedings of the 11th Annual Conference on Innovative Data Systems Research (CIDR 2021), Virtual Event, Jan. 11-15, 2021, pp. 1 - 8.
+10. `[10]` Basiri A., Behnam N., de Rooij R., Hochstein L., Kosewski L., Reynolds J., Rosenthal C., *Chaos Engineering*, IEEE Software, Vol. 33 (3), 2016, pp. 35 - 41, doi: 10.1109/MS.2016.60.
+11. `[11]` ClickHouse Inc., *ClickHouse: Fast Open-Source OLAP Database Management System Documentation*, ClickHouse Official Technical Reference, 2024, URL: https://clickhouse.com/docs/.
+12. `[12]` Databricks Inc., *What is the medallion lakehouse architecture?*, Databricks Documentation, URL: https://docs.databricks.com/aws/en/lakehouse/medallion, truy cập ngày 16/11/2026.
+13. `[13]` Kimball R., Ross M., *The Data Warehouse Toolkit: The Definitive Guide to Dimensional Modeling*, 3rd Edition, John Wiley & Sons, Indianapolis, IN, 2013.
+14. `[14]` Kleppmann M., *Designing Data-Intensive Applications: The big ideas behind reliable, scalable, and maintainable systems*, 1st Edition, O'Reilly Media, Sebastopol, CA, 2017.
+15. `[15]` Kreps J., *Questioning the Lambda Architecture*, O'Reilly Radar, Jul. 2, 2014, URL: https://www.oreilly.com/radar/questioning-the-lambda-architecture/, truy cập ngày 16/11/2026.
+16. `[16]` Kreps J., Narkhede N., Rao J., *Kafka: A distributed messaging system for log processing*, Proceedings of the 6th International Workshop on Networking Meets Databases (NetDB), Athens, Greece, Jun. 12, 2011, pp. 1 - 7.
+17. `[17]` Marz N., Warren J., *Big Data: Principles and best practices of scalable realtime data systems*, 1st Edition, Manning Publications, Shelter Island, NY, 2015.
+18. `[18]` Peffers K., Tuunanen T., Rothenberger M. A., Chatterjee S., *A design science research methodology for information systems research*, Journal of Management Information Systems, Vol. 24 (3), 2007, pp. 45 - 77, doi: 10.2753/MIS0742-1222240302.
+19. `[19]` Redis Ltd., *Key eviction*, Redis Documentation, URL: https://redis.io/docs/latest/develop/reference/eviction/, truy cập ngày 16/11/2026.
+20. `[20]` Schulze R., Schreiber T., Yatsishin I., Dahimene R., Milovidov A., *ClickHouse - Lightning fast analytics for everyone*, Proceedings of the VLDB Endowment, Vol. 17 (12), 2024, pp. 3731 - 3744, doi: 10.14778/3685800.3685802.
+21. `[21]` Wright A., Andrews H., Hutton B., Dennis G., *JSON Schema: A media type for describing JSON documents*, IETF Internet-Draft draft-bhutton-json-schema-01 (JSON Schema Draft 2020-12), Jun. 2022, URL: https://json-schema.org/draft/2020-12/json-schema-core.
+22. `[22]` Zaharia M., Xin R. S., Wendell P., Das T., Armbrust M., Dave A., Meng X., Rosen J., Venkataraman S., Franklin M. J., Ghodsi A., Gonzalez J., Shenker S., Stoica I., *Apache Spark: A unified engine for big data processing*, Communications of the ACM, Vol. 59 (11), 2016, pp. 56 - 65.
 
 ---
 
