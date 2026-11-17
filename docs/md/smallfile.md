@@ -58,7 +58,7 @@ Bin-Packing Compaction     Expire Old Snapshots     Remove Orphan Files
                                    ▼
           ┌─────────────────────────────────────────────────┐
           │  BẢNG BRONZE SAU BẢO TRÌ ĐÃ ĐƯỢC TỐI ƯU         │
-          │  (Số file giảm 45%, Tốc độ đọc tăng 2.10x)      │
+          │  (Giảm 91.5% số file: 118->10, ổn định gấp 28x) │
           └─────────────────────────────────────────────────┘
 ```
 
@@ -260,18 +260,21 @@ Quy trình đo lường được thực thi tự động qua hàm `run_real_benc
 4. **Xác định tỷ số gia tốc (Speedup Ratio):**
    $$\text{Speedup Ratio} = \frac{\text{Latency}_{\text{BEFORE}}}{\text{Latency}_{\text{AFTER}}}$$
 
-### 3.3. Kết Quả Thực Nghiệm Thực Tế (Mode Real)
+### 3.3. Kết Quả Thực Nghiệm Thực Tế (Mode Real — Đợt Chính Thức 2026-11-11, `runs = 20`)
 
-Dữ liệu thực nghiệm thu được từ các lần chạy thực tế trên môi trường container:
+Dữ liệu thực nghiệm thu được từ đợt đo chính thức (`ts = 2026-11-11T19:02:03`, $N = 20$ lần đọc mỗi pha trên bảng Iceberg thật trong container `batch-pipeline`):
 
-| Chỉ số thực nghiệm | Trước Compaction (BEFORE) | Sau Compaction (AFTER) | Mức độ cải thiện |
+| Chỉ số thực nghiệm | Trước Compaction (`before`) | Sau Compaction (`after`) | Mức độ cải thiện |
 | :--- | :---: | :---: | :---: |
-| **Số lượng Data Files** | **20 tệp** (phân mảnh) | **11 tệp** (đã gộp) | **Giảm 45.0%** |
-| **Kích thước file trung bình** | $0.15 \text{ MB}$ | $0.28 \text{ MB}$ | Tăng độ gom cụm |
-| **Thời gian truy vấn đọc (ms)** | **$5,340 \text{ ms}$** | **$2,549 \text{ ms}$** | **Giảm 52.3% độ trễ** |
-| **Hệ số gia tốc (Speedup Ratio)** | — | — | **$2.10\times$ (Nhanh hơn gấp 2 lần)** |
+| **Số lượng tệp Parquet (`file_count`)** | **118 tệp** (phân mảnh) | **10 tệp** (đã gộp) | **Giảm 91.5% số tệp** |
+| **Kích thước tệp trung bình** | $0.97 \text{ MB}$ | **$10.60 \text{ MB}$** | **Tăng gấp $10.9\times$** |
+| **Tổng dung lượng dữ liệu** | $114.37 \text{ MB}$ | $105.97 \text{ MB}$ | Giảm $7.3\%$ dung lượng nén |
+| **Độ trễ đọc trung vị (bỏ lần đọc lạnh đầu)** | **$1,821.8 \text{ ms}$** | **$1,206.4 \text{ ms}$** | **Tăng tốc $1.51\times$** (Trung bình nóng: $1.53\times$) |
+| **Độ trễ đọc trung bình (gồm cả lần đọc lạnh)** | $2,220.0 \text{ ms}$ | $1,226.1 \text{ ms}$ | **Tăng tốc $1.81\times$** (Các đợt cũ $N=2$: $2.10\times$) |
+| **Độ lệch chuẩn thời gian đọc (Độ ổn định I/O)** | $1,553.1 \text{ ms}$ | **$55.5 \text{ ms}$** | **Ổn định hơn gấp $28\times$** |
+| **Thời gian thực thi Compaction** | — | **$17.54 \text{ giây}$** | Hoàn tất 118 tệp Zero-Downtime |
 
 > [!IMPORTANT]
-> **Kết luận cho RQ3:**  
-> Việc ứng dụng chiến lược Bin-Packing Compaction trên Apache Iceberg giúp giải quyết triệt để vấn đề Small File phát sinh từ streaming, giảm **45%** số lượng tệp lưu trữ và mang lại tốc độ phản hồi truy vấn nhanh hơn gấp **$2.10$ lần**.
+> **Kết luận cho RQ3 (Đồng bộ Chương 4 & Chương 5):**  
+> Trên bảng Bronze 118 tệp Parquet, thủ tục Bin-Packing Compaction (`rewrite_data_files`) giảm **91.5%** số lượng tệp (từ 118 xuống 10 tệp), tăng tốc độ đọc phân tích khoảng **$1.51\times$** ở trạng thái bộ đệm nóng ($1.81\times$ tính cả lần đọc lạnh đầu tiên), và giảm độ lệch chuẩn thời gian đọc gấp **28 lần** (từ $1,553.1\text{ ms}$ xuống $55.5\text{ ms}$), chỉ tốn chi phí $17.54\text{ giây}$.
 

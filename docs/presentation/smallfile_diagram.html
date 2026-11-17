@@ -548,7 +548,7 @@
       </div>
       <div>
         <div style="font-size:12px; font-weight:700; color:var(--brand-amber);">
-          ⚠️ Tác hại: 20+ file nhỏ, chi phí đọc Header/Footer và gọi HTTP GET qua MinIO S3 làm chậm truy vấn.
+          ⚠️ Tác hại: 118 file nhỏ (TB 0.97 MB), chi phí đọc Header/Footer và gọi HTTP GET qua MinIO S3 làm chậm truy vấn.
         </div>
       </div>
     </div>
@@ -612,7 +612,7 @@
       </div>
       <div>
         <div style="font-size:12px; font-weight:700; color:var(--brand-emerald);">
-          ✓ Kết quả: Giảm 45% số file, tốc độ truy vấn tăng vọt 2.10 lần (Benchmark 3 PASS).
+          ✓ Kết quả: Giảm 91.5% số file (118 → 10), tốc độ đọc nóng tăng 1.51x (1.81x TB), ổn định gấp 28x.
         </div>
       </div>
     </div>
@@ -709,23 +709,23 @@
     <div class="metrics-summary-grid">
       <div class="metric-box">
         <div class="metric-label">Số File Parquet</div>
-        <div class="metric-value">20 → 11</div>
-        <div class="metric-sub" style="color:var(--brand-emerald);">Giảm 45.0% tệp nhỏ</div>
+        <div class="metric-value">118 → 10</div>
+        <div class="metric-sub" style="color:var(--brand-emerald);">Giảm 91.5% tệp nhỏ</div>
       </div>
       <div class="metric-box">
-        <div class="metric-label">Độ Trễ Đọc Trước Compact</div>
-        <div class="metric-value" style="color:var(--brand-rose);">5,340 ms</div>
-        <div class="metric-sub">Nhiều tệp rời rạc, nghẽn I/O</div>
+        <div class="metric-label">Trung Vị Đọc Trước (Warm)</div>
+        <div class="metric-value" style="color:var(--brand-rose);">1,821.8 ms</div>
+        <div class="metric-sub">Trung bình gồm cold: 2,220.0 ms</div>
       </div>
       <div class="metric-box">
-        <div class="metric-label">Độ Trễ Đọc Sau Compact</div>
-        <div class="metric-value blue">2,549 ms</div>
-        <div class="metric-sub">Giảm 52.3% độ trễ</div>
+        <div class="metric-label">Trung Vị Đọc Sau (Warm)</div>
+        <div class="metric-value blue">1,206.4 ms</div>
+        <div class="metric-sub">Độ lệch chuẩn: 1,553 → 55.5 ms</div>
       </div>
       <div class="metric-box highlight">
-        <div class="metric-label" style="color:var(--brand-emerald);">Tốc Độ Tăng Trưởng (Speedup)</div>
-        <div class="metric-value green">2.10x</div>
-        <div class="metric-sub" style="color:var(--brand-emerald);">Nhanh hơn gấp 2.1 lần</div>
+        <div class="metric-label" style="color:var(--brand-emerald);">Tốc Độ &amp; Độ Ổn Định</div>
+        <div class="metric-value green">1.51x / 1.81x</div>
+        <div class="metric-sub" style="color:var(--brand-emerald);">Ổn định I/O hơn gấp 28 lần</div>
       </div>
     </div>
 
@@ -734,49 +734,49 @@
       <table class="comp-table">
         <thead>
           <tr>
-            <th>Chỉ Số Đánh Giá (Metric)</th>
-            <th style="width: 200px;">Trước Compaction (BEFORE)</th>
-            <th style="width: 200px;">Sau Compaction (AFTER)</th>
+            <th>Chỉ Số Đánh Giá (Metric — Đợt Chính Thức 2026-11-11, N=20)</th>
+            <th style="width: 210px;">Trước Compaction (BEFORE)</th>
+            <th style="width: 210px;">Sau Compaction (AFTER)</th>
             <th>Trực Quan Hóa Mức Độ Tối Ưu Hóa</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>Số lượng tệp dữ liệu (Data Files)</strong></td>
-            <td><strong style="color:var(--brand-rose);">20 tệp</strong> (nhiều tệp KB)</td>
-            <td><strong style="color:var(--brand-emerald);">11 tệp</strong> (đã đóng thùng)</td>
+            <td><strong style="color:var(--brand-rose);">118 tệp</strong> (phân mảnh)</td>
+            <td><strong style="color:var(--brand-emerald);">10 tệp</strong> (đã đóng thùng)</td>
             <td>
               <div class="progress-track">
-                <div class="progress-fill-green" style="width: 55%;"></div>
+                <div class="progress-fill-green" style="width: 91.5%;"></div>
               </div>
-              <span style="font-size:11px; color:var(--brand-emerald); font-weight:700;">Giảm 45% gánh nặng Metadata & I/O</span>
+              <span style="font-size:11px; color:var(--brand-emerald); font-weight:700;">Giảm 91.5% gánh nặng Metadata &amp; HTTP GET trên MinIO</span>
             </td>
           </tr>
           <tr>
-            <td><strong>Thời gian thực thi truy vấn (Read Latency)</strong></td>
-            <td><strong style="color:var(--brand-rose);">5,340 ms</strong> (5.34 giây)</td>
-            <td><strong style="color:var(--brand-emerald);">2,549 ms</strong> (2.55 giây)</td>
+            <td><strong>Độ trễ đọc trung vị (Warm Median — 19 lần)</strong></td>
+            <td><strong style="color:var(--brand-rose);">1,821.8 ms</strong> (TB: 2,220.0 ms)</td>
+            <td><strong style="color:var(--brand-emerald);">1,206.4 ms</strong> (TB: 1,226.1 ms)</td>
             <td>
               <div class="progress-track">
-                <div class="progress-fill-green" style="width: 48%;"></div>
+                <div class="progress-fill-green" style="width: 66%;"></div>
               </div>
-              <span style="font-size:11px; color:var(--brand-emerald); font-weight:700;">Tiết kiệm 52.3% thời gian quét dữ liệu</span>
+              <span style="font-size:11px; color:var(--brand-emerald); font-weight:700;">Tăng tốc 1.51x (trạng thái nóng) / 1.81x (tính cả lần đọc lạnh)</span>
             </td>
           </tr>
           <tr>
-            <td><strong>Kích thước tệp trung bình (Average Size)</strong></td>
-            <td>0.15 MB / tệp</td>
-            <td>0.28 MB / tệp</td>
+            <td><strong>Kích thước tệp trung bình &amp; Độ lệch chuẩn</strong></td>
+            <td>0.97 MB / tệp (σ = 1,553.1 ms)</td>
+            <td><strong>10.60 MB / tệp</strong> (σ = 55.5 ms)</td>
             <td>
-              <span class="badge badge-blue">Tăng độ gom cụm Parquet Row-Group</span>
+              <span class="badge badge-blue">Kích thước tệp ×10.9 lần • Độ ổn định I/O ×28 lần</span>
             </td>
           </tr>
           <tr>
-            <td><strong>Trạng thái Snapshot & Tính toàn vẹn</strong></td>
-            <td>Nhiều commit nhỏ phân mảnh</td>
-            <td>Đóng gói 1 Snapshot nguyên tử</td>
+            <td><strong>Thời gian nén &amp; Cam kết ACID</strong></td>
+            <td>118 commit nhỏ rời rạc</td>
+            <td><strong>17.54 giây</strong> (1 Snapshot nguyên tử)</td>
             <td>
-              <span class="badge badge-emerald">Zero-Downtime ACID Commitment</span>
+              <span class="badge badge-emerald">Zero-Downtime Snapshot Isolation (OCC)</span>
             </td>
           </tr>
         </tbody>

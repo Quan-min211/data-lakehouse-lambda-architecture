@@ -574,7 +574,7 @@
     <button class="tab-btn" onclick="switchSlide(1)">
       <span class="tab-badge">KỊCH BẢN 2 (TC2)</span>
       <span class="tab-title">Late Data &gt; 2x Watermark</span>
-      <span class="tab-metric">ΔV: 20% → 0.0%</span>
+      <span class="tab-metric">ΔV: 21.15% → 0.0%</span>
     </button>
     <button class="tab-btn" onclick="switchSlide(2)">
       <span class="tab-badge">KỊCH BẢN 3 (TC3)</span>
@@ -584,7 +584,7 @@
     <button class="tab-btn" onclick="switchSlide(3)">
       <span class="tab-badge">KỊCH BẢN 4 (BENCH 4)</span>
       <span class="tab-title">Dữ Liệu Rác / Giá Âm</span>
-      <span class="tab-metric">F1: 1.0 (430k msg/s)</span>
+      <span class="tab-metric">F1: 1.0 (375k–425k/s)</span>
     </button>
   </nav>
 
@@ -676,7 +676,7 @@
             <div class="compare-box before">
               <span class="compare-title">TRƯỚC TỰ SỬA</span>
               <span class="compare-value">R_gap: 25%</span>
-              <span class="compare-sub">&Delta;V lệch: 24.3%</span>
+              <span class="compare-sub">&Delta;V lệch: 23.58%</span>
             </div>
             <div class="compare-box after">
               <span class="compare-title">SAU TỰ SỬA</span>
@@ -687,7 +687,7 @@
 
           <div class="highlight-stat-box">
             <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
-            <span class="stat-val">0.124 giây</span>
+            <span class="stat-val">0.0035 giây</span>
           </div>
         </div>
       </div>
@@ -753,14 +753,14 @@
             <div class="flow-step-item">
               <div class="flow-step-num">3</div>
               <div class="flow-step-info">
-                <span class="flow-step-title">Batch Layer tính theo event_time</span>
-                <span class="flow-step-sub">Quét toàn bộ Bronze, vớt lại 40 sự kiện trễ</span>
+                <span class="flow-step-title">Batch Layer &amp; SilverTradeStore tính lại</span>
+                <span class="flow-step-sub">Quét theo event_time, recompute đủ cửa sổ bị ảnh hưởng</span>
               </div>
             </div>
           </div>
 
           <div class="code-badge-ref">
-            📁 Mã nguồn: <code>src/speed_layer/spark_streaming.py</code> &amp; <code>spark_batch_jobs.py</code>
+            📁 Mã nguồn: <code>silver_store.py</code> &amp; <code>spark_batch_jobs.py</code>
           </div>
         </div>
 
@@ -778,7 +778,7 @@
           <div class="result-compare-grid">
             <div class="compare-box before">
               <span class="compare-title">SPEED TẠM THỜI</span>
-              <span class="compare-value">&Delta;V: 18.7%</span>
+              <span class="compare-value">&Delta;V: 21.15%</span>
               <span class="compare-sub">Drop 40 giao dịch trễ</span>
             </div>
             <div class="compare-box after">
@@ -790,7 +790,7 @@
 
           <div class="highlight-stat-box">
             <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
-            <span class="stat-val">0.252 giây</span>
+            <span class="stat-val">0.0094 giây</span>
           </div>
         </div>
       </div>
@@ -893,7 +893,7 @@
 
           <div class="highlight-stat-box">
             <span class="stat-label">Thời gian hội tụ đối soát (T_conv):</span>
-            <span class="stat-val">0.183 giây</span>
+            <span class="stat-val">0.0123 giây</span>
           </div>
         </div>
       </div>
@@ -905,7 +905,7 @@
         <div class="slide-title-wrap">
           <h2>
             <span style="color:var(--brand-amber)">🛡️ Lỗi 4:</span>
-            Dữ Liệu Rác, Giá Âm &amp; Sai Schema (Benchmark 4 - DQ Gate)
+            Dữ Liệu Rác, Giá Âm &amp; NaN/Inf (Benchmark 4 - DQ Gate)
           </h2>
           <p>Tự động cách ly vào bảng Quarantine, không để dữ liệu bẩn làm sập Spark hoặc sai lệch nến.</p>
         </div>
@@ -921,12 +921,12 @@
           </div>
           <div class="pillar-question">Tại sao xảy ra lỗi này?</div>
           <p class="pillar-desc">
-            Do bug từ sàn giao dịch, parser lỗi, hoặc kẻ gian tiêm dữ liệu độc hại (Poison Pill): giá âm ($P < 0$), khối lượng bằng 0 ($Q \le 0$), thiếu trường bắt buộc hoặc sai kiểu dữ liệu.
+            Do bug từ sàn giao dịch, parser lỗi, hoặc kẻ gian tiêm dữ liệu độc hại (Poison Pill): giá âm ($P \le 0$), khối lượng $\le 0$, giá trị <code>NaN</code> / <code>Infinity</code>, thiếu trường bắt buộc hoặc chuỗi boolean sai.
           </p>
           <div class="chaos-box">
             <div class="chaos-box-title">🔥 Mô Phỏng Chaos (Chaos Injection):</div>
             <div class="chaos-box-content">
-              Bơm hàng loạt bản ghi giá âm, quantity = 0 và schema invalid (tỷ lệ lỗi 20% trên 5,000 records).
+              3 lượt × 5,000 sự kiện gốc (tổng 16,018 records cả bản sao): tiêm giá âm, quantity = 0, schema invalid (TP = 874 lỗi).
             </div>
           </div>
         </div>
@@ -943,8 +943,8 @@
             <div class="flow-step-item">
               <div class="flow-step-num">1</div>
               <div class="flow-step-info">
-                <span class="flow-step-title">Data Quality Gate Validator</span>
-                <span class="flow-step-sub">Kiểm tra điều kiện: price &gt; 0, qty &gt; 0, valid timestamp</span>
+                <span class="flow-step-title">Data Quality Gate (7 Luật Ngữ Nghĩa)</span>
+                <span class="flow-step-sub">Kiểm tra math.isfinite (chặn NaN/Inf), price &gt; 0, qty &gt; 0</span>
               </div>
             </div>
             <div class="flow-arrow-down">&darr;</div>
@@ -978,19 +978,19 @@
           </div>
           <div class="pillar-question">Số liệu thực nghiệm chứng minh</div>
           <p class="pillar-desc">
-            Phân loại hoàn hảo 100%: không chặn nhầm bản ghi sạch (FP = 0), không để lọt bản ghi rác nào (FN = 0).
+            Phân loại hoàn hảo 100% trên 16,018 bản ghi: bắt đúng 874/874 bản lỗi (TP = 874, FP = 0, FN = 0, TN = 14,126).
           </p>
 
           <div class="result-compare-grid">
             <div class="compare-box after" style="background:#F0FDF4; border-color:#86EFAC;">
               <span class="compare-title">PRECISION &amp; RECALL</span>
               <span class="compare-value" style="color:var(--brand-emerald);">1.0000</span>
-              <span class="compare-sub">Phát hiện lỗi chuẩn 100%</span>
+              <span class="compare-sub">TP=874 | FP=0 | FN=0</span>
             </div>
             <div class="compare-box after" style="background:#EFF6FF; border-color:#93C5FD;">
               <span class="compare-title">THÔNG LƯỢNG XỬ LÝ</span>
-              <span class="compare-value" style="color:var(--brand-blue); font-size:16px;">430,704</span>
-              <span class="compare-sub">bản ghi / giây (Overhead 7.1ms)</span>
+              <span class="compare-value" style="color:var(--brand-blue); font-size:16px;">374,895</span>
+              <span class="compare-sub">rec/s trung vị (Đỉnh 425k/s, 14.26ms)</span>
             </div>
           </div>
 
