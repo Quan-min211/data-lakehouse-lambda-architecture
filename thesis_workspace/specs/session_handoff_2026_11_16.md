@@ -55,3 +55,10 @@ python ../make_ch4_figures.py <repo_root> figures
 - Xác nhận Bảng 4.1: thông số phần cứng được đọc từ máy chủ ngày 2026-11-16, giả định là máy đã chạy thực nghiệm.
 - Phần tiền đề (bìa, tóm tắt, danh mục) và Tài liệu tham khảo, Phụ lục chưa viết. Lưu ý: tóm tắt trong outline vẫn ghi số cũ (P50 = 50,92 ms, Speedup 2,10×).
 - Nếu còn thời gian chạy lại thực nghiệm: đo Trường hợp 3 (sửa `--watermark-offset-hours` nhận số thập phân), đo độ tươi dữ liệu, chạy cả hai tầng thật trên cùng một luồng có lỗi.
+
+## 6. Cập nhật 2026-11-22: bản rút gọn 92 trang
+
+- `thesis_workspace/Tieu_luan_hoan_chinh_rut_gon.docx` là bản toàn văn rút gọn từ `Tieu_luan_hoan_chinh (1).docx` (137 → 92 trang theo WPS, khoảng 46 300 → 28 000 từ), sửa trực tiếp trên docx, đã cập nhật ba mục lục tự động. Tệp gốc giữ nguyên.
+- Đã bỏ 7 bảng: sản phẩm dự kiến (trùng Bảng 5.1), ánh xạ RQ → kịch bản (trùng bảng tổng hợp thực nghiệm), tham số Kafka producer, tham số Spark, mô hình dbt, mô-đun Streamlit, cấu hình 14 dịch vụ. Số bảng đã đánh lại; giá trị then chốt của các bảng tham số được giữ trong văn bản. Giữ đủ 15 hình.
+- Sửa theo mã nguồn: lớp quản lý bảng là `IcebergTableManager`; `WatermarkReader` đọc `max(watermark_time)`.
+- Các tệp `drafts/chuong_N.md`/`.docx` **chưa** được đồng bộ với bản rút gọn; nếu dựng lại từ `.md` sẽ mất phần rút gọn.

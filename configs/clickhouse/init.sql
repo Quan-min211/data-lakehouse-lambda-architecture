@@ -75,5 +75,33 @@ ENGINE = MergeTree()
 PARTITION BY toYYYYMM(quarantined_at)
 ORDER BY (batch_run_id, quarantined_at);
 
+-- 5. RECONCILIATION AUDIT METRICS: Chi so doi soat Speed vs Batch moi window (khop voi
+--    ClickHouseBatchSync.DDL_INIT_RECONCILIATION_METRICS trong src/batch_layer/clickhouse_sync.py)
+CREATE TABLE IF NOT EXISTS lakehouse.reconciliation_audit_metrics
+(
+    run_id                      String,
+    symbol                      LowCardinality(String),
+    window_start                DateTime64(3, 'UTC'),
+    window_end                  DateTime64(3, 'UTC'),
+    speed_count                 UInt64,
+    batch_count                 UInt64,
+    speed_volume                Float64,
+    batch_volume                Float64,
+    speed_vwap                  Float64,
+    batch_vwap                  Float64,
+    volume_drift_pct            Float64,
+    vwap_error                  Float64,
+    sequence_gap_count          UInt64 DEFAULT 0,
+    sequence_gap_rate           Float64 DEFAULT 0.0,
+    duplicate_count             UInt64 DEFAULT 0,
+    duplication_ratio           Float64 DEFAULT 0.0,
+    convergence_latency_seconds Float64 DEFAULT 0.0,
+    reconciliation_status       LowCardinality(String) DEFAULT 'RECONCILED_AND_HEALED',
+    created_at                  DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(created_at)
+PARTITION BY toYYYYMMDD(window_start)
+ORDER BY (symbol, window_start);
+
 -- Seed initial watermark
 INSERT INTO lakehouse.system_watermark (layer, watermark_time) VALUES ('batch_layer', toDateTime64('1970-01-01 00:00:00.000', 3, 'UTC'));
