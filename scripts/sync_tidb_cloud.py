@@ -492,6 +492,29 @@ def sync_to_tidb(max_rows: Optional[int] = None, truncate_first: bool = False) -
     return True
 
 
+def _ensure_clean_dbt_tidb_venv() -> str:
+    """
+    Tạo môi trường ảo riêng `.venv-tidb` chỉ chứa `dbt-tidb` để không bị xung đột
+    file macro với `dbt-adapters` / `dbt-spark` đời mới cài chung trong Python hệ thống.
+    """
+    venv_dir = ROOT_DIR / ".venv-tidb"
+    if os.name == "nt":
+        py_exe = venv_dir / "Scripts" / "python.exe"
+        dbt_exe = venv_dir / "Scripts" / "dbt.exe"
+    else:
+        py_exe = venv_dir / "bin" / "python"
+        dbt_exe = venv_dir / "bin" / "dbt"
+
+    if not dbt_exe.exists():
+        print("      -> Đang khởi tạo môi trường cô lập `.venv-tidb` cho dbt-tidb (chỉ chạy 1 lần, ~10s)...")
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        subprocess.run(
+            [str(py_exe), "-m", "pip", "install", "--quiet", "dbt-tidb", "certifi"],
+            check=True,
+        )
+    return str(dbt_exe)
+
+
 def run_dbt_tidb() -> int:
     """Chạy dbt run & dbt test nhắm tới target `tidb` trên TiDB Cloud."""
     env = os.environ.copy()
@@ -499,10 +522,12 @@ def run_dbt_tidb() -> int:
     if ca_path and not env.get("TIDB_SSL_CA"):
         env["TIDB_SSL_CA"] = ca_path.replace("\\", "/")
 
-    dbt_bin = [shutil.which("dbt")] if shutil.which("dbt") else [sys.executable, "-m", "dbt.cli.main"]
+    dbt_exe = _ensure_clean_dbt_tidb_venv()
     dbt_dir = str(ROOT_DIR / "dbt_project")
+
     for subcmd in ("run", "test"):
-        cmd = dbt_bin + [
+        cmd = [
+            dbt_exe,
             subcmd,
             "--project-dir", dbt_dir,
             "--profiles-dir", dbt_dir,
@@ -535,7 +560,15 @@ def main() -> None:
     )
     parser.add_argument("--truncate", action="store_true", help="Làm sạch bảng trước khi nạp mới")
     parser.add_argument("--run-dbt", action="store_true", help="Chạy luôn `dbt run` và `dbt test` trên TiDB Cloud")
+    parser.add_argument(
+        "--only-dbt",
+        action="store_true",
+        help="Chỉ chạy bước `dbt run` và `dbt test` trên dữ liệu đã nạp sẵn trên TiDB Cloud",
+    )
     args = parser.parse_args()
+
+    if args.only_dbt:
+        sys.exit(run_dbt_tidb())
 
     effective_limit: Optional[int] = None if (args.all or args.max_rows <= 0) else args.max_rows
     ok = sync_to_tidb(max_rows=effective_limit, truncate_first=args.truncate)

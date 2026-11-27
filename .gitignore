@@ -6,6 +6,7 @@ __pycache__/
 # Environment
 **/.venv/
 .venv/
+.venv-tidb/
 venv/
 **/venv/
 env/
