@@ -1,12 +1,25 @@
 lambda_spark:
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
+    # Target mặc định: chạy trên cụm Spark Thrift Server cục bộ (Docker)
     dev:
       type: spark
       method: thrift
       host: "{{ env_var('DBT_SPARK_HOST', 'localhost') }}"
       port: 10000
       schema: default
-      # Tăng timeout và retries để tránh connection abort khi Spark thực thi query lâu
       connect_timeout: 120
       connect_retries: 5
+
+    # Target Cloud Serverless: chạy trên TiDB Cloud (tự động Scale-to-Zero / ngủ đông khi nhàn rỗi)
+    tidb:
+      type: tidb
+      server: "{{ env_var('TIDB_HOST', 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com') }}"
+      port: "{{ env_var('TIDB_PORT', '4000') | int }}"
+      schema: "{{ env_var('TIDB_DATABASE', 'lakehouse_dbt') }}"
+      username: "{{ env_var('TIDB_USER', 'root') }}"
+      password: "{{ env_var('TIDB_PASSWORD', '') }}"
+      retries: 3
+      {% if env_var('TIDB_SSL_CA', '') != '' %}
+      ssl_ca: "{{ env_var('TIDB_SSL_CA') }}"
+      {% endif %}

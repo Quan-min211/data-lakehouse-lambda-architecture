@@ -1,8 +1,15 @@
+{% if target.type == 'spark' %}
 {{ config(
     materialized='incremental',
+    file_format='parquet',
     incremental_strategy='insert_overwrite',
     partition_by=['trade_date']
 ) }}
+{% else %}
+{{ config(
+    materialized='table'
+) }}
+{% endif %}
 
 with valid_records as (
     select
@@ -18,12 +25,14 @@ with valid_records as (
       and trade_id >= 0
       and symbol is not null
       and trim(symbol) != ''
+{% if target.type == 'spark' %}
       and not isnan(price)
       and not isnan(quantity)
       -- Spark SQL không có hàm isinf(); so trị tuyệt đối với vô cực để chặn cả +inf
       -- và -inf, đồng bộ với math.isfinite() của dq_checks.py
       and abs(price) != cast('Infinity' as double)
       and abs(quantity) != cast('Infinity' as double)
+{% endif %}
       and price > 0
       and quantity > 0
       and trade_time > 0
@@ -42,12 +51,17 @@ select
     fault_type,
     batch_run_id,
     bronze_written_at,
+{% if target.type == 'spark' %}
     to_date(trade_time_ts) as trade_date,
     current_timestamp() as silver_written_at
+{% else %}
+    date(trade_time_ts) as trade_date,
+    current_timestamp(3) as silver_written_at
+{% endif %}
 from valid_records
 where dedupe_rank = 1
 
-{% if is_incremental() %}
+{% if target.type == 'spark' and is_incremental() %}
   -- Chỉ xử lý các partition ngày có dữ liệu mới, không quét lại toàn bộ
   and to_date(trade_time_ts) >= (
       select coalesce(max(trade_date), date('1970-01-01'))

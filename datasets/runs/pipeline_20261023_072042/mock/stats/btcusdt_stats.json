@@ -1,0 +1,17 @@
+{
+  "symbol": "BTCUSDT",
+  "last_price": 81763.93,
+  "mu_annual": -1.4386969229974913,
+  "sigma_annual": 0.22412230291590107,
+  "mu_per_min": -2.7372468093559577e-06,
+  "sigma_per_min": 0.00030914156276720564,
+  "volume_mean": 4.4941239,
+  "volume_std": 2.9981940287736197,
+  "volume_min": 0.71765,
+  "volume_max": 16.64978,
+  "trade_count_mean": 1103.42,
+  "trade_count_std": 632.6080963756314,
+  "buyer_maker_ratio": 0.0,
+  "candle_count_real": 100,
+  "source_file": "C:\\HCMUTE\\nam4ki1\\tlcn\\datasets\\runs\\pipeline_20261023_072042\\raw\\klines\\btcusdt_klines_1m.csv"
+}

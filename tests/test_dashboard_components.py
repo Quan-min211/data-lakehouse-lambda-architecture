@@ -178,6 +178,26 @@ class TestUiBackendSync(unittest.TestCase):
         self.assertIsNone(manager.check_sequence_gap("BTCUSDT", 5, 0.2, run_id="r1"))
         self.assertEqual(manager.check_sequence_gap("ETHUSDT", 50, 2.5, run_id="r1").severity, "CRITICAL")
 
+    def test_serving_dq_quarantine_mock(self):
+        """ClickHouseQueryClient.get_quarantine_records hỗ trợ lọc theo symbol cho Web/Vercel API."""
+        from src.serving_layer.clickhouse_client import ClickHouseQueryClient
+        ch = ClickHouseQueryClient(
+            mock_data={
+                "dq_quarantine": [
+                    {"symbol": "BTCUSDT", "trade_id": "1", "dq_error": "price_non_positive"},
+                    {"symbol": "ETHUSDT", "trade_id": "2", "dq_error": "quantity_non_positive"},
+                ]
+            }
+        )
+        all_res = ch.get_quarantine_records(limit=50)
+        self.assertTrue(all_res["connected"])
+        self.assertEqual(all_res["count"], 2)
+
+        btc_res = ch.get_quarantine_records(limit=50, symbol="btcusdt")
+        self.assertEqual(btc_res["count"], 1)
+        self.assertEqual(btc_res["records"][0]["symbol"], "BTCUSDT")
+
+
 
 if __name__ == "__main__":
     unittest.main()

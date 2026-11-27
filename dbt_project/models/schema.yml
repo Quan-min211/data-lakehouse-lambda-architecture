@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: bronze_crypto_trades
-    description: "Typed view over the Iceberg Bronze TradeEvent table."
+    description: "Typed view over the Bronze TradeEvent table (Iceberg on Spark or raw_crypto_trades on TiDB Cloud)."
     columns:
       - name: trade_id
         tests:
@@ -17,7 +17,7 @@ models:
       # trade_id cua Binance chi duy nhat trong tung symbol, nen kiem tra unique tren khoa
       # ghep (symbol, trade_id) - dung khoa khu trung cua row_number() va dq_checks.py
       - unique:
-          column_name: "concat(symbol, ':', cast(trade_id as string))"
+          column_name: "concat(symbol, ':', trade_id)"
     columns:
       - name: trade_id
         tests:
@@ -37,7 +37,7 @@ models:
           - not_null
 
   - name: gold_market_aggregates
-    description: "Reconciled one-minute OHLCV/VWAP candles for ClickHouse batch views."
+    description: "Reconciled one-minute OHLCV/VWAP candles for ClickHouse / TiDB Gold batch views."
     columns:
       - name: symbol
         tests:

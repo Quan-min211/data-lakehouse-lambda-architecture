@@ -311,3 +311,20 @@ async def get_system_alerts(limit: int = Query(50, ge=1, le=200, description="S�
         "queried_at": datetime.now(timezone.utc).isoformat(),
     }
 
+
+@app.get("/api/dq/quarantine", tags=["Audit & Benchmark"])
+async def get_dq_quarantine(
+    limit: int = Query(200, ge=1, le=1000, description="Số bản ghi cách ly tối đa"),
+    symbol: Optional[str] = Query(None, description="Lọc theo mã giao dịch (tùy chọn)"),
+):
+    """Truy vấn danh sách bản ghi vi phạm Data Contract bị cách ly trong ClickHouse."""
+    result = _ch_client.get_quarantine_records(limit=limit, symbol=symbol)
+    return {
+        "status": "ok" if result["connected"] else "unavailable",
+        "connected": result["connected"],
+        "count": result["count"],
+        "records": result["records"],
+        "queried_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+

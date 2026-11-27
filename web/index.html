@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lambda Lakehouse · Market Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <!-- Mobile Backdrop -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/30 z-30 hidden lg:hidden" onclick="toggleSidebar(false)"></div>
+
+    <div class="lh-layout">
+        <!-- ==================== LEFT SIDEBAR (Streamlit Style) ==================== -->
+        <aside id="sidebar" class="lh-sidebar">
+            <!-- Brand Header -->
+            <div class="lh-sb-section flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm" style="background:#FFFBEB;border:1px solid #FDE68A;color:#B45309;">
+                        ▲
+                    </div>
+                    <div>
+                        <div class="font-bold text-[14px] text-slate-900 leading-tight">Lambda Lakehouse</div>
+                        <div class="text-[11.5px] text-slate-500">Market data platform</div>
+                    </div>
+                </div>
+                <button class="lg:hidden text-slate-400 hover:text-slate-700 p-1" onclick="toggleSidebar(false)" aria-label="Đóng thanh bên">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Instrument Selector -->
+            <div class="lh-sb-section">
+                <label class="lh-sb-label" for="symbol-select">Cặp giao dịch (Instrument)</label>
+                <select id="symbol-select" class="lh-select lh-num mb-2">
+                    <option value="BTCUSDT">BTCUSDT · Bitcoin</option>
+                    <option value="ETHUSDT">ETHUSDT · Ethereum</option>
+                    <option value="SOLUSDT">SOLUSDT · Solana</option>
+                    <option value="BNBUSDT">BNBUSDT · BNB</option>
+                    <option value="XRPUSDT">XRPUSDT · XRP</option>
+                    <option value="DOGEUSDT">DOGEUSDT · Dogecoin</option>
+                    <option value="ADAUSDT">ADAUSDT · Cardano</option>
+                    <option value="AVAXUSDT">AVAXUSDT · Avalanche</option>
+                    <option value="LINKUSDT">LINKUSDT · Chainlink</option>
+                    <option value="SUIUSDT">SUIUSDT · Sui</option>
+                </select>
+                <div class="flex flex-wrap gap-1.5" id="quick-coins">
+                    <button type="button" class="lh-coin-pill active" data-coin="BTCUSDT">BTC</button>
+                    <button type="button" class="lh-coin-pill" data-coin="ETHUSDT">ETH</button>
+                    <button type="button" class="lh-coin-pill" data-coin="SOLUSDT">SOL</button>
+                    <button type="button" class="lh-coin-pill" data-coin="BNBUSDT">BNB</button>
+                    <button type="button" class="lh-coin-pill" data-coin="XRPUSDT">XRP</button>
+                </div>
+            </div>
+
+            <!-- Time Range & Query Mode -->
+            <div class="lh-sb-section">
+                <label class="lh-sb-label">Khung thời gian (Time range)</label>
+                <div class="lh-seg-group mb-3" id="timeframe-group">
+                    <button type="button" class="lh-seg-btn" data-minutes="15">15m</button>
+                    <button type="button" class="lh-seg-btn" data-minutes="30">30m</button>
+                    <button type="button" class="lh-seg-btn active" data-minutes="60">1H</button>
+                    <button type="button" class="lh-seg-btn" data-minutes="180">3H</button>
+                    <button type="button" class="lh-seg-btn" data-minutes="360">6H</button>
+                </div>
+
+                <label class="lh-sb-label" for="query-window-mode">Chế độ truy vấn cửa sổ</label>
+                <select id="query-window-mode" class="lh-select">
+                    <option value="hybrid">Mặc định · Kết hợp (Hybrid)</option>
+                    <option value="history">Lịch sử đã chốt sổ (Trước mốc W)</option>
+                    <option value="realtime">Thời gian thực mới nhất (Sau mốc W)</option>
+                </select>
+            </div>
+
+            <!-- Serving API Connection -->
+            <div class="lh-sb-section">
+                <label class="lh-sb-label" for="api-url-input">Kết nối máy chủ (Serving API)</label>
+                <input id="api-url-input" type="text" class="lh-input mb-2" placeholder="http://localhost:8000" value="http://localhost:8000" />
+                <div class="flex gap-2">
+                    <button type="button" id="btn-save-api" class="lh-btn flex-1">Áp dụng & Truy vấn</button>
+                </div>
+                <p id="sidebar-conn-note" class="text-[11.5px] text-slate-500 mt-2 leading-snug">
+                    Tự động kết nối máy chủ khi bật, hoặc chuyển sang dữ liệu mẫu khi máy chủ nghỉ.
+                </p>
+            </div>
+
+            <!-- Auto Refresh -->
+            <div class="lh-sb-section">
+                <div class="flex items-center justify-between mb-2.5">
+                    <span class="text-[13px] font-medium text-slate-700">Tự động làm mới</span>
+                    <label class="lh-switch">
+                        <input type="checkbox" id="auto-refresh-toggle" />
+                        <span class="lh-slider"></span>
+                    </label>
+                </div>
+                <div id="refresh-interval-box" class="mb-3 hidden">
+                    <div class="flex justify-between text-[12px] text-slate-500 mb-1">
+                        <span>Chu kỳ cập nhật</span>
+                        <span id="refresh-sec-label" class="font-semibold text-slate-700 lh-num">5 giây</span>
+                    </div>
+                    <input type="range" id="refresh-slider" min="3" max="30" value="5" class="w-full accent-emerald-600" />
+                </div>
+                <button type="button" id="btn-refresh-now" class="lh-btn lh-btn-primary w-full">
+                    <span>↻</span>
+                    <span>Làm mới dữ liệu ngay</span>
+                </button>
+            </div>
+
+            <!-- Sidebar Footer Info -->
+            <div class="mt-auto p-4 text-[11.5px] text-slate-400 leading-relaxed">
+                <div class="font-medium text-slate-600 mb-0.5">Trạng thái vận hành</div>
+                <div id="sidebar-mode-summary">Đang kiểm tra kết nối máy chủ...</div>
+            </div>
+        </aside>
+
+        <!-- ==================== MAIN DASHBOARD AREA ==================== -->
+        <main class="lh-main">
+            <!-- 1. TOPBAR -->
+            <header class="flex flex-wrap items-center justify-between gap-3 pb-3.5 mb-3.5 border-b border-slate-200">
+                <div class="flex items-center gap-3">
+                    <button type="button" class="lg:hidden lh-btn px-2.5 py-1.5" onclick="toggleSidebar(true)" aria-label="Mở menu">
+                        ☰
+                    </button>
+                    <div>
+                        <h1 class="text-[18px] font-bold text-slate-900 tracking-tight leading-snug">Market Monitor</h1>
+                        <p class="text-[12.5px] text-slate-500">Hợp nhất dữ liệu Lô & Thời gian thực · Tự động đối soát theo mốc chốt sổ</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="chip-source" class="lh-chip">
+                        <span id="chip-source-dot" class="lh-dot" style="background:#D97706;"></span>
+                        <span id="chip-source-text">Đang kiểm tra...</span>
+                    </span>
+                    <span id="chip-health" class="lh-chip">
+                        <span id="chip-health-dot" class="lh-dot" style="background:#94A3B8;"></span>
+                        <span id="chip-health-text">Hệ thống</span>
+                    </span>
+                    <span id="chip-clock" class="lh-chip lh-num text-slate-600">--:--:-- UTC</span>
+                </div>
+            </header>
+
+            <!-- 2. BINANCE-STYLE INSTRUMENT TICKER HEADER -->
+            <section class="lh-ticker-bar" aria-label="Thông số thị trường">
+                <div class="lh-ticker-main">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <span id="ticker-symbol-label" class="text-[13px] text-slate-500"><strong class="text-slate-900 text-[15px]">BTC</strong> / USDT · 1m</span>
+                        <span id="ticker-candle-badge" class="lh-badge badge-slate">Đang tải</span>
+                    </div>
+                    <div class="flex items-baseline gap-2.5 flex-wrap">
+                        <span id="ticker-price" class="lh-ticker-price lh-num">--</span>
+                        <span id="ticker-delta-pill" class="lh-badge badge-slate lh-num">--</span>
+                    </div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Giá mở cửa (Open)</div>
+                    <div id="stat-open" class="lh-stat-v lh-num">--</div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Cao nhất (High)</div>
+                    <div id="stat-high" class="lh-stat-v lh-num" style="color:var(--up-green);">--</div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Thấp nhất (Low)</div>
+                    <div id="stat-low" class="lh-stat-v lh-num" style="color:var(--down-red);">--</div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Giá bình quân (VWAP)</div>
+                    <div id="stat-vwap" class="lh-stat-v lh-num" style="color:var(--hybrid-blue);">--</div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Khối lượng (Volume)</div>
+                    <div id="stat-volume" class="lh-stat-v lh-num">--</div>
+                </div>
+                <div class="lh-stat">
+                    <div class="lh-stat-k">Số khớp lệnh (Trades)</div>
+                    <div id="stat-trades" class="lh-stat-v lh-num">--</div>
+                </div>
+            </section>
+
+            <!-- 3. 4-CELL LAMBDA WATERMARK STATUS BAR -->
+            <section class="lh-grid-box mb-3.5" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));" aria-label="Trạng thái phân luồng và chốt sổ">
+                <!-- Cell 1: Serving Route -->
+                <div class="lh-cell">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="lh-cell-label mb-0">Luồng phục vụ truy vấn</span>
+                        <span id="wm-status-badge" class="lh-badge badge-amber">Đang tải</span>
+                    </div>
+                    <div id="wm-route-title" class="lh-cell-value text-[15.5px] mt-1">--</div>
+                    <div>
+                        <div class="lh-split-bar">
+                            <div id="wm-bar-batch" style="width:70%;background:var(--up-green);transition:width 0.3s;"></div>
+                            <div id="wm-bar-speed" style="width:30%;background:var(--provisional-amber);transition:width 0.3s;"></div>
+                        </div>
+                        <div id="wm-candle-split" class="lh-cell-note lh-num mt-0">-- nến chuẩn · -- nến tạm tính</div>
+                    </div>
+                </div>
+
+                <!-- Cell 2: Batch Watermark -->
+                <div class="lh-cell">
+                    <div class="lh-cell-label">Mốc chốt sổ (Watermark W)</div>
+                    <div id="wm-time-clock" class="lh-cell-value lh-num">--:--:--</div>
+                    <div id="wm-time-date" class="lh-cell-note lh-num">-- UTC</div>
+                </div>
+
+                <!-- Cell 3: Freshness Lag -->
+                <div class="lh-cell">
+                    <div class="lh-cell-label">Độ trễ chốt sổ</div>
+                    <div id="wm-lag-value" class="lh-cell-value lh-num">--</div>
+                    <div class="lh-cell-note">Khoảng cách từ mốc chốt sổ đến hiện tại</div>
+                </div>
+
+                <!-- Cell 4: Reconciliation Error -->
+                <div class="lh-cell">
+                    <div class="lh-cell-label">Sai số đối soát trung bình</div>
+                    <div id="wm-drift-value" class="lh-cell-value lh-num">--</div>
+                    <div id="wm-drift-note" class="lh-cell-note">Chênh lệch giá bình quân gia quyền</div>
+                </div>
+            </section>
+
+            <!-- 4. MAIN CANDLESTICK + VWAP + VOLUME CHART (Binance Light Style) -->
+            <section class="lh-card p-4 mb-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <h2 class="text-[14.5px] font-bold text-slate-900">Biểu đồ Nến 1 Phút, VWAP & Khối lượng</h2>
+                        <div class="flex items-center gap-3 text-[12px] text-slate-500">
+                            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#0ECB81;"></span>Tăng giá</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#F6465D;"></span>Giảm giá</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="w-3 h-0.5 inline-block" style="background:#2563EB;"></span>Đường VWAP</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#FEF3C7;border:1px solid #F59E0B;"></span>Vùng tạm tính (sau W)</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 text-[12px]">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-600">
+                            <input type="checkbox" id="chk-show-vwap" checked class="accent-blue-600" />
+                            <span>Hiện VWAP</span>
+                        </label>
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-600">
+                            <input type="checkbox" id="chk-show-spikes" checked class="accent-amber-500" />
+                            <span>Điểm đột biến</span>
+                        </label>
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-slate-600">
+                            <input type="checkbox" id="chk-show-wm" checked class="accent-emerald-600" />
+                            <span>Mốc chốt sổ W</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="main-candlestick-chart" class="w-full" style="height: 460px;"></div>
+            </section>
+
+            <!-- 5. DETAIL TABS BELOW CHART (Matching Streamlit Tabs) -->
+            <nav class="lh-tabs-nav" aria-label="Chi tiết phân tích">
+                <button type="button" class="lh-tab-btn active" data-tab="recon">Đối soát dữ liệu</button>
+                <button type="button" class="lh-tab-btn" data-tab="bench">Kết quả thực nghiệm</button>
+                <button type="button" class="lh-tab-btn" data-tab="dq">Chất lượng dữ liệu</button>
+                <button type="button" class="lh-tab-btn" data-tab="system">Trạng thái hệ thống</button>
+                <button type="button" class="lh-tab-btn" data-tab="spike">Biến động giá</button>
+                <button type="button" class="lh-tab-btn" data-tab="arch">Mô hình vận hành</button>
+            </nav>
+
+            <!-- ==================== TAB 1: ĐỐI SOÁT DỮ LIỆU ==================== -->
+            <section id="tab-recon" class="tab-panel space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-[15px] font-bold text-slate-900">Đối soát luồng Thời gian thực và luồng Lô chuẩn tắc</h3>
+                        <p class="text-[12.5px] text-slate-500">So sánh từng cửa sổ 1 phút giữa kết quả tính nhanh và kết quả chuẩn sau khi chốt sổ.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="recon-status-filter" class="lh-select !w-auto">
+                            <option value="ALL">Tất cả trạng thái</option>
+                            <option value="MATCHED">Khớp tuyệt đối</option>
+                            <option value="RECONCILED_AND_HEALED">Đã hiệu chỉnh sai lệch</option>
+                            <option value="PROVISIONAL_ONLY">Đang tạm tính</option>
+                        </select>
+                        <input type="text" id="recon-search-input" class="lh-input !w-44" placeholder="Tìm theo giờ (VD: 14:20)..." />
+                    </div>
+                </div>
+
+                <!-- 4 KPI Summary Cells -->
+                <div class="lh-grid-box" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                    <div class="lh-cell">
+                        <div class="lh-cell-label">Cửa sổ so sánh</div>
+                        <div id="recon-kpi-total" class="lh-cell-value lh-num">--</div>
+                        <div class="lh-cell-note">Tổng số nến 1 phút trong khung</div>
+                    </div>
+                    <div class="lh-cell">
+                        <div class="lh-cell-label">Đã đối soát hoàn tất</div>
+                        <div id="recon-kpi-reconciled" class="lh-cell-value lh-num" style="color:var(--up-green);">--</div>
+                        <div id="recon-kpi-coverage" class="lh-cell-note lh-num">--</div>
+                    </div>
+                    <div class="lh-cell">
+                        <div class="lh-cell-label">Chênh lệch VWAP trung bình</div>
+                        <div id="recon-kpi-mean" class="lh-cell-value lh-num">--</div>
+                        <div class="lh-cell-note">Đơn vị: USDT</div>
+                    </div>
+                    <div class="lh-cell">
+                        <div class="lh-cell-label">Chênh lệch VWAP lớn nhất</div>
+                        <div id="recon-kpi-max" class="lh-cell-value lh-num">--</div>
+                        <div class="lh-cell-note">Đơn vị: USDT</div>
+                    </div>
+                </div>
+
+                <!-- Reconciliation Comparison Chart -->
+                <div class="lh-card p-4">
+                    <div class="text-[13.5px] font-semibold text-slate-800 mb-2">Biểu đồ đối chiếu đường VWAP Chuẩn tắc và Tạm tính</div>
+                    <div id="recon-compare-chart" class="w-full" style="height: 250px;"></div>
+                </div>
+
+                <!-- Reconciliation Table -->
+                <div class="lh-table-wrap">
+                    <table class="lh-table lh-num">
+                        <thead>
+                            <tr>
+                                <th>Bắt đầu (UTC)</th>
+                                <th>Kết thúc (UTC)</th>
+                                <th>Trạng thái đối soát</th>
+                                <th class="text-right">VWAP Chuẩn (Batch)</th>
+                                <th class="text-right">VWAP Tạm (Speed)</th>
+                                <th class="text-right">Chênh lệch VWAP</th>
+                                <th class="text-right">KL Chuẩn</th>
+                                <th class="text-right">KL Tạm</th>
+                                <th class="text-right">Lệch KL (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recon-table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 2: KẾT QUẢ THỰC NGHIỆM (BENCHMARK) ==================== -->
+            <section id="tab-bench" class="tab-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-[15px] font-bold text-slate-900">Báo cáo Thực nghiệm Hiệu năng & Độ chính xác</h3>
+                        <p class="text-[12.5px] text-slate-500">Số liệu đo kiểm thực tế trên tập dữ liệu 1,275,230 giao dịch tiền mã hóa.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5" id="bench-subnav">
+                        <button type="button" class="lh-subpill active" data-bm="overview">Tổng quan</button>
+                        <button type="button" class="lh-subpill" data-bm="bm1">BM1 · Độ trễ truy vấn</button>
+                        <button type="button" class="lh-subpill" data-bm="bm2">BM2 · Độ chính xác đối soát</button>
+                        <button type="button" class="lh-subpill" data-bm="bm3">BM3 · Tối ưu tệp lưu trữ</button>
+                    </div>
+                </div>
+
+                <!-- Sub-view: Overview -->
+                <div id="bm-view-overview" class="bm-subview space-y-4">
+                    <div class="lh-grid-box" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));">
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Độ trễ truy vấn trung vị (P50)</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--hybrid-blue);">62.84 ms</div>
+                            <div class="lh-cell-note">Chênh lệch ~2.7 ms so với truy vấn đơn lẻ</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Sai số sau tái xử lý</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--up-green);">0.000%</div>
+                            <div class="lh-cell-note">Khớp 112/112 cửa sổ đối soát (100%)</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Tăng tốc đọc sau gộp tệp</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--up-green);">1.51×</div>
+                            <div class="lh-cell-note">Giảm 91.5% số tệp nhỏ (118 → 10 tệp)</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Chốt chặn chất lượng dữ liệu</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--up-green);">F1 = 1.000</div>
+                            <div class="lh-cell-note">Thông lượng 374,895 bản ghi/giây</div>
+                        </div>
+                    </div>
+
+                    <div class="lh-card p-4">
+                        <h4 class="text-[14px] font-bold text-slate-900 mb-1">Kiểm thử Sức chịu đựng Sự cố (4 Kịch bản thực tế)</h4>
+                        <p class="text-[12px] text-slate-500 mb-3">Đánh giá khả năng tự phục hồi dữ liệu khi xảy ra mất gói tin, trễ mạng, lặp bản ghi và đột biến lưu lượng.</p>
+                        <div class="lh-table-wrap">
+                            <table class="lh-table">
+                                <thead>
+                                    <tr>
+                                        <th>Kịch bản</th>
+                                        <th>Tình huống kiểm thử</th>
+                                        <th>Ảnh hưởng tức thời</th>
+                                        <th>Kết quả sau đối soát</th>
+                                        <th class="text-right">Thời gian hội tụ</th>
+                                        <th>Đánh giá</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="chaos-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-view: BM1 Latency -->
+                <div id="bm-view-bm1" class="bm-subview hidden space-y-4">
+                    <div class="lh-card p-4">
+                        <div class="text-[14px] font-bold text-slate-900 mb-1">So sánh Độ trễ Truy vấn theo Ba Chiến lược Phục vụ (ms)</div>
+                        <p id="bm1-insight" class="text-[12.5px] text-slate-500 mb-3"></p>
+                        <div id="bm1-chart" class="w-full" style="height: 320px;"></div>
+                    </div>
+                    <div class="lh-table-wrap">
+                        <table class="lh-table lh-num">
+                            <thead>
+                                <tr>
+                                    <th>Kịch bản truy vấn</th>
+                                    <th>Phạm vi thời gian</th>
+                                    <th class="text-right">Số dòng</th>
+                                    <th class="text-right">Chỉ Lô P50 (ms)</th>
+                                    <th class="text-right">Chỉ Nhanh P50 (ms)</th>
+                                    <th class="text-right">Kết hợp Lambda P50 (ms)</th>
+                                    <th class="text-right">Kết hợp Lambda P95 (ms)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bm1-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-view: BM2 Reprocessing -->
+                <div id="bm-view-bm2" class="bm-subview hidden space-y-4">
+                    <div class="lh-card p-4">
+                        <div class="text-[14px] font-bold text-slate-900 mb-1">Độ lệch Tạm thời trước Chốt sổ & Sai số sau Tái xử lý</div>
+                        <p id="bm2-insight" class="text-[12.5px] text-slate-500 mb-3"></p>
+                        <div id="bm2-chart" class="w-full" style="height: 300px;"></div>
+                    </div>
+                    <div class="lh-table-wrap">
+                        <table class="lh-table lh-num">
+                            <thead>
+                                <tr>
+                                    <th>Cặp giao dịch</th>
+                                    <th>Khung giờ thực nghiệm</th>
+                                    <th class="text-right">Số nến đối chiếu</th>
+                                    <th class="text-right">Độ bao phủ</th>
+                                    <th class="text-right">Sai số tuyệt đối TB (MAE)</th>
+                                    <th class="text-right">Tỷ lệ lệch TB (MAPE)</th>
+                                    <th class="text-right">Sai số sau chốt sổ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bm2-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-view: BM3 Compaction -->
+                <div id="bm-view-bm3" class="bm-subview hidden space-y-4">
+                    <div class="lh-grid-box" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Số lượng tệp lưu trữ</div>
+                            <div class="lh-cell-value lh-num">118 → 10 tệp</div>
+                            <div class="lh-cell-note">Giảm 91.5% tệp phân mảnh</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Kích thước tệp trung bình</div>
+                            <div class="lh-cell-value lh-num">0.97 → 10.60 MB</div>
+                            <div class="lh-cell-note">Tối ưu cho đọc tuần tự</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Thời gian đọc trung vị</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--up-green);">1,821.8 → 1,206.4 ms</div>
+                            <div class="lh-cell-note">Nhanh hơn 1.51 lần</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Độ dao động (Độ lệch chuẩn)</div>
+                            <div class="lh-cell-value lh-num" style="color:var(--up-green);">1,553.1 → 55.5 ms</div>
+                            <div class="lh-cell-note">Ổn định hơn 28 lần</div>
+                        </div>
+                    </div>
+                    <div class="lh-card p-4">
+                        <div class="text-[14px] font-bold text-slate-900 mb-1">Thời gian Truy vấn qua 20 Lần Đo Trước và Sau khi Gộp Tệp (ms)</div>
+                        <p id="bm3-insight" class="text-[12.5px] text-slate-500 mb-3"></p>
+                        <div id="bm3-chart" class="w-full" style="height: 310px;"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 3: CHẤT LƯỢNG DỮ LIỆU ==================== -->
+            <section id="tab-dq" class="tab-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-[15px] font-bold text-slate-900">Giám sát Chất lượng Dữ liệu & Khu vực Cách ly</h3>
+                        <p class="text-[12.5px] text-slate-500">Tự động phát hiện và tách riêng các giao dịch bất thường (giá âm, khối lượng bằng 0, dữ liệu khuyết) trước khi tính toán.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="dq-reason-filter" class="lh-select !w-auto">
+                            <option value="ALL">Tất cả lý do cách ly</option>
+                            <option value="INVALID_PRICE">Giá không hợp lệ</option>
+                            <option value="INVALID_QUANTITY">Khối lượng không hợp lệ</option>
+                            <option value="INVALID_TRADE_ID">Mã giao dịch lỗi</option>
+                            <option value="MISSING_SYMBOL">Thiếu mã cặp tiền</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Clean Status Banner -->
+                <div id="dq-banner" class="lh-card p-3.5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                        <span id="dq-banner-dot" class="lh-dot" style="background:var(--up-green);"></span>
+                        <span id="dq-banner-text" class="text-[13px] font-medium text-slate-800">Đang kiểm tra khu vực cách ly...</span>
+                    </div>
+                    <span id="dq-count-badge" class="lh-badge badge-slate lh-num">0 bản ghi</span>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="lh-card p-4">
+                        <div class="text-[13.5px] font-semibold text-slate-800 mb-2">Tỷ lệ theo nhóm vi phạm</div>
+                        <div id="dq-reason-chart" class="w-full" style="height: 250px;"></div>
+                    </div>
+                    <div class="lh-card p-4">
+                        <div class="text-[13.5px] font-semibold text-slate-800 mb-2">Phân bổ bản ghi cách ly theo cặp giao dịch</div>
+                        <div id="dq-symbol-chart" class="w-full" style="height: 250px;"></div>
+                    </div>
+                </div>
+
+                <!-- Quarantine Records Table -->
+                <div class="lh-table-wrap">
+                    <table class="lh-table lh-num">
+                        <thead>
+                            <tr>
+                                <th>Thời điểm phát hiện (UTC)</th>
+                                <th>Cặp giao dịch</th>
+                                <th>Mã giao dịch</th>
+                                <th class="text-right">Giá ghi nhận</th>
+                                <th class="text-right">Khối lượng</th>
+                                <th>Lý do cách ly</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dq-table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 4: TRẠNG THÁI HỆ THỐNG ==================== -->
+            <section id="tab-system" class="tab-panel hidden space-y-4">
+                <div>
+                    <h3 class="text-[15px] font-bold text-slate-900">Tình trạng Kết nối Dịch vụ & Cảnh báo Chủ động</h3>
+                    <p class="text-[12.5px] text-slate-500">Theo dõi sức khỏe các thành phần dữ liệu và cảnh báo biến động bất thường theo thời gian thực.</p>
+                </div>
+
+                <!-- Service Readiness Grid -->
+                <div class="lh-grid-box" style="grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));" id="sys-services-grid"></div>
+
+                <!-- Latest Speed Candle Summary -->
+                <div class="lh-card p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="text-[13.5px] font-bold text-slate-900">Nến Thời gian thực Mới nhất trên Bộ nhớ Đệm</div>
+                        <span id="sys-cache-badge" class="lh-badge badge-slate">--</span>
+                    </div>
+                    <div class="lh-grid-box" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Cặp giao dịch</div>
+                            <div id="sys-latest-symbol" class="lh-cell-value">--</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Giá khớp mới nhất</div>
+                            <div id="sys-latest-close" class="lh-cell-value lh-num">--</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Giá bình quân (VWAP)</div>
+                            <div id="sys-latest-vwap" class="lh-cell-value lh-num" style="color:var(--hybrid-blue);">--</div>
+                        </div>
+                        <div class="lh-cell">
+                            <div class="lh-cell-label">Số khớp lệnh trong phút</div>
+                            <div id="sys-latest-trades" class="lh-cell-value lh-num">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Proactive Alerts Table -->
+                <div class="lh-card p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <div class="text-[13.5px] font-bold text-slate-900">Danh sách Cảnh báo Chủ động</div>
+                            <div class="text-[12px] text-slate-500">Bao gồm đột biến giá, lệch khối lượng, trễ mốc chốt sổ và thiếu hụt chuỗi giao dịch.</div>
+                        </div>
+                        <span id="sys-alert-count" class="lh-badge badge-slate lh-num">0 cảnh báo</span>
+                    </div>
+                    <div class="lh-table-wrap">
+                        <table class="lh-table">
+                            <thead>
+                                <tr>
+                                    <th>Thời điểm (UTC)</th>
+                                    <th>Mức độ</th>
+                                    <th>Nhóm cảnh báo</th>
+                                    <th>Cặp giao dịch</th>
+                                    <th>Nội dung chi tiết</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sys-alerts-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 5: BIẾN ĐỘNG GIÁ (SPIKE) ==================== -->
+            <section id="tab-spike" class="tab-panel hidden space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-[15px] font-bold text-slate-900">Phát hiện Cửa sổ Biến động Giá Mạnh</h3>
+                        <p class="text-[12.5px] text-slate-500">Các cây nến 1 phút có biên độ đóng–mở lớn hoặc dao động đỉnh–đáy bất thường trong khung thời gian đang chọn.</p>
+                    </div>
+                    <span id="spike-count-badge" class="lh-badge badge-amber lh-num">0 điểm biến động</span>
+                </div>
+
+                <div class="lh-table-wrap">
+                    <table class="lh-table lh-num">
+                        <thead>
+                            <tr>
+                                <th>Thời điểm (UTC)</th>
+                                <th class="text-right">Mở cửa</th>
+                                <th class="text-right">Đóng cửa</th>
+                                <th class="text-right">Cao nhất</th>
+                                <th class="text-right">Thấp nhất</th>
+                                <th class="text-right">Biên độ Đóng–Mở (%)</th>
+                                <th>Xu hướng</th>
+                                <th class="text-right">Biên độ Đỉnh–Đáy (%)</th>
+                                <th class="text-right">Khối lượng</th>
+                                <th>Nguồn dữ liệu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="spike-table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 6: MÔ HÌNH VẬN HÀNH ==================== -->
+            <section id="tab-arch" class="tab-panel hidden space-y-4">
+                <div>
+                    <h3 class="text-[15px] font-bold text-slate-900">Nguyên lý Phục vụ Truy vấn & Chuẩn hóa Dữ liệu</h3>
+                    <p class="text-[12.5px] text-slate-500">Cách hệ thống kết hợp dữ liệu lịch sử chính xác và dữ liệu thời gian thực độ trễ thấp trên cùng một màn hình tra cứu.</p>
+                </div>
+
+                <!-- 3 Routing Cases -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="lh-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="lh-badge badge-green">Trường hợp 1 · Lịch sử</span>
+                            <span class="text-[11.5px] font-semibold text-slate-400">Trước mốc W</span>
+                        </div>
+                        <h4 class="font-bold text-[14px] text-slate-900 mb-1.5">Tra cứu dữ liệu đã chốt sổ</h4>
+                        <p class="text-[12.5px] text-slate-600 leading-relaxed">
+                            Khi khoảng thời gian tra cứu nằm hoàn toàn trước mốc chốt sổ, hệ thống trả về dữ liệu chuẩn tắc đã qua kiểm định chất lượng và khử trùng lặp tuyệt đối.
+                        </p>
+                    </div>
+
+                    <div class="lh-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="lh-badge badge-amber">Trường hợp 2 · Tức thời</span>
+                            <span class="text-[11.5px] font-semibold text-slate-400">Sau mốc W</span>
+                        </div>
+                        <h4 class="font-bold text-[14px] text-slate-900 mb-1.5">Theo dõi diễn biến mới nhất</h4>
+                        <p class="text-[12.5px] text-slate-600 leading-relaxed">
+                            Khi xem các phút vừa diễn ra chưa kịp chốt sổ định kỳ, hệ thống lấy ngay nến tạm tính từ luồng xử lý thời gian thực để phản ánh giá thị trường tức thì.
+                        </p>
+                    </div>
+
+                    <div class="lh-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="lh-badge badge-blue">Trường hợp 3 · Kết hợp</span>
+                            <span class="text-[11.5px] font-semibold text-slate-400">Cắt qua mốc W</span>
+                        </div>
+                        <h4 class="font-bold text-[14px] text-slate-900 mb-1.5">Ghép nối liền mạch hai luồng</h4>
+                        <p class="text-[12.5px] text-slate-600 leading-relaxed">
+                            Với khung giờ trải dài từ quá khứ đến hiện tại, hệ thống tự động lấy phần lịch sử chuẩn trước mốc W ghép nối với phần thời gian thực sau mốc W mà không đếm trùng.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Clean Medallion Flow (No Code / SQL) -->
+                <div class="lh-card p-4">
+                    <h4 class="font-bold text-[14px] text-slate-900 mb-3">Quy trình Làm sạch & Tổng hợp Dữ liệu Đa tầng</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div class="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
+                            <div class="text-[11px] font-bold uppercase text-slate-400 mb-1">Bước 1 · Tiếp nhận</div>
+                            <div class="font-bold text-[13.5px] text-slate-900 mb-1">Luồng giao dịch gốc</div>
+                            <p class="text-[12px] text-slate-600">Ghi nhận nguyên vẹn từng khớp lệnh mua bán từ sàn giao dịch theo thời gian thực.</p>
+                        </div>
+                        <div class="p-3.5 rounded-lg bg-amber-50/60 border border-amber-200">
+                            <div class="text-[11px] font-bold uppercase text-amber-700 mb-1">Bước 2 · Tầng Đồng</div>
+                            <div class="font-bold text-[13.5px] text-slate-900 mb-1">Chuẩn hóa định dạng</div>
+                            <p class="text-[12px] text-slate-600">Đồng bộ kiểu số liệu giá, khối lượng, dấu thời gian UTC và tên cặp tiền tệ.</p>
+                        </div>
+                        <div class="p-3.5 rounded-lg bg-blue-50/60 border border-blue-200">
+                            <div class="text-[11px] font-bold uppercase text-blue-700 mb-1">Bước 3 · Tầng Bạc</div>
+                            <div class="font-bold text-[13.5px] text-slate-900 mb-1">Lọc lỗi & Khử trùng lặp</div>
+                            <p class="text-[12px] text-slate-600">Loại bỏ giao dịch trùng mã, tách riêng các bản ghi sai lệch vào khu vực cách ly.</p>
+                        </div>
+                        <div class="p-3.5 rounded-lg bg-emerald-50/60 border border-emerald-200">
+                            <div class="text-[11px] font-bold uppercase text-emerald-700 mb-1">Bước 4 · Tầng Vàng</div>
+                            <div class="font-bold text-[13.5px] text-slate-900 mb-1">Tổng hợp nến chuẩn 1 phút</div>
+                            <p class="text-[12px] text-slate-600">Tính toán chính xác giá Mở, Cao, Thấp, Đóng, VWAP và khối lượng phục vụ tra cứu.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. FOOTNOTE -->
+            <footer class="mt-8 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-slate-400">
+                <div>Khóa luận tốt nghiệp · Data Lakehouse kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực · Nguyễn Đặng Quốc Anh, Phạm Minh Quân</div>
+                <div id="footer-updated-at" class="lh-num">Cập nhật: -- UTC</div>
+            </footer>
+        </main>
+    </div>
+
+    <script src="./data/benchmarks.js"></script>
+    <script src="./app.js"></script>
+</body>
+</html>

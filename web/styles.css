@@ -1,0 +1,539 @@
+/* ==========================================================================
+   Lambda Lakehouse · Binance Light / Streamlit Financial Dashboard Theme
+   ========================================================================== */
+
+:root {
+    --bg-canvas: #F5F7FA;
+    --bg-surface: #FFFFFF;
+    --bg-subtle: #F8FAFC;
+    --bg-hover: #F1F5F9;
+    --border-color: #EAECEF;
+    --border-strong: #CBD5E1;
+
+    --text-primary: #1E2329;
+    --text-secondary: #474D57;
+    --text-muted: #707A8A;
+
+    /* Binance Light Financial Accents */
+    --up-green: #0ECB81;
+    --up-green-bg: #E6F9F1;
+    --down-red: #F6465D;
+    --down-red-bg: #FEEDEF;
+    --provisional-amber: #D97706;
+    --provisional-amber-bg: #FEF3C7;
+    --brand-yellow: #F0B90B;
+    --hybrid-blue: #2563EB;
+    --hybrid-blue-bg: #EFF6FF;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular numbers for financial prices & metrics */
+.lh-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* Layout Shell (Streamlit Left Sidebar + Main Area) */
+.lh-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.lh-sidebar {
+    width: 272px;
+    min-width: 272px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 40;
+    transition: transform 0.22s ease;
+}
+
+.lh-main {
+    flex: 1;
+    min-width: 0;
+    padding: 18px 24px 36px;
+    max-width: 1560px;
+    margin: 0 auto;
+}
+
+/* Sidebar Controls */
+.lh-sb-section {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.lh-sb-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.lh-input, .lh-select {
+    width: 100%;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lh-input:focus, .lh-select:focus {
+    background: var(--bg-surface);
+    border-color: var(--hybrid-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Segmented Timeframe & Coin Buttons */
+.lh-seg-group {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    background: var(--bg-subtle);
+    padding: 3px;
+    border-radius: 7px;
+    border: 1px solid var(--border-color);
+}
+
+.lh-seg-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 0;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.lh-seg-btn:hover {
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.lh-seg-btn.active {
+    background: var(--bg-surface);
+    color: var(--hybrid-blue);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.lh-coin-pill {
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.14s ease;
+}
+
+.lh-coin-pill:hover {
+    border-color: #CBD5E1;
+    background: var(--bg-subtle);
+}
+
+.lh-coin-pill.active {
+    border-color: var(--brand-yellow);
+    background: #FFFBEB;
+    color: #92400E;
+}
+
+/* Buttons */
+.lh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+}
+
+.lh-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-strong);
+}
+
+.lh-btn-primary {
+    background: #1E2329;
+    color: #FFFFFF;
+    border-color: #1E2329;
+}
+
+.lh-btn-primary:hover {
+    background: #333B46;
+    border-color: #333B46;
+}
+
+/* Cards & 1px Grid Containers (matching Streamlit lh-grid / lh-cell) */
+.lh-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.lh-grid-box {
+    display: grid;
+    gap: 1px;
+    background: var(--border-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.lh-cell {
+    background: var(--bg-surface);
+    padding: 13px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.lh-cell-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.lh-cell-value {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.lh-cell-note {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Binance Instrument Ticker Header */
+.lh-ticker-bar {
+    display: grid;
+    grid-template-columns: minmax(250px, 1.45fr) repeat(6, minmax(95px, 1fr));
+    gap: 1px;
+    background: var(--border-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.lh-ticker-main {
+    background: var(--bg-surface);
+    padding: 13px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.lh-ticker-price {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.lh-stat {
+    background: var(--bg-surface);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.lh-stat-k {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 3px;
+}
+
+.lh-stat-v {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Status Chips & Badges */
+.lh-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+}
+
+.lh-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.lh-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-green {
+    background: var(--up-green-bg);
+    color: #057A4B;
+}
+
+.badge-red {
+    background: var(--down-red-bg);
+    color: #C81E37;
+}
+
+.badge-amber {
+    background: var(--provisional-amber-bg);
+    color: #B45309;
+}
+
+.badge-blue {
+    background: var(--hybrid-blue-bg);
+    color: #1D4ED8;
+}
+
+.badge-slate {
+    background: #F1F5F9;
+    color: #475569;
+}
+
+/* Split Progress Bar for Batch vs Speed Candles */
+.lh-split-bar {
+    height: 6px;
+    width: 100%;
+    background: #F1F5F9;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    margin: 7px 0 4px;
+}
+
+/* Streamlit-like Tabs Bar */
+.lh-tabs-nav {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.lh-tabs-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.lh-tab-btn {
+    padding: 10px 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.lh-tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.lh-tab-btn.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--brand-yellow);
+}
+
+/* Sub-pills for Benchmark */
+.lh-subpill {
+    padding: 6px 13px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.lh-subpill:hover {
+    background: var(--bg-subtle);
+}
+
+.lh-subpill.active {
+    background: #1E2329;
+    color: #FFFFFF;
+    border-color: #1E2329;
+}
+
+/* Clean Financial Data Tables */
+.lh-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-surface);
+}
+
+.lh-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+.lh-table th {
+    background: var(--bg-subtle);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.lh-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #F1F5F9;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.lh-table tbody tr:hover {
+    background: #F8FAFC;
+}
+
+.lh-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+/* Toggle Switch */
+.lh-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+
+.lh-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.lh-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #CBD5E1;
+    transition: 0.2s;
+    border-radius: 999px;
+}
+
+.lh-slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.lh-switch input:checked + .lh-slider {
+    background-color: var(--up-green);
+}
+
+.lh-switch input:checked + .lh-slider:before {
+    transform: translateX(16px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1180px) {
+    .lh-ticker-bar {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    .lh-ticker-main {
+        grid-column: span 4;
+    }
+}
+
+@media (max-width: 960px) {
+    .lh-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 24px rgba(15, 23, 42, 0.12);
+    }
+    .lh-sidebar.open {
+        transform: translateX(0);
+    }
+    .lh-main {
+        padding: 14px 14px 32px;
+    }
+}

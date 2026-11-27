@@ -285,3 +285,65 @@ class ClickHouseQueryClient:
         except Exception as e:
             logger.warning(f"Khong doc duoc sequence_gap tu reconciliation_audit_metrics: {e}")
             return []
+
+    def get_quarantine_records(
+        self,
+        limit: int = 200,
+        symbol: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Truy vấn danh sách bản ghi bị cách ly từ bảng lakehouse.dq_quarantine.
+
+        Args:
+            limit: Số bản ghi tối đa trả về (1..1000).
+            symbol: Lọc theo cặp giao dịch (tùy chọn).
+
+        Returns:
+            dict gồm connected (bool), count (int) và records (List[Dict]).
+        """
+        if "dq_quarantine" in self._mock_data:
+            rows = list(self._mock_data["dq_quarantine"])
+            if symbol:
+                clean_sym = self._sanitize_symbol(symbol)
+                rows = [r for r in rows if str(r.get("symbol", "")).upper() == clean_sym]
+            return {"connected": True, "count": len(rows[:limit]), "records": rows[:limit]}
+
+        if not self._IDENT_RE.match(self.database):
+            return {"connected": False, "count": 0, "records": []}
+
+        client = self.get_client()
+        if client is None:
+            return {"connected": False, "count": 0, "records": []}
+
+        safe_limit = max(1, min(int(limit), 1000))
+        where_clause = ""
+        params: Dict[str, Any] = {}
+        if symbol:
+            params["sym"] = self._sanitize_symbol(symbol)
+            where_clause = "WHERE symbol = {sym:String}"
+
+        query = f"""
+        SELECT
+            batch_run_id,
+            toString(trade_id) AS trade_id,
+            symbol,
+            toString(price) AS price,
+            toString(quantity) AS quantity,
+            toString(trade_time) AS trade_time,
+            dq_error,
+            raw_record,
+            toString(quarantined_at) AS quarantined_at
+        FROM {self.database}.dq_quarantine
+        {where_clause}
+        ORDER BY quarantined_at DESC
+        LIMIT {safe_limit}
+        """
+        try:
+            with self._query_lock:
+                res = client.query(query, parameters=params if params else None)
+            cols = res.column_names
+            records = [dict(zip(cols, row)) for row in res.result_rows]
+            return {"connected": True, "count": len(records), "records": records}
+        except Exception as e:
+            logger.warning(f"Khong doc duoc bang dq_quarantine: {e}")
+            return {"connected": False, "count": 0, "records": []}
+
