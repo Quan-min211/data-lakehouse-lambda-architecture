@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: lambda-lakehouse-api
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: uvicorn src.serving_layer.api_routes:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CLOUD_SERVING_MODE
+        value: tidb
+      - key: TIDB_HOST
+        value: gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+      - key: TIDB_PORT
+        value: "4000"
+      - key: TIDB_DATABASE
+        value: lakehouse_dbt
+      - key: TIDB_USER
+        sync: false
+      - key: TIDB_PASSWORD
+        sync: false

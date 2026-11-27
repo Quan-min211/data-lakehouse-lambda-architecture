@@ -15,11 +15,9 @@ lambda_spark:
     tidb:
       type: tidb
       server: "{{ env_var('TIDB_HOST', 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com') }}"
-      port: "{{ env_var('TIDB_PORT', '4000') | int }}"
+      port: "{{ env_var('TIDB_PORT', '4000') | as_number }}"
       schema: "{{ env_var('TIDB_DATABASE', 'lakehouse_dbt') }}"
       username: "{{ env_var('TIDB_USER', 'root') }}"
       password: "{{ env_var('TIDB_PASSWORD', '') }}"
       retries: 3
-      {% if env_var('TIDB_SSL_CA', '') != '' %}
-      ssl_ca: "{{ env_var('TIDB_SSL_CA') }}"
-      {% endif %}
+      ssl_ca: "{{ env_var('TIDB_SSL_CA', '') }}"

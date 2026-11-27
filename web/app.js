@@ -21,17 +21,38 @@ const COIN_BASE_PRICES = {
     SUIUSDT: 3.42
 };
 
+const DEFAULT_RENDER_API_URL = "https://lambda-lakehouse-api.onrender.com";
+
+function getInitialApiUrl() {
+    try {
+        const paramUrl = new URLSearchParams(window.location.search).get("api");
+        if (paramUrl && paramUrl.trim()) {
+            localStorage.setItem("lh_serving_api_url", paramUrl.trim());
+            return paramUrl.trim();
+        }
+    } catch (_) {}
+    const saved = localStorage.getItem("lh_serving_api_url");
+    if (saved && saved.trim()) return saved.trim();
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+        return "http://localhost:8000";
+    }
+    return DEFAULT_RENDER_API_URL;
+}
+
 const STATE = {
     symbol: "BTCUSDT",
     minutes: 60,
     queryWindowMode: "hybrid", // 'hybrid' | 'history' | 'realtime'
-    apiBaseUrl: localStorage.getItem("lh_serving_api_url") || "http://localhost:8000",
-    autoRefresh: false,
-    refreshSeconds: 5,
+    apiBaseUrl: getInitialApiUrl(),
+    autoRefresh: true,
+    refreshSeconds: 10,
     refreshTimer: null,
     activeTab: "recon",
     activeBenchSubtab: "overview",
     isLive: false,
+    isWaking: false,
+    serverMode: "hibernating",
     showVwap: true,
     showSpikes: true,
     showWatermark: true,
@@ -311,7 +332,7 @@ function buildDemoDataset(symbol, minutes, windowMode) {
 
 /* ==================== API FETCHING & HYBRID HIBERNATION DETECTION ==================== */
 
-async function fetchJsonWithTimeout(url, timeoutMs = 3200) {
+async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -323,21 +344,94 @@ async function fetchJsonWithTimeout(url, timeoutMs = 3200) {
     }
 }
 
+function normalizeMarketPayload(raw) {
+    if (!raw) return null;
+    if (Array.isArray(raw.data)) return raw;
+
+    const rawCandles = Array.isArray(raw.candles) ? raw.candles : [];
+    const qMap = {
+        1: "case1_history",
+        2: "case2_realtime",
+        3: "case3_hybrid",
+        CASE_1_HISTORY: "case1_history",
+        CASE_2_REALTIME: "case2_realtime",
+        CASE_3_HYBRID: "case3_hybrid"
+    };
+    const stMap = {
+        Reconciled: "RECONCILED",
+        Provisional: "PROVISIONAL",
+        "Partially Reconciled": "PARTIALLY_RECONCILED",
+        RECONCILED: "RECONCILED",
+        PROVISIONAL: "PROVISIONAL",
+        PARTIALLY_RECONCILED: "PARTIALLY_RECONCILED"
+    };
+
+    const data = rawCandles.map((c) => {
+        const isFinal = c.status === "Reconciled" || c.status === "RECONCILED" || c.is_final === true;
+        return {
+            window_start: c.window_start,
+            window_end: c.window_end,
+            symbol: c.symbol,
+            open_price: Number(c.open_price),
+            high_price: Number(c.high_price),
+            low_price: Number(c.low_price),
+            close_price: Number(c.close_price),
+            vwap: Number(c.vwap),
+            volume: Number(c.volume),
+            trade_count: Number(c.trade_count || 0),
+            is_spike: Boolean(c.is_spike),
+            is_final: isFinal,
+            source: isFinal ? "batch" : "speed"
+        };
+    });
+
+    return {
+        symbol: raw.symbol,
+        metadata: {
+            query_case: qMap[raw.query_case] || "case3_hybrid",
+            watermark_used: raw.watermark || null,
+            reconciliation_status: stMap[raw.overall_status] || "PARTIALLY_RECONCILED",
+            batch_candles_count: Number(raw.source_breakdown?.batch ?? data.filter((d) => d.is_final).length),
+            speed_candles_count: Number(raw.source_breakdown?.speed ?? data.filter((d) => !d.is_final).length),
+            reconciliation_delta: raw.reconciliation_delta
+        },
+        data
+    };
+}
+
 async function refreshDashboardData() {
     const base = STATE.apiBaseUrl.replace(/\/+$/, "");
-    let liveOk = false;
+    const isRenderUrl = base.includes(".onrender.com");
 
+    // Khi mới mở trang lần đầu, hiển thị dữ liệu nền ngay lập tức trong lúc đánh thức Render Cloud (nếu đang ngủ)
+    if (!STATE.marketPayload) {
+        const demoInit = buildDemoDataset(STATE.symbol, STATE.minutes, STATE.queryWindowMode);
+        STATE.marketPayload = demoInit.marketPayload;
+        STATE.reconItems = demoInit.reconItems;
+        STATE.quarantineItems = demoInit.quarantineItems;
+        STATE.systemStatus = demoInit.systemStatus;
+        STATE.latestSpeed = demoInit.latestSpeed;
+        STATE.alerts = demoInit.alerts;
+        if (isRenderUrl) {
+            STATE.isWaking = true;
+        }
+        renderAll();
+    }
+
+    let liveOk = false;
+    let healthPayload = null;
     try {
-        const health = await fetchJsonWithTimeout(`${base}/health`, 2200);
-        if (health) liveOk = true;
+        healthPayload = await fetchJsonWithTimeout(`${base}/health`, isRenderUrl && !STATE.isLive ? 45000 : 3500);
+        if (healthPayload) liveOk = true;
     } catch (_) {
         liveOk = false;
     }
 
+    STATE.isWaking = false;
+
     if (liveOk) {
         try {
-            // Determine start_time and end_time based on queryWindowMode
-            const statusRes = await fetchJsonWithTimeout(`${base}/api/system/status`, 3500).catch(() => null);
+            const statusRes = await fetchJsonWithTimeout(`${base}/api/system/status`, 8000).catch(() => null);
             const now = new Date();
             let endIso = now.toISOString();
             let startIso = new Date(now.getTime() - STATE.minutes * 60000).toISOString();
@@ -357,19 +451,26 @@ async function refreshDashboardData() {
             }
 
             const qs = `symbol=${encodeURIComponent(STATE.symbol)}&start_time=${encodeURIComponent(startIso)}&end_time=${encodeURIComponent(endIso)}`;
-            const [market, recon, dq, speed, alerts] = await Promise.all([
-                fetchJsonWithTimeout(`${base}/api/market?${qs}`, 5000),
-                fetchJsonWithTimeout(`${base}/api/reconciliation?${qs}`, 5000).catch(() => ({ report: [] })),
-                fetchJsonWithTimeout(`${base}/api/dq/quarantine?limit=200`, 4000).catch(() => ({ items: [] })),
-                fetchJsonWithTimeout(`${base}/api/speed/latest?symbol=${encodeURIComponent(STATE.symbol)}`, 3500).catch(() => null),
-                fetchJsonWithTimeout(`${base}/api/system/alerts?limit=30`, 3500).catch(() => ({ alerts: [] }))
+            const [rawMarket, recon, dq, speed, alerts] = await Promise.all([
+                fetchJsonWithTimeout(`${base}/api/market?${qs}`, 10000),
+                fetchJsonWithTimeout(`${base}/api/reconciliation?${qs}`, 10000).catch(() => []),
+                fetchJsonWithTimeout(`${base}/api/dq/quarantine?limit=200`, 6000).catch(() => ({ records: [] })),
+                fetchJsonWithTimeout(`${base}/api/speed/latest?symbol=${encodeURIComponent(STATE.symbol)}`, 6000).catch(() => null),
+                fetchJsonWithTimeout(`${base}/api/system/alerts?limit=30`, 6000).catch(() => ({ alerts: [] }))
             ]);
 
+            const market = normalizeMarketPayload(rawMarket);
             if (market && Array.isArray(market.data) && market.data.length > 0) {
                 STATE.isLive = true;
+                STATE.serverMode = healthPayload?.mode || statusRes?.mode || "live";
                 STATE.marketPayload = market;
-                STATE.reconItems = Array.isArray(recon?.report) ? recon.report : (Array.isArray(recon?.items) ? recon.items : []);
-                STATE.quarantineItems = Array.isArray(dq?.items) ? dq.items : [];
+                const reconList = Array.isArray(recon)
+                    ? recon
+                    : (Array.isArray(recon?.report) ? recon.report : (Array.isArray(recon?.items) ? recon.items : []));
+                STATE.reconItems = reconList.slice().reverse();
+                STATE.quarantineItems = Array.isArray(dq?.records)
+                    ? dq.records
+                    : (Array.isArray(dq?.items) ? dq.items : []);
                 STATE.systemStatus = statusRes;
                 STATE.latestSpeed = speed;
                 STATE.alerts = Array.isArray(alerts?.alerts) ? alerts.alerts : (Array.isArray(alerts) ? alerts : []);
@@ -418,9 +519,17 @@ function renderTopbarAndSidebarStatus() {
     const healthText = document.getElementById("chip-health-text");
     const sbSummary = document.getElementById("sidebar-mode-summary");
 
-    if (STATE.isLive) {
+    if (STATE.isWaking) {
+        srcDot.style.background = "var(--hybrid-blue)";
+        srcText.textContent = "Đang đánh thức Cloud (~20s)...";
+        healthDot.style.background = "var(--provisional-amber)";
+        healthText.textContent = "Đang đồng bộ Binance";
+        sbSummary.innerHTML = `<span style="color:#1D4ED8;font-weight:600;">● Đang đánh thức Render & TiDB Cloud...</span> Tự động chuyển sang dữ liệu trực tiếp ngay khi sẵn sàng.`;
+    } else if (STATE.isLive) {
         srcDot.style.background = "var(--up-green)";
-        srcText.textContent = "Trực tuyến · Máy chủ Serving API";
+        srcText.textContent = STATE.serverMode === "tidb_cloud"
+            ? "Trực tuyến · Binance + TiDB Cloud"
+            : "Trực tuyến · Máy chủ Serving API";
         const st = String(STATE.systemStatus?.status || "ok").toLowerCase();
         if (st === "ok" || st === "healthy") {
             healthDot.style.background = "var(--up-green)";
@@ -429,13 +538,13 @@ function renderTopbarAndSidebarStatus() {
             healthDot.style.background = "var(--provisional-amber)";
             healthText.textContent = "Hoạt động một phần";
         }
-        sbSummary.innerHTML = `<span style="color:#057A4B;font-weight:600;">● Đang kết nối trực tiếp</span> vào máy chủ dữ liệu của bạn.`;
+        sbSummary.innerHTML = `<span style="color:#057A4B;font-weight:600;">● Đang kết nối trực tiếp</span> và cập nhật giá thời gian thực từ sàn Binance.`;
     } else {
         srcDot.style.background = "var(--provisional-amber)";
         srcText.textContent = "Chế độ Ngủ đông · Dữ liệu minh họa";
         healthDot.style.background = "#94A3B8";
         healthText.textContent = "Máy chủ đang nghỉ";
-        sbSummary.innerHTML = `<span style="color:#B45309;font-weight:600;">● Máy chủ tại nhà đang tắt.</span> Giao diện tự động hiển thị dữ liệu mẫu & báo cáo thực nghiệm tĩnh.`;
+        sbSummary.innerHTML = `<span style="color:#B45309;font-weight:600;">● Máy chủ đang ngủ đông.</span> Giao diện hiển thị dữ liệu mẫu & báo cáo thực nghiệm tĩnh.`;
     }
 }
 
@@ -1322,14 +1431,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Auto refresh controls
     const autoToggle = document.getElementById("auto-refresh-toggle");
+    autoToggle.checked = STATE.autoRefresh;
     autoToggle.addEventListener("change", () => {
         STATE.autoRefresh = autoToggle.checked;
         updateAutoRefreshTimer();
     });
 
     const slider = document.getElementById("refresh-slider");
+    slider.value = String(STATE.refreshSeconds);
+    document.getElementById("refresh-sec-label").textContent = `${STATE.refreshSeconds} giây`;
     slider.addEventListener("input", () => {
-        STATE.refreshSeconds = Number(slider.value || 5);
+        STATE.refreshSeconds = Number(slider.value || 10);
         document.getElementById("refresh-sec-label").textContent = `${STATE.refreshSeconds} giây`;
         if (STATE.autoRefresh) updateAutoRefreshTimer();
     });
@@ -1376,7 +1488,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("recon-search-input").addEventListener("input", renderReconciliationTab);
     document.getElementById("dq-reason-filter").addEventListener("change", renderDataQualityTab);
 
-    // Start live clock & initial fetch
+    // Start live clock, auto-refresh timer & initial fetch
     startUtcClock();
+    updateAutoRefreshTimer();
     refreshDashboardData();
 });

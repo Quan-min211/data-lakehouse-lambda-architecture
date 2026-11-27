@@ -19,8 +19,8 @@ from iceberg_catalog.bronze.crypto_trades
 select
     cast(trade_id as signed) as trade_id,
     upper(cast(symbol as char(32))) as symbol,
-    cast(price as double) as price,
-    cast(quantity as double) as quantity,
+    cast(price as decimal(28, 8)) as price,
+    cast(quantity as decimal(28, 8)) as quantity,
     cast(trade_time as signed) as trade_time,
     cast(trade_time_ts as datetime(3)) as trade_time_ts,
     cast(is_buyer_maker as unsigned) as is_buyer_maker,

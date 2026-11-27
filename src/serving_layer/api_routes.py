@@ -10,6 +10,7 @@ Cung cấp các endpoint:
 """
 
 import json
+import os
 import socket
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
@@ -36,7 +37,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Kích hoạt CORS cho phép Streamlit Dashboard (Port 8501) kết nối
+# Kích hoạt CORS cho phép Streamlit Dashboard và Vercel Web Frontend kết nối
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,9 +46,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Khởi tạo singletons
-_watermark_reader = WatermarkReader()
-_ch_client = ClickHouseQueryClient()
+# Tự động phát hiện chế độ chạy Cloud trên Render (CLOUD_SERVING_MODE=tidb hoặc biến RENDER=true)
+_IS_CLOUD_MODE = (
+    os.getenv("CLOUD_SERVING_MODE", "").strip().lower() == "tidb"
+    or os.getenv("RENDER", "").strip().lower() == "true"
+)
+
+if _IS_CLOUD_MODE:
+    from src.serving_layer.tidb_cloud_backend import TiDBCloudServingBackend
+    _cloud_backend: Optional[Any] = TiDBCloudServingBackend()
+    _watermark_reader: Any = _cloud_backend
+    _ch_client: Any = _cloud_backend
+else:
+    _cloud_backend = None
+    _watermark_reader = WatermarkReader()
+    _ch_client = ClickHouseQueryClient()
+
 query_merger = AutoCorrectingQueryMerger(
     watermark_reader=_watermark_reader,
     ch_client=_ch_client,
@@ -124,6 +138,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "serving_layer",
+        "mode": "tidb_cloud" if _cloud_backend is not None else "local_lakehouse",
         "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -137,21 +152,27 @@ async def get_system_status():
     if watermark.tzinfo is None:
         watermark = watermark.replace(tzinfo=timezone.utc)
 
-    dependencies = [
-        _clickhouse_status(),
-        _redis_status(),
-        _kafka_status(),
-    ]
-    required_ok = all(
-        item["status"] == "ok"
-        for item in dependencies
-        if item["name"] in {"clickhouse", "kafka"}
-    )
+    if _cloud_backend is not None:
+        dependencies = _cloud_backend.get_dependencies_status()
+        required_ok = any(item["status"] == "ok" for item in dependencies)
+    else:
+        dependencies = [
+            _clickhouse_status(),
+            _redis_status(),
+            _kafka_status(),
+        ]
+        required_ok = all(
+            item["status"] == "ok"
+            for item in dependencies
+            if item["name"] in {"clickhouse", "kafka"}
+        )
+
     overall = "ok" if required_ok else "degraded"
 
     return {
         "status": overall,
         "service": "serving_layer",
+        "mode": "tidb_cloud" if _cloud_backend is not None else "local_lakehouse",
         "timestamp": now.isoformat(),
         "watermark": {
             "layer": "batch_layer",
@@ -166,7 +187,10 @@ async def get_system_status():
 async def get_latest_speed_candle(
     symbol: str = Query("BTCUSDT", description="Cặp coin cần đọc từ Redis hot cache"),
 ):
-    """Read the latest provisional Speed candle from Redis hot cache."""
+    """Read the latest provisional Speed candle from Redis hot cache (or Cloud speed memory)."""
+    if _cloud_backend is not None:
+        return _cloud_backend.get_latest_speed_candle(symbol)
+
     cfg = get_redis_config()
     key = f"{cfg.key_prefix}:{symbol.upper()}:latest"
     try:
@@ -214,7 +238,7 @@ async def root():
 
 @app.get("/api/watermark", response_model=WatermarkResponse, tags=["Metadata"])
 async def get_watermark(layer: str = Query("batch_layer", description="Tên layer")):
-    """Lấy mốc System Watermark hiện tại từ ClickHouse."""
+    """Lấy mốc System Watermark hiện tại từ ClickHouse / TiDB Cloud."""
     wm = _watermark_reader.get_watermark(layer=layer)
     return WatermarkResponse(
         layer=layer,
@@ -317,7 +341,7 @@ async def get_dq_quarantine(
     limit: int = Query(200, ge=1, le=1000, description="Số bản ghi cách ly tối đa"),
     symbol: Optional[str] = Query(None, description="Lọc theo mã giao dịch (tùy chọn)"),
 ):
-    """Truy vấn danh sách bản ghi vi phạm Data Contract bị cách ly trong ClickHouse."""
+    """Truy vấn danh sách bản ghi vi phạm Data Contract bị cách ly trong ClickHouse / TiDB Cloud."""
     result = _ch_client.get_quarantine_records(limit=limit, symbol=symbol)
     return {
         "status": "ok" if result["connected"] else "unavailable",
@@ -326,5 +350,3 @@ async def get_dq_quarantine(
         "records": result["records"],
         "queried_at": datetime.now(timezone.utc).isoformat(),
     }
-
-

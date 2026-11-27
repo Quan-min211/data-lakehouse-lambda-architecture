@@ -1,15 +1,9 @@
-{% if target.type == 'spark' %}
 {{ config(
-    materialized='incremental',
-    file_format='parquet',
-    incremental_strategy='insert_overwrite',
-    partition_by=['trade_date']
+    materialized=('incremental' if target.type == 'spark' else 'table'),
+    file_format=('parquet' if target.type == 'spark' else none),
+    incremental_strategy=('insert_overwrite' if target.type == 'spark' else none),
+    partition_by=(['trade_date'] if target.type == 'spark' else none)
 ) }}
-{% else %}
-{{ config(
-    materialized='table'
-) }}
-{% endif %}
 
 with valid_records as (
     select

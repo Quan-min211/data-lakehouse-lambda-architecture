@@ -1,6 +1,9 @@
-{% if target.type == 'spark' %}
-{{ config(materialized='table', file_format='parquet') }}
+{{ config(
+    materialized='table',
+    file_format=('parquet' if target.type == 'spark' else none)
+) }}
 
+{% if target.type == 'spark' %}
 with bucketed as (
     select
         symbol,
@@ -49,8 +52,6 @@ select
 from aggregated
 
 {% else %}
-{{ config(materialized='table') }}
-
 with ordered_trades as (
     select
         symbol,
