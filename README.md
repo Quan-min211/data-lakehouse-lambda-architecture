@@ -1,14 +1,29 @@
 # Thiết kế và triển khai hệ thống Data Lakehouse theo kiến trúc Lambda hỗ trợ đối soát dữ liệu thời gian thực cho thị trường tiền mã hóa
 ## (Auto-Correcting Lambda Lakehouse for Real-Time Crypto Market Monitoring)
 
-[![Course](https://img.shields.io/badge/Course-TLCN-blue)](https://github.com/)
-[![Architecture](https://img.shields.io/badge/Architecture-Lambda-green)](https://github.com/)
-[![Status](https://img.shields.io/badge/Status-End--to--End%20Prototype-green)](https://github.com/)
+[![Course](https://img.shields.io/badge/Course-TLCN-blue)](https://github.com/Quan-min211/data-lakehouse-lambda-architecture)
+[![Architecture](https://img.shields.io/badge/Architecture-Lambda-green)](https://github.com/Quan-min211/data-lakehouse-lambda-architecture)
+[![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-Vercel-000000?logo=vercel)](https://data-lakehouse-lambda-architecture.vercel.app/)
+[![Serving API](https://img.shields.io/badge/Serving_API-Render-46E3B7?logo=render&logoColor=black)](https://lambda-lakehouse-api.onrender.com/docs)
+[![dbt Cloud](https://img.shields.io/badge/dbt_Medallion-TiDB_Cloud-DC2626)](https://tidbcloud.com/)
 
 Thiết kế và triển khai hệ thống **Data Lakehouse** theo mô hình **Lambda Architecture** (Batch Layer + Speed Layer + Serving Layer) với cơ chế tự động đối soát dựa trên Batch Watermark cho thị trường tiền mã hóa (BTCUSDT Binance), sử dụng **Apache Iceberg** làm Open Table Format và **Docker Compose** để đóng gói toàn bộ hạ tầng.
 
 Đề tài Tiểu luận Chuyên ngành (TLCN) — Khoa Công Nghệ Thông Tin · Đại học Sư phạm Kỹ thuật TP.HCM (HCMUTE).
 Niên khóa: Học kỳ 1 — Năm học 2026-2027.
+
+---
+
+## 🌐 Live Demo (Triển khai Cloud trực tuyến)
+
+| Thành phần | Đường dẫn trực tiếp | Vai trò vận hành |
+|:---|:---|:---|
+| **Web Dashboard (Frontend)** | **https://data-lakehouse-lambda-architecture.vercel.app/** | Giao diện giám sát thị trường, truy vấn nến 1 phút, đối soát & báo cáo thực nghiệm (triển khai trên **Vercel**) |
+| **Serving API (Swagger UI)** | **https://lambda-lakehouse-api.onrender.com/docs** | Cổng REST API `Auto-Correcting Query Merger` kết nối trực tiếp dữ liệu sàn Binance & TiDB Cloud (triển khai trên **Render**) |
+| **Cloud Warehouse & `dbt`** | **TiDB Cloud Serverless (`lakehouse_dbt`)** | Lưu trữ dữ liệu & vận hành mô hình `dbt` đa tầng (`Bronze` → `Silver` → `Gold`) theo cơ chế *Scale-to-Zero* |
+
+> [!TIP]
+> Lần đầu mở trang sau hơn 15 phút không có truy cập, giao diện trên **Vercel** sẽ hiển thị ngay lập tức và tự động đánh thức máy chủ **Render** (~20 giây) để kéo bù lịch sử 6 giờ gần nhất từ sàn Binance và chuyển sang chế độ cập nhật giá trực tiếp.
 
 ---
 
@@ -18,6 +33,7 @@ Niên khóa: Học kỳ 1 — Năm học 2026-2027.
 
 ## Table of Contents
 
+- [Live Demo](#-live-demo-triển-khai-cloud-trực-tuyến)
 - [Project Overview](#project-overview)
 - [Research Questions](#research-questions)
 - [System Architecture](#system-architecture)
@@ -212,9 +228,19 @@ lakehouse-lambda-benchmark/
 │   ├── test_serving_layer.py
 │   └── test_data_quality.py
 │
-├── dashboard/                   # Dashboard UI (Streamlit)
+├── dashboard/                   # Dashboard UI cục bộ (Streamlit)
 │   ├── app.py                   # Streamlit main app
 │   └── README.md
+│
+├── web/                         # Web Dashboard hiện đại triển khai trên Vercel
+│   ├── index.html               # Giao diện Market Monitor (Light Theme)
+│   ├── styles.css               # Hệ thống thiết kế tài chính mô phỏng sàn Binance
+│   ├── app.js                   # Kết nối Serving API trực tiếp & biểu đồ tương tác
+│   ├── vercel.json              # Cấu hình triển khai Vercel
+│   └── data/benchmarks.js       # Dữ liệu báo cáo thực nghiệm tĩnh
+│
+├── render.yaml                  # Cấu hình triển khai FastAPI Serving Layer trên Render
+├── requirements-render.txt      # Danh sách thư viện rút gọn cho Cloud Serving API
 │
 └── references/                  # Tài liệu tham khảo & papers
     ├── README.md
